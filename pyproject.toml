@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "devault"
+version = "0.1.0"
+description = "Developer-focused backup platform — file backup MVP"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi>=0.115.0",
+  "uvicorn[standard]>=0.32.0",
+  "sqlalchemy>=2.0.36",
+  "psycopg[binary]>=3.2.0",
+  "alembic>=1.14.0",
+  "celery[redis]>=5.4.0",
+  "redis>=5.2.0",
+  "pydantic>=2.10.0",
+  "pydantic-settings>=2.6.0",
+  "boto3>=1.35.0",
+  "pathspec>=0.12.1",
+  "httpx>=0.28.0",
+  "typer>=0.15.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3.0",
+  "pytest-cov>=6.0.0",
+]
+
+[project.scripts]
+devault = "devault.cli.main:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"

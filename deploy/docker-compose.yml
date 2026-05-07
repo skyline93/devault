@@ -1,0 +1,96 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: devault
+      POSTGRES_PASSWORD: devault
+      POSTGRES_DB: devault
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U devault -d devault"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - miniodata:/data
+
+  api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    command: >
+      sh -c "alembic upgrade head &&
+             uvicorn devault.api.main:app --host 0.0.0.0 --port 8000"
+    environment:
+      DEVAULT_DATABASE_URL: postgresql+psycopg://devault:devault@postgres:5432/devault
+      DEVAULT_REDIS_URL: redis://redis:6379/0
+      DEVAULT_API_TOKEN: ${DEVAULT_API_TOKEN:-changeme}
+      DEVAULT_STORAGE_BACKEND: s3
+      DEVAULT_S3_ENDPOINT: http://minio:9000
+      DEVAULT_S3_ACCESS_KEY: minioadmin
+      DEVAULT_S3_SECRET_KEY: minioadmin
+      DEVAULT_S3_BUCKET: devault
+      DEVAULT_S3_USE_SSL: "false"
+      DEVAULT_ENV_NAME: dev
+      PYTHONPATH: /app/src
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      minio:
+        condition: service_started
+
+  worker:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    command: celery -A devault.worker.app worker --loglevel=INFO
+    environment:
+      DEVAULT_DATABASE_URL: postgresql+psycopg://devault:devault@postgres:5432/devault
+      DEVAULT_REDIS_URL: redis://redis:6379/0
+      DEVAULT_API_TOKEN: ${DEVAULT_API_TOKEN:-changeme}
+      DEVAULT_STORAGE_BACKEND: s3
+      DEVAULT_S3_ENDPOINT: http://minio:9000
+      DEVAULT_S3_ACCESS_KEY: minioadmin
+      DEVAULT_S3_SECRET_KEY: minioadmin
+      DEVAULT_S3_BUCKET: devault
+      DEVAULT_S3_USE_SSL: "false"
+      DEVAULT_ENV_NAME: dev
+      DEVAULT_ALLOWED_PATH_PREFIXES: /data,/restore
+      PYTHONPATH: /app/src
+    volumes:
+      - ../demo_data:/data:ro
+      - worker_restore:/restore
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      minio:
+        condition: service_started
+
+volumes:
+  pgdata: {}
+  miniodata: {}
+  worker_restore: {}
