@@ -4,7 +4,6 @@ import json
 import os
 import sys
 import time
-import uuid
 
 import httpx
 import typer
@@ -13,10 +12,14 @@ app = typer.Typer(no_args_is_help=True, help="DeVault CLI (calls HTTP API)")
 file_app = typer.Typer(no_args_is_help=True)
 job_app = typer.Typer(no_args_is_help=True)
 artifact_app = typer.Typer(no_args_is_help=True)
+policy_app = typer.Typer(no_args_is_help=True)
+schedule_app = typer.Typer(no_args_is_help=True)
 
 app.add_typer(file_app, name="file")
 app.add_typer(job_app, name="job")
 app.add_typer(artifact_app, name="artifact")
+app.add_typer(policy_app, name="policy")
+app.add_typer(schedule_app, name="schedule")
 
 
 def _client() -> httpx.Client:
@@ -30,10 +33,17 @@ def _client() -> httpx.Client:
 
 @file_app.command("backup")
 def file_backup(
-    paths: list[str] = typer.Argument(..., help="Absolute paths to back up"),
+    paths: list[str] = typer.Argument(None, help="Absolute paths to back up"),
     exclude: list[str] = typer.Option([], "--exclude", "-e", help="gitwildmatch exclude (repeatable)"),
+    policy_id: str | None = typer.Option(None, "--policy", "-p", help="Run backup from saved policy UUID"),
 ) -> None:
-    body = {"plugin": "file", "config": {"version": 1, "paths": paths, "excludes": list(exclude)}}
+    if policy_id:
+        body: dict = {"plugin": "file", "policy_id": policy_id}
+    else:
+        if not paths:
+            typer.echo("Either paths or --policy is required", err=True)
+            raise typer.Exit(2)
+        body = {"plugin": "file", "config": {"version": 1, "paths": paths, "excludes": list(exclude)}}
     with _client() as c:
         r = c.post("/api/v1/jobs/backup", json=body)
         r.raise_for_status()
@@ -76,7 +86,7 @@ def job_wait(job_id: str, timeout_s: float = 300.0, poll: float = 1.0) -> None:
             r.raise_for_status()
             data = r.json()
             st = data.get("status")
-            if st in ("success", "failed"):
+            if st in ("success", "failed", "cancelled"):
                 typer.echo(json.dumps(data, indent=2))
                 if st == "failed":
                     raise typer.Exit(code=1)
@@ -90,6 +100,38 @@ def job_wait(job_id: str, timeout_s: float = 300.0, poll: float = 1.0) -> None:
 def artifact_list() -> None:
     with _client() as c:
         r = c.get("/api/v1/artifacts")
+        r.raise_for_status()
+        typer.echo(json.dumps(r.json(), indent=2))
+
+
+@job_app.command("cancel")
+def job_cancel(job_id: str) -> None:
+    with _client() as c:
+        r = c.post(f"/api/v1/jobs/{job_id}/cancel")
+        r.raise_for_status()
+        typer.echo(json.dumps(r.json(), indent=2))
+
+
+@job_app.command("retry")
+def job_retry(job_id: str) -> None:
+    with _client() as c:
+        r = c.post(f"/api/v1/jobs/{job_id}/retry")
+        r.raise_for_status()
+        typer.echo(json.dumps(r.json(), indent=2))
+
+
+@policy_app.command("list")
+def policy_list() -> None:
+    with _client() as c:
+        r = c.get("/api/v1/policies")
+        r.raise_for_status()
+        typer.echo(json.dumps(r.json(), indent=2))
+
+
+@schedule_app.command("list")
+def schedule_list() -> None:
+    with _client() as c:
+        r = c.get("/api/v1/schedules")
         r.raise_for_status()
         typer.echo(json.dumps(r.json(), indent=2))
 

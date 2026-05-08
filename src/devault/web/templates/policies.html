@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Policies · DeVault{% endblock %}
+{% block body %}
+<h1>Policies</h1>
+{% if flash %}<p class="flash ok">{{ flash }}</p>{% endif %}
+{% if error %}<p class="flash err">{{ error }}</p>{% endif %}
+
+<p><a href="/ui/policies/new" class="btn">＋ New policy</a></p>
+
+<h2>Run backup now</h2>
+<p class="muted">Enqueue one backup from a saved policy (independent of schedules).</p>
+{% set enabled_policies = policies | selectattr('enabled') | list %}
+{% if enabled_policies %}
+<form method="post" action="/ui/policies/run-backup" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+  <select name="policy_id" required>
+    {% for p in enabled_policies %}
+    <option value="{{ p.id }}">{{ p.name }}</option>
+    {% endfor %}
+  </select>
+  <button type="submit">Run backup</button>
+</form>
+{% elif policies %}
+<p class="muted">All policies are disabled. Enable one or create a new policy.</p>
+{% else %}
+<p class="muted">No policies yet. Create one first.</p>
+{% endif %}
+
+<h2>Policy list</h2>
+<table>
+  <thead>
+    <tr>
+      <th>Name</th>
+      <th>Enabled</th>
+      <th>Paths</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for p in policies %}
+    <tr>
+      <td><strong>{{ p.name }}</strong><br/><code class="muted">{{ p.id }}</code></td>
+      <td>{{ p.enabled }}</td>
+      <td><code>{% for path in p.config.get('paths', [])[:3] %}{{ path }}<br/>{% endfor %}{% if (p.config.get('paths', [])|length) > 3 %}…{% endif %}</code></td>
+      <td class="row-actions">
+        <a href="/ui/policies/{{ p.id }}/edit">Edit</a>
+        <form method="post" action="/ui/policies/{{ p.id }}/delete" class="inline" style="margin-top:6px;"
+              onsubmit="return confirm('Delete policy {{ p.name }}? Related schedules will be cascade-deleted.');">
+          <button type="submit">Delete</button>
+        </form>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="4" class="muted">No data</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

@@ -1,0 +1,87 @@
+syntax = "proto3";
+
+package devault.agent.v1;
+
+// Agent control plane: Pull lease + storage grants + completion.
+
+service AgentControl {
+  rpc Heartbeat(HeartbeatRequest) returns (HeartbeatReply);
+  rpc LeaseJobs(LeaseJobsRequest) returns (LeaseJobsReply);
+  rpc RequestStorageGrant(RequestStorageGrantRequest) returns (RequestStorageGrantReply);
+  rpc ReportProgress(ReportProgressRequest) returns (ReportProgressReply);
+  rpc CompleteJob(CompleteJobRequest) returns (CompleteJobReply);
+}
+
+message HeartbeatRequest {
+  string agent_id = 1;
+}
+
+message HeartbeatReply {
+  bool ok = 1;
+}
+
+message LeaseJobsRequest {
+  string agent_id = 1;
+  int32 max_jobs = 2;
+}
+
+message JobLease {
+  string job_id = 1;
+  string kind = 2;
+  string plugin = 3;
+  string config_json = 4;
+}
+
+message LeaseJobsReply {
+  repeated JobLease jobs = 1;
+}
+
+enum StorageIntent {
+  STORAGE_INTENT_UNSPECIFIED = 0;
+  STORAGE_INTENT_WRITE = 1;
+  STORAGE_INTENT_READ = 2;
+}
+
+message RequestStorageGrantRequest {
+  string agent_id = 1;
+  string job_id = 2;
+  StorageIntent intent = 3;
+}
+
+message RequestStorageGrantReply {
+  string bundle_key = 1;
+  string manifest_key = 2;
+  string bundle_http_url = 3;
+  string manifest_http_url = 4;
+  int64 expires_in_seconds = 5;
+  // For READ: client should verify the downloaded bundle against this digest.
+  string expected_checksum_sha256 = 6;
+}
+
+message ReportProgressRequest {
+  string agent_id = 1;
+  string job_id = 2;
+  int32 percent = 3;
+  string message = 4;
+}
+
+message ReportProgressReply {
+  bool ok = 1;
+  bool job_cancelled = 2;
+}
+
+message CompleteJobRequest {
+  string agent_id = 1;
+  string job_id = 2;
+  bool success = 3;
+  string error_code = 4;
+  string error_message = 5;
+  string bundle_key = 6;
+  string manifest_key = 7;
+  int64 size_bytes = 8;
+  string checksum_sha256 = 9;
+}
+
+message CompleteJobReply {
+  bool ok = 1;
+}

@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+import httpx
 import pathspec
 from sqlalchemy.orm import Session
 
@@ -101,9 +102,10 @@ def _sha256_file(path: Path, chunk: int = 1024 * 1024) -> str:
     return h.hexdigest()
 
 
-def _artifact_prefix(settings: Settings, job_id: uuid.UUID) -> str:
-    now = datetime.now(timezone.utc)
-    return f"devault/{settings.env_name}/artifacts/{now:%Y/%m/%d}/{job_id}"
+def artifact_object_keys(settings: Settings, job_id: uuid.UUID) -> tuple[str, str]:
+    """Stable S3 keys for a job artifact (control plane and agent must agree)."""
+    prefix = f"devault/{settings.env_name}/artifacts/{job_id}"
+    return f"{prefix}/bundle.tar.gz", f"{prefix}/manifest.json"
 
 
 @dataclass
@@ -115,12 +117,13 @@ class BackupOutcome:
     manifest: dict
 
 
-def run_file_backup(
-    *,
+def _build_backup_tarball(
     job: Job,
     settings: Settings,
-    storage: Storage,
-) -> BackupOutcome:
+    *,
+    bundle_key: str,
+    manifest_key: str,
+) -> tuple[Path, dict, int, str]:
     cfg = job.config_snapshot or {}
     if cfg.get("version") != 1:
         raise FileBackupError("INVALID_CONFIG", "config.version must be 1")
@@ -131,10 +134,6 @@ def run_file_backup(
     file_entries = _iter_file_entries(roots, spec)
     if not file_entries:
         raise FileBackupError("EMPTY_BACKUP", "No files matched the given paths and excludes")
-
-    prefix = _artifact_prefix(settings, job.id)
-    bundle_key = f"{prefix}/bundle.tar.gz"
-    manifest_key = f"{prefix}/manifest.json"
 
     files_meta: list[dict] = []
     with tempfile.NamedTemporaryFile(suffix=".tar.gz", delete=False) as tmp:
@@ -151,7 +150,6 @@ def run_file_backup(
                         "mode": st.st_mode,
                     }
                 )
-                # Avoid passing `filter=` to `TarFile.add`: signature differs across Python versions.
                 tf.add(str(full), arcname=arcname, recursive=False)
 
         size_bytes = tmp_path.stat().st_size
@@ -169,8 +167,30 @@ def run_file_backup(
             "checksum_sha256": checksum,
             "size_bytes": size_bytes,
         }
-        manifest_bytes = json.dumps(manifest, indent=2).encode("utf-8")
+        return tmp_path, manifest, size_bytes, checksum
+    except Exception:
+        try:
+            tmp_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise
 
+
+def run_file_backup(
+    *,
+    job: Job,
+    settings: Settings,
+    storage: Storage,
+) -> BackupOutcome:
+    bundle_key, manifest_key = artifact_object_keys(settings, job.id)
+    tmp_path, manifest, size_bytes, checksum = _build_backup_tarball(
+        job,
+        settings,
+        bundle_key=bundle_key,
+        manifest_key=manifest_key,
+    )
+    try:
+        manifest_bytes = json.dumps(manifest, indent=2).encode("utf-8")
         storage.put_file(bundle_key, tmp_path)
         storage.put_bytes(manifest_key, manifest_bytes)
 
@@ -191,13 +211,60 @@ def run_file_backup(
             pass
 
 
-def run_file_restore(
+def http_put_presigned_file(url: str, path: Path, *, timeout: float = 7200.0) -> None:
+    data = path.read_bytes()
+    with httpx.Client(timeout=timeout) as client:
+        r = client.put(url, content=data)
+        r.raise_for_status()
+
+
+def http_put_presigned_bytes(url: str, data: bytes, *, timeout: float = 600.0) -> None:
+    with httpx.Client(timeout=timeout) as client:
+        r = client.put(url, content=data)
+        r.raise_for_status()
+
+
+def http_download_file(url: str, dest: Path, *, timeout: float = 7200.0) -> None:
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    with httpx.Client(timeout=timeout, follow_redirects=True) as client:
+        r = client.get(url)
+        r.raise_for_status()
+        dest.write_bytes(r.content)
+
+
+def run_file_backup_with_presigned_urls(
     *,
-    db: Session,
     job: Job,
     settings: Settings,
-    storage: Storage,
-) -> None:
+    bundle_put_url: str,
+    manifest_put_url: str,
+) -> BackupOutcome:
+    bundle_key, manifest_key = artifact_object_keys(settings, job.id)
+    tmp_path, manifest, size_bytes, checksum = _build_backup_tarball(
+        job,
+        settings,
+        bundle_key=bundle_key,
+        manifest_key=manifest_key,
+    )
+    try:
+        manifest_bytes = json.dumps(manifest, indent=2).encode("utf-8")
+        http_put_presigned_file(bundle_put_url, tmp_path)
+        http_put_presigned_bytes(manifest_put_url, manifest_bytes)
+        return BackupOutcome(
+            bundle_key=bundle_key,
+            manifest_key=manifest_key,
+            size_bytes=size_bytes,
+            checksum_sha256=checksum,
+            manifest=manifest,
+        )
+    finally:
+        try:
+            tmp_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
+def _restore_paths_and_target(job: Job, settings: Settings) -> tuple[uuid.UUID, Path, bool]:
     cfg = job.config_snapshot or {}
     artifact_id = cfg.get("artifact_id") or str(job.restore_artifact_id or "")
     if not artifact_id:
@@ -228,6 +295,17 @@ def run_file_restore(
             "TARGET_NOT_EMPTY",
             "target_path exists and is not empty; pass confirm_overwrite_non_empty=true",
         )
+    return aid, target, confirm
+
+
+def run_file_restore(
+    *,
+    db: Session,
+    job: Job,
+    settings: Settings,
+    storage: Storage,
+) -> None:
+    aid, target, _confirm = _restore_paths_and_target(job, settings)
 
     art = db.get(Artifact, aid)
     if art is None:
@@ -237,17 +315,41 @@ def run_file_restore(
         bundle_local = Path(tmp.name)
     try:
         storage.get_file(art.bundle_key, bundle_local)
-        digest = _sha256_file(bundle_local)
-        if digest.lower() != art.checksum_sha256.lower():
-            raise FileBackupError("CHECKSUM_MISMATCH", "Downloaded bundle checksum mismatch")
+        _extract_bundle(bundle_local, target, art.checksum_sha256)
+    finally:
+        try:
+            bundle_local.unlink(missing_ok=True)
+        except OSError:
+            pass
 
-        target.mkdir(parents=True, exist_ok=True)
-        with tarfile.open(bundle_local, "r:gz") as tf:
-            # Safe extraction when supported (3.11+ / 3.12+ varies); fall back otherwise.
-            try:
-                tf.extractall(path=target, filter="data")  # type: ignore[call-arg]
-            except TypeError:
-                tf.extractall(path=target)
+
+def _extract_bundle(bundle_local: Path, target: Path, expected_checksum: str) -> None:
+    digest = _sha256_file(bundle_local)
+    if digest.lower() != expected_checksum.lower():
+        raise FileBackupError("CHECKSUM_MISMATCH", "Downloaded bundle checksum mismatch")
+
+    target.mkdir(parents=True, exist_ok=True)
+    with tarfile.open(bundle_local, "r:gz") as tf:
+        try:
+            tf.extractall(path=target, filter="data")  # type: ignore[call-arg]
+        except TypeError:
+            tf.extractall(path=target)
+
+
+def run_file_restore_with_presigned_bundle(
+    *,
+    job: Job,
+    settings: Settings,
+    bundle_get_url: str,
+    expected_checksum_sha256: str,
+) -> None:
+    _, target, _confirm = _restore_paths_and_target(job, settings)
+
+    with tempfile.NamedTemporaryFile(suffix=".tar.gz", delete=False) as tmp:
+        bundle_local = Path(tmp.name)
+    try:
+        http_download_file(bundle_get_url, bundle_local)
+        _extract_bundle(bundle_local, target, expected_checksum_sha256)
     finally:
         try:
             bundle_local.unlink(missing_ok=True)

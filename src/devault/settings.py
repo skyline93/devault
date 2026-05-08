@@ -38,6 +38,17 @@ class Settings(BaseSettings):
         description="Comma-separated absolute path prefixes; if set, backup paths must match one",
     )
 
+    grpc_listen: str | None = Field(
+        default=None,
+        description="Enable Agent gRPC server, e.g. 0.0.0.0:50051 (empty disables)",
+    )
+    grpc_target: str | None = Field(
+        default=None,
+        description="Agent only: control plane address host:port for gRPC",
+    )
+    job_lease_ttl_seconds: int = Field(default=1800, ge=60)
+    presign_ttl_seconds: int = Field(default=3600, ge=60)
+
     @property
     def allowed_prefix_list(self) -> list[str] | None:
         if not self.allowed_path_prefixes:

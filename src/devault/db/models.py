@@ -10,6 +10,50 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from devault.db.base import Base
 
 
+class Policy(Base):
+    __tablename__ = "policies"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    plugin: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    config: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    schedules: Mapped[list["Schedule"]] = relationship(
+        "Schedule",
+        back_populates="policy",
+        cascade="all, delete-orphan",
+    )
+
+
+class Schedule(Base):
+    __tablename__ = "schedules"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    policy_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("policies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    cron_expression: Mapped[str] = mapped_column(String(128), nullable=False)
+    timezone: Mapped[str] = mapped_column(String(64), nullable=False, default="UTC")
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    policy: Mapped["Policy"] = relationship("Policy", back_populates="schedules")
+
+
 class Job(Base):
     __tablename__ = "jobs"
 
@@ -27,6 +71,11 @@ class Job(Base):
     error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     trace_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    lease_agent_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    lease_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
 
     artifact: Mapped["Artifact | None"] = relationship(
         "Artifact",

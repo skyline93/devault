@@ -1,0 +1,19 @@
+# 缩小 docker build 上下文，加快传送与缓存命中排查
+.git
+.github
+.idea
+.cursor
+.pytest_cache
+.mypy_cache
+.ruff_cache
+__pycache__
+*.pyc
+.venv
+venv
+*.egg-info
+dist
+build
+htmlcov
+.coverage
+demo_data
+**/node_modules

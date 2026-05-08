@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}{{ heading }} · DeVault{% endblock %}
+{% block body %}
+<h1>{{ heading }}</h1>
+<p><a href="/ui/policies">← Policies</a></p>
+<form method="post" action="{% if policy %}/ui/policies/{{ policy.id }}/edit{% else %}/ui/policies/new{% endif %}">
+  <p>
+    <label for="name">Name</label><br/>
+    <input type="text" id="name" name="name" required style="width:100%;max-width:480px;"
+           value="{{ policy.name if policy else '' }}"/>
+  </p>
+  <p>
+    <label for="paths_multiline">Paths (one absolute path per line)</label><br/>
+    <textarea id="paths_multiline" name="paths_multiline" required>{% if policy %}{{ policy.config.get('paths', []) | join('\n') }}{% endif %}</textarea>
+  </p>
+  <p>
+    <label for="excludes_multiline">Excludes (optional, gitwildmatch, one pattern per line)</label><br/>
+    <textarea id="excludes_multiline" name="excludes_multiline">{% if policy %}{{ policy.config.get('excludes', []) | join('\n') }}{% endif %}</textarea>
+  </p>
+  <p>
+    <span>Enabled</span><br/>
+    <label><input type="radio" name="enabled" value="yes" {% if not policy or policy.enabled %}checked{% endif %}/> Yes</label>
+    <label><input type="radio" name="enabled" value="no" {% if policy and not policy.enabled %}checked{% endif %}/> No</label>
+  </p>
+  <p><button type="submit">{% if policy %}Save{% else %}Create{% endif %}</button></p>
+</form>
+{% endblock %}

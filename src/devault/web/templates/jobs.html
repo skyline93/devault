@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Jobs · DeVault{% endblock %}
+{% block body %}
+<h1>Jobs</h1>
+{% if flash %}<p class="flash ok">{{ flash }}</p>{% endif %}
+{% if error %}<p class="flash err">{{ error }}</p>{% endif %}
+<p class="muted">Latest 100 jobs. Running jobs can be cancelled; only <strong>failed backups</strong> can be retried.</p>
+<table>
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>Kind</th>
+      <th>Status</th>
+      <th>Trigger</th>
+      <th>Policy</th>
+      <th>Error</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for j in jobs %}
+    <tr>
+      <td><code>{{ j.id }}</code></td>
+      <td>{{ j.kind }}</td>
+      <td>{{ j.status }}</td>
+      <td>{{ j.trigger }}</td>
+      <td>{% if j.policy_id %}<code>{{ j.policy_id }}</code>{% else %}—{% endif %}</td>
+      <td>{% if j.error_code %}{{ j.error_code }}: {{ j.error_message[:80] }}{% else %}—{% endif %}</td>
+      <td class="row-actions">
+        {% set terminal = (j.status == 'success' or j.status == 'failed' or j.status == 'cancelled') %}
+        {% if not terminal %}
+        <form method="post" action="/ui/jobs/{{ j.id }}/cancel" class="inline" onsubmit="return confirm('Cancel this job?');">
+          <button type="submit">Cancel</button>
+        </form>
+        {% endif %}
+        {% if j.status == 'failed' and j.kind == 'backup' %}
+        <form method="post" action="/ui/jobs/{{ j.id }}/retry" class="inline">
+          <button type="submit">Retry</button>
+        </form>
+        {% endif %}
+        {% if terminal and not (j.status == 'failed' and j.kind == 'backup') %}—{% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

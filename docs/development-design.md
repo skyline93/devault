@@ -506,25 +506,27 @@ devault/
 
 ## 20. 开发阶段与里程碑
 
+> **实现状态（代码库）**：S1 与 S2 主线条已在仓库落地；S3 数据库插件仍为规划。以 `README.md` 与 API `/docs` 为准做验收。
+
 ### 20.1 S1 — 文件备份 MVP（建议 2～3 周）
 
-- [ ] Monorepo 骨架、配置加载、日志  
-- [ ] PG 元数据库与 Alembic 迁移  
-- [ ] `StorageBackend`：local + MinIO  
-- [ ] `file` 插件：tar 流、sha256、manifest、上传  
-- [ ] Celery task：`run_backup_job`  
-- [ ] FastAPI：`POST /jobs/backup`（仅 file）、`GET /jobs/{id}`、`GET /artifacts`  
-- [ ] 恢复：`POST /jobs/restore` + worker 解压  
-- [ ] 集成测试一条 golden path  
+- [x] Monorepo 骨架、配置加载、日志  
+- [x] PG 元数据库与 Alembic 迁移  
+- [x] `StorageBackend`：local + MinIO  
+- [x] `file` 插件：tar.gz、sha256、manifest、上传  
+- [x] Celery task：`run_backup_job` / `run_restore_job`  
+- [x] FastAPI：`POST /jobs/backup`、`GET /jobs`、`GET /artifacts` 等  
+- [x] 恢复：`POST /jobs/restore` + worker 解压  
+- [x] 单元测试（存储 + 文件插件）  
 
 ### 20.2 S2 — 文件产品化（建议 2 周）
 
-- [ ] APScheduler + schedules CRUD  
-- [ ] 重试、取消、错误码、并发锁  
-- [ ] Prometheus metrics（最小集）  
-- [ ] CLI `devault file ...`  
-- [ ] Web UI 四页  
-- [ ] Compose 一键起 + 文档  
+- [x] APScheduler 独立进程（`devault-scheduler`）+ `schedules` CRUD + `policies` CRUD  
+- [x] 任务取消 / 失败重试、`celery_task_id` 记录、同 `policy_id` 备份 Redis 互斥锁  
+- [x] Prometheus：`/metrics`（`devault_jobs_total`、`devault_job_duration_seconds` 等）  
+- [x] CLI：`devault file|job|artifact|policy|schedule`  
+- [x] Web UI（Jinja2）：`/ui/jobs|artifacts|policies|schedules`（HTTP Basic，密码为 `DEVAULT_API_TOKEN`）  
+- [x] Compose 含 `scheduler` 服务 + 文档  
 
 ### 20.3 S3 — 数据库 MVP（建议 3～4 周）
 
@@ -562,6 +564,7 @@ devault/
 | 版本 | 日期 | 说明 |
 |------|------|------|
 | 0.1 | 2026-05-07 | 初版：文件优先、数据库次之完整开发设计 |
+| 0.2 | 2026-05-08 | 对齐实现：S2（策略/定时/取消重试/锁/指标/简易 UI/scheduler 进程） |
 
 ---
 

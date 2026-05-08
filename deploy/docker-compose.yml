@@ -32,6 +32,30 @@ services:
     volumes:
       - miniodata:/data
 
+  # One-shot: create bucket at deploy time (app never calls CreateBucket — enterprise IAM).
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_started
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+      DEVAULT_S3_BUCKET: ${DEVAULT_S3_BUCKET:-devault}
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        set -e
+        i=0
+        while [ "$$i" -lt 60 ]; do
+          mc alias set local http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD" && break
+          i=$$((i+1))
+          sleep 1
+        done
+        mc mb --ignore-existing "local/$$DEVAULT_S3_BUCKET"
+    restart: "no"
+
   api:
     build:
       context: ..
@@ -47,50 +71,61 @@ services:
       DEVAULT_S3_ENDPOINT: http://minio:9000
       DEVAULT_S3_ACCESS_KEY: minioadmin
       DEVAULT_S3_SECRET_KEY: minioadmin
-      DEVAULT_S3_BUCKET: devault
+      DEVAULT_S3_BUCKET: ${DEVAULT_S3_BUCKET:-devault}
       DEVAULT_S3_USE_SSL: "false"
       DEVAULT_ENV_NAME: dev
+      DEVAULT_GRPC_LISTEN: 0.0.0.0:50051
       PYTHONPATH: /app/src
     ports:
       - "8000:8000"
+      - "50051:50051"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_started
-      minio:
-        condition: service_started
+      minio-init:
+        condition: service_completed_successfully
 
-  worker:
+  scheduler:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
-    command: celery -A devault.worker.app worker --loglevel=INFO
+    # Do not run alembic here: api already runs `alembic upgrade head` on startup.
+    # Concurrent migrations from multiple containers race on CREATE alembic_version.
+    command: devault-scheduler
     environment:
       DEVAULT_DATABASE_URL: postgresql+psycopg://devault:devault@postgres:5432/devault
       DEVAULT_REDIS_URL: redis://redis:6379/0
+      PYTHONPATH: /app/src
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      api:
+        condition: service_started
+
+  agent:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    command: devault-agent
+    environment:
       DEVAULT_API_TOKEN: ${DEVAULT_API_TOKEN:-changeme}
-      DEVAULT_STORAGE_BACKEND: s3
-      DEVAULT_S3_ENDPOINT: http://minio:9000
-      DEVAULT_S3_ACCESS_KEY: minioadmin
-      DEVAULT_S3_SECRET_KEY: minioadmin
-      DEVAULT_S3_BUCKET: devault
-      DEVAULT_S3_USE_SSL: "false"
-      DEVAULT_ENV_NAME: dev
+      DEVAULT_GRPC_TARGET: api:50051
       DEVAULT_ALLOWED_PATH_PREFIXES: /data,/restore
       PYTHONPATH: /app/src
     volumes:
       - ../demo_data:/data:ro
-      - worker_restore:/restore
+      - agent_restore:/restore
     depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
+      api:
         condition: service_started
-      minio:
-        condition: service_started
+      minio-init:
+        condition: service_completed_successfully
 
 volumes:
   pgdata: {}
   miniodata: {}
-  worker_restore: {}
+  agent_restore: {}

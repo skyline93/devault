@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Artifacts · DeVault{% endblock %}
+{% block body %}
+<h1>Artifacts</h1>
+{% if flash %}<p class="flash ok">{{ flash }}</p>{% endif %}
+{% if error %}<p class="flash err">{{ error }}</p>{% endif %}
+<p class="muted">Restore target must be an <strong>absolute path</strong> (Compose example: <code>/restore/out</code>) and must match the Agent allowed path prefixes.</p>
+<table>
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>Job</th>
+      <th>Size</th>
+      <th>SHA256</th>
+      <th>Restore</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for a in artifacts %}
+    <tr>
+      <td><code>{{ a.id }}</code></td>
+      <td><code>{{ a.job_id }}</code></td>
+      <td>{{ a.size_bytes }}</td>
+      <td><code>{{ a.checksum_sha256[:20] }}…</code></td>
+      <td>
+        <form method="post" action="/ui/artifacts/restore" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;">
+          <input type="hidden" name="artifact_id" value="{{ a.id }}"/>
+          <input type="text" name="target_path" placeholder="/restore/out" size="28" required/>
+          <span class="muted">Overwrite non-empty</span>
+          <label><input type="radio" name="confirm_overwrite_non_empty" value="no" checked/> No</label>
+          <label><input type="radio" name="confirm_overwrite_non_empty" value="yes"/> Yes</label>
+          <button type="submit">Restore</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

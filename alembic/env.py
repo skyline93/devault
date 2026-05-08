@@ -7,7 +7,7 @@ from alembic import context
 from sqlalchemy import engine_from_config, pool
 
 from devault.db.base import Base
-from devault.db import models  # noqa: F401
+import devault.db.models  # noqa: F401  # registers Policy, Schedule, Job, Artifact
 from devault.settings import get_settings
 
 config = context.config

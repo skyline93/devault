@@ -4,10 +4,11 @@ from pathlib import Path
 
 import boto3
 from botocore.client import BaseClient
-from botocore.exceptions import ClientError
 
 
 class S3Storage:
+    """S3-compatible storage. The bucket must already exist (provisioned by ops / IaC)."""
+
     backend_name = "s3"
 
     def __init__(
@@ -30,20 +31,6 @@ class S3Storage:
             region_name=region,
             use_ssl=use_ssl,
         )
-        self._ensure_bucket()
-
-    def _ensure_bucket(self) -> None:
-        try:
-            self.client.head_bucket(Bucket=self.bucket)
-            return
-        except ClientError:
-            pass
-        try:
-            self.client.create_bucket(Bucket=self.bucket)
-        except ClientError as e2:
-            code = e2.response.get("Error", {}).get("Code", "")
-            if code not in ("BucketAlreadyOwnedByYou", "BucketAlreadyExists"):
-                raise
 
     def put_file(self, key: str, src_path: Path) -> None:
         self.client.upload_file(str(src_path), self.bucket, key)

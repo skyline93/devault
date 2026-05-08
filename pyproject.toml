@@ -14,7 +14,8 @@ dependencies = [
   "sqlalchemy>=2.0.36",
   "psycopg[binary]>=3.2.0",
   "alembic>=1.14.0",
-  "celery[redis]>=5.4.0",
+  "grpcio>=1.60.0",
+  "protobuf>=5.26.0",
   "redis>=5.2.0",
   "pydantic>=2.10.0",
   "pydantic-settings>=2.6.0",
@@ -22,19 +23,30 @@ dependencies = [
   "pathspec>=0.12.1",
   "httpx>=0.28.0",
   "typer>=0.15.0",
+  "apscheduler>=3.10.0",
+  "prometheus-client>=0.21.0",
+  "jinja2>=3.1.0",
+  "croniter>=2.0.0",
+  "python-multipart>=0.0.9",
 ]
 
 [project.optional-dependencies]
 dev = [
   "pytest>=8.3.0",
   "pytest-cov>=6.0.0",
+  "grpcio-tools>=1.60.0",
 ]
 
 [project.scripts]
 devault = "devault.cli.main:main"
+devault-scheduler = "devault.scheduler.main:main"
+devault-agent = "devault.agent.main:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+"devault.web" = ["templates/**/*.html"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

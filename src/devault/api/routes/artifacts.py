@@ -13,7 +13,12 @@ from devault.db.models import Artifact
 router = APIRouter(prefix="/artifacts", tags=["artifacts"])
 
 
-@router.get("/{artifact_id}", dependencies=[Depends(verify_bearer)], response_model=ArtifactOut)
+@router.get(
+    "/{artifact_id}",
+    dependencies=[Depends(verify_bearer)],
+    response_model=ArtifactOut,
+    summary="Get artifact",
+)
 def get_artifact(artifact_id: uuid.UUID, db: Session = Depends(get_db)) -> Artifact:
     art = db.get(Artifact, artifact_id)
     if art is None:
@@ -21,7 +26,12 @@ def get_artifact(artifact_id: uuid.UUID, db: Session = Depends(get_db)) -> Artif
     return art
 
 
-@router.get("", dependencies=[Depends(verify_bearer)], response_model=list[ArtifactOut])
+@router.get(
+    "",
+    dependencies=[Depends(verify_bearer)],
+    response_model=list[ArtifactOut],
+    summary="List artifacts",
+)
 def list_artifacts(
     db: Session = Depends(get_db),
     limit: int = Query(50, ge=1, le=200),

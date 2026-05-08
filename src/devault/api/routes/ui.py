@@ -1,0 +1,364 @@
+from __future__ import annotations
+
+import uuid
+from pathlib import Path
+from urllib.parse import quote
+
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from fastapi.templating import Jinja2Templates
+from pydantic import ValidationError
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from devault.api.deps import get_db
+from devault.api.schemas import (
+    CreateBackupJobBody,
+    CreateRestoreJobBody,
+    FileBackupConfigV1,
+    PolicyCreate,
+    PolicyPatch,
+    ScheduleCreate,
+    SchedulePatch,
+)
+from devault.db.models import Artifact, Job, Policy, Schedule
+from devault.services import control as control_svc
+from devault.settings import get_settings
+
+_PKG = Path(__file__).resolve().parent.parent.parent
+templates = Jinja2Templates(directory=str(_PKG / "web" / "templates"))
+
+security = HTTPBasic(auto_error=False)
+
+router = APIRouter(prefix="/ui", tags=["ui"])
+
+
+def verify_ui_basic(credentials: HTTPBasicCredentials | None = Depends(security)) -> None:
+    settings = get_settings()
+    if not settings.api_token:
+        return
+    if credentials is None:
+        raise HTTPException(
+            status_code=401,
+            detail="Authentication required",
+            headers={"WWW-Authenticate": 'Basic realm="DeVault UI"'},
+        )
+    if credentials.password != settings.api_token:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+
+_ui_dep = [Depends(verify_ui_basic)]
+
+
+def _lines(text: str | None) -> list[str]:
+    return [ln.strip() for ln in (text or "").splitlines() if ln.strip()]
+
+
+def _redirect(path: str, *, flash: str | None = None, error: str | None = None) -> RedirectResponse:
+    qs: list[str] = []
+    if flash:
+        qs.append(f"flash={quote(flash)}")
+    if error:
+        qs.append(f"error={quote(error)}")
+    url = path + ("?" + "&".join(qs) if qs else "")
+    return RedirectResponse(url=url, status_code=303)
+
+
+def _http_err_detail(exc: HTTPException) -> str:
+    d = exc.detail
+    if isinstance(d, str):
+        return d
+    return str(d)
+
+
+@router.get("/jobs", response_class=HTMLResponse, dependencies=_ui_dep)
+def ui_jobs(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
+    rows = list(db.scalars(select(Job).order_by(Job.id.desc()).limit(100)).all())
+    return templates.TemplateResponse(
+        request,
+        "jobs.html",
+        {
+            "request": request,
+            "jobs": rows,
+            "flash": request.query_params.get("flash"),
+            "error": request.query_params.get("error"),
+        },
+    )
+
+
+@router.post("/jobs/{job_id}/cancel", dependencies=_ui_dep)
+def ui_job_cancel(job_id: uuid.UUID, db: Session = Depends(get_db)) -> RedirectResponse:
+    try:
+        control_svc.cancel_job(db, job_id)
+        return _redirect("/ui/jobs", flash="Task cancelled.")
+    except HTTPException as e:
+        return _redirect("/ui/jobs", error=_http_err_detail(e))
+
+
+@router.post("/jobs/{job_id}/retry", dependencies=_ui_dep)
+def ui_job_retry(job_id: uuid.UUID, db: Session = Depends(get_db)) -> RedirectResponse:
+    try:
+        new_job = control_svc.retry_failed_backup_job(db, job_id)
+        return _redirect("/ui/jobs", flash=f"Retry queued: {new_job.id}")
+    except HTTPException as e:
+        return _redirect("/ui/jobs", error=_http_err_detail(e))
+
+
+@router.get("/artifacts", response_class=HTMLResponse, dependencies=_ui_dep)
+def ui_artifacts(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
+    rows = list(db.scalars(select(Artifact).order_by(Artifact.created_at.desc()).limit(100)).all())
+    return templates.TemplateResponse(
+        request,
+        "artifacts.html",
+        {
+            "request": request,
+            "artifacts": rows,
+            "flash": request.query_params.get("flash"),
+            "error": request.query_params.get("error"),
+        },
+    )
+
+
+@router.post("/artifacts/restore", dependencies=_ui_dep)
+def ui_restore(
+    artifact_id: uuid.UUID = Form(),
+    target_path: str = Form(...),
+    confirm_overwrite_non_empty: str = Form("no"),
+    db: Session = Depends(get_db),
+) -> RedirectResponse:
+    try:
+        body = CreateRestoreJobBody(
+            artifact_id=artifact_id,
+            target_path=target_path.strip(),
+            confirm_overwrite_non_empty=confirm_overwrite_non_empty == "yes",
+        )
+        job = control_svc.create_restore_job(db, body)
+        return _redirect("/ui/artifacts", flash=f"Restore queued: job {job.id}")
+    except HTTPException as e:
+        return _redirect("/ui/artifacts", error=_http_err_detail(e))
+    except ValidationError as e:
+        return _redirect("/ui/artifacts", error=str(e.errors())[:600])
+
+
+@router.get("/policies", response_class=HTMLResponse, dependencies=_ui_dep)
+def ui_policies(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
+    rows = list(db.scalars(select(Policy).order_by(Policy.created_at.desc())).all())
+    return templates.TemplateResponse(
+        request,
+        "policies.html",
+        {
+            "request": request,
+            "policies": rows,
+            "flash": request.query_params.get("flash"),
+            "error": request.query_params.get("error"),
+        },
+    )
+
+
+@router.get("/policies/new", response_class=HTMLResponse, dependencies=_ui_dep)
+def ui_policies_new(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
+    _ = db
+    return templates.TemplateResponse(
+        request,
+        "policy_form.html",
+        {
+            "request": request,
+            "policy": None,
+            "flash": None,
+            "error": None,
+            "heading": "New policy",
+        },
+    )
+
+
+@router.post("/policies/new", dependencies=_ui_dep)
+def ui_policies_create(
+    name: str = Form(...),
+    paths_multiline: str = Form(...),
+    excludes_multiline: str = Form(""),
+    enabled: str = Form("yes"),
+    db: Session = Depends(get_db),
+) -> RedirectResponse:
+    try:
+        paths = _lines(paths_multiline)
+        excludes = _lines(excludes_multiline)
+        cfg = FileBackupConfigV1(version=1, paths=paths, excludes=excludes)
+        body = PolicyCreate(
+            name=name.strip(),
+            plugin="file",
+            config=cfg,
+            enabled=enabled == "yes",
+        )
+        control_svc.create_policy(db, body)
+        return _redirect("/ui/policies", flash="Policy created.")
+    except HTTPException as e:
+        return _redirect("/ui/policies", error=_http_err_detail(e))
+    except ValidationError as e:
+        return _redirect("/ui/policies", error=str(e)[:800])
+
+
+@router.get("/policies/{policy_id}/edit", response_class=HTMLResponse, dependencies=_ui_dep)
+def ui_policies_edit(request: Request, policy_id: uuid.UUID, db: Session = Depends(get_db)) -> HTMLResponse:
+    p = db.get(Policy, policy_id)
+    if p is None:
+        raise HTTPException(404, detail="policy not found")
+    return templates.TemplateResponse(
+        request,
+        "policy_form.html",
+        {
+            "request": request,
+            "policy": p,
+            "flash": None,
+            "error": None,
+            "heading": f"Edit policy — {p.name}",
+        },
+    )
+
+
+@router.post("/policies/{policy_id}/edit", dependencies=_ui_dep)
+def ui_policies_update(
+    policy_id: uuid.UUID,
+    name: str = Form(...),
+    paths_multiline: str = Form(...),
+    excludes_multiline: str = Form(""),
+    enabled: str = Form("yes"),
+    db: Session = Depends(get_db),
+) -> RedirectResponse:
+    try:
+        paths = _lines(paths_multiline)
+        excludes = _lines(excludes_multiline)
+        cfg = FileBackupConfigV1(version=1, paths=paths, excludes=excludes)
+        patch = PolicyPatch(name=name.strip(), config=cfg, enabled=enabled == "yes")
+        control_svc.patch_policy(db, policy_id, patch)
+        return _redirect("/ui/policies", flash="Policy updated.")
+    except HTTPException as e:
+        return _redirect("/ui/policies", error=_http_err_detail(e))
+    except ValidationError as e:
+        return _redirect("/ui/policies", error=str(e)[:800])
+
+
+@router.post("/policies/{policy_id}/delete", dependencies=_ui_dep)
+def ui_policies_delete(policy_id: uuid.UUID, db: Session = Depends(get_db)) -> RedirectResponse:
+    try:
+        control_svc.delete_policy(db, policy_id)
+        return _redirect("/ui/policies", flash="Policy deleted.")
+    except HTTPException as e:
+        return _redirect("/ui/policies", error=_http_err_detail(e))
+
+
+@router.post("/policies/run-backup", dependencies=_ui_dep)
+def ui_run_policy_backup(
+    policy_id: uuid.UUID = Form(...),
+    db: Session = Depends(get_db),
+) -> RedirectResponse:
+    try:
+        body = CreateBackupJobBody(plugin="file", policy_id=policy_id)
+        job = control_svc.create_backup_job(db, body)
+        return _redirect("/ui/jobs", flash=f"Backup queued: job {job.id}")
+    except HTTPException as e:
+        return _redirect("/ui/policies", error=_http_err_detail(e))
+    except ValidationError as e:
+        return _redirect("/ui/policies", error=str(e)[:800])
+
+
+@router.get("/schedules", response_class=HTMLResponse, dependencies=_ui_dep)
+def ui_schedules(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
+    rows = list(db.scalars(select(Schedule).order_by(Schedule.created_at.desc())).all())
+    return templates.TemplateResponse(
+        request,
+        "schedules.html",
+        {
+            "request": request,
+            "schedules": rows,
+            "flash": request.query_params.get("flash"),
+            "error": request.query_params.get("error"),
+        },
+    )
+
+
+@router.get("/schedules/new", response_class=HTMLResponse, dependencies=_ui_dep)
+def ui_schedules_new(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
+    policies = list(db.scalars(select(Policy).order_by(Policy.name.asc())).all())
+    return templates.TemplateResponse(
+        request,
+        "schedule_form.html",
+        {
+            "request": request,
+            "schedule": None,
+            "policies": policies,
+            "heading": "New schedule",
+        },
+    )
+
+
+@router.post("/schedules/new", dependencies=_ui_dep)
+def ui_schedules_create(
+    policy_id: uuid.UUID = Form(...),
+    cron_expression: str = Form(...),
+    timezone: str = Form("UTC"),
+    enabled: str = Form("yes"),
+    db: Session = Depends(get_db),
+) -> RedirectResponse:
+    try:
+        body = ScheduleCreate(
+            policy_id=policy_id,
+            cron_expression=cron_expression.strip(),
+            timezone=timezone.strip() or "UTC",
+            enabled=enabled == "yes",
+        )
+        control_svc.create_schedule(db, body)
+        return _redirect("/ui/schedules", flash="Schedule created.")
+    except HTTPException as e:
+        return _redirect("/ui/schedules", error=_http_err_detail(e))
+    except ValidationError as e:
+        return _redirect("/ui/schedules", error=str(e)[:800])
+
+
+@router.get("/schedules/{schedule_id}/edit", response_class=HTMLResponse, dependencies=_ui_dep)
+def ui_schedules_edit(request: Request, schedule_id: uuid.UUID, db: Session = Depends(get_db)) -> HTMLResponse:
+    s = db.get(Schedule, schedule_id)
+    if s is None:
+        raise HTTPException(404, detail="schedule not found")
+    policies = list(db.scalars(select(Policy).order_by(Policy.name.asc())).all())
+    return templates.TemplateResponse(
+        request,
+        "schedule_form.html",
+        {
+            "request": request,
+            "schedule": s,
+            "policies": policies,
+            "heading": f"Edit schedule — {schedule_id}",
+        },
+    )
+
+
+@router.post("/schedules/{schedule_id}/edit", dependencies=_ui_dep)
+def ui_schedules_update(
+    schedule_id: uuid.UUID,
+    cron_expression: str = Form(...),
+    timezone: str = Form("UTC"),
+    enabled: str = Form("yes"),
+    db: Session = Depends(get_db),
+) -> RedirectResponse:
+    try:
+        if db.get(Schedule, schedule_id) is None:
+            raise HTTPException(404, detail="schedule not found")
+        patch = SchedulePatch(
+            cron_expression=cron_expression.strip(),
+            timezone=(timezone or "UTC").strip(),
+            enabled=enabled == "yes",
+        )
+        control_svc.patch_schedule(db, schedule_id, patch)
+        return _redirect("/ui/schedules", flash="Schedule updated.")
+    except HTTPException as e:
+        return _redirect("/ui/schedules", error=_http_err_detail(e))
+
+
+@router.post("/schedules/{schedule_id}/delete", dependencies=_ui_dep)
+def ui_schedules_delete(schedule_id: uuid.UUID, db: Session = Depends(get_db)) -> RedirectResponse:
+    try:
+        control_svc.delete_schedule(db, schedule_id)
+        return _redirect("/ui/schedules", flash="Schedule deleted.")
+    except HTTPException as e:
+        return _redirect("/ui/schedules", error=_http_err_detail(e))

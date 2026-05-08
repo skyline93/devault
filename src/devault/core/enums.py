@@ -16,6 +16,13 @@ class JobStatus(StrEnum):
     SUCCESS = "success"
     FAILED = "failed"
     RETRYING = "retrying"
+    CANCELLED = "cancelled"
+
+
+class JobTrigger(StrEnum):
+    MANUAL = "manual"
+    SCHEDULED = "scheduled"
+    RETRY = "retry"
 
 
 class PluginName(StrEnum):
