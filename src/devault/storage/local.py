@@ -3,8 +3,6 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from devault.storage.types import Storage
-
 
 class LocalStorage:
     backend_name = "local"

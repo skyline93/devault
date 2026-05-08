@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "devault"
-version = "0.1.0"
+version = "0.2.0"
 description = "Developer-focused backup platform — file backup MVP"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -14,7 +14,8 @@ dependencies = [
   "sqlalchemy>=2.0.36",
   "psycopg[binary]>=3.2.0",
   "alembic>=1.14.0",
-  "grpcio>=1.60.0",
+  "grpcio>=1.80.0",
+  "grpcio-health-checking>=1.80.0",
   "protobuf>=5.26.0",
   "redis>=5.2.0",
   "pydantic>=2.10.0",
@@ -34,7 +35,7 @@ dependencies = [
 dev = [
   "pytest>=8.3.0",
   "pytest-cov>=6.0.0",
-  "grpcio-tools>=1.60.0",
+  "grpcio-tools>=1.80.0",
 ]
 
 [project.scripts]
@@ -55,3 +56,4 @@ pythonpath = ["src"]
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+extend-exclude = ["src/devault/grpc_gen"]

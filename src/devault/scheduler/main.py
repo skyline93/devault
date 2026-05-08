@@ -11,7 +11,7 @@ from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy import select
 
-from devault.core.enums import JobKind, JobStatus, JobTrigger, PluginName
+from devault.core.enums import JobKind, JobStatus, JobTrigger
 from devault.db.models import Job, Policy, Schedule
 from devault.db.session import SessionLocal
 

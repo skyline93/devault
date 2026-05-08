@@ -24,37 +24,41 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0b\x61gent.proto\x12\x10\x64\x65vault.agent.v1\"$\n\x10HeartbeatRequest\x12\x10\n\x08\x61gent_id\x18\x01 \x01(\t\"\x1c\n\x0eHeartbeatReply\x12\n\n\x02ok\x18\x01 \x01(\x08\"6\n\x10LeaseJobsRequest\x12\x10\n\x08\x61gent_id\x18\x01 \x01(\t\x12\x10\n\x08max_jobs\x18\x02 \x01(\x05\"M\n\x08JobLease\x12\x0e\n\x06job_id\x18\x01 \x01(\t\x12\x0c\n\x04kind\x18\x02 \x01(\t\x12\x0e\n\x06plugin\x18\x03 \x01(\t\x12\x13\n\x0b\x63onfig_json\x18\x04 \x01(\t\":\n\x0eLeaseJobsReply\x12(\n\x04jobs\x18\x01 \x03(\x0b\x32\x1a.devault.agent.v1.JobLease\"o\n\x1aRequestStorageGrantRequest\x12\x10\n\x08\x61gent_id\x18\x01 \x01(\t\x12\x0e\n\x06job_id\x18\x02 \x01(\t\x12/\n\x06intent\x18\x03 \x01(\x0e\x32\x1f.devault.agent.v1.StorageIntent\"\xb6\x01\n\x18RequestStorageGrantReply\x12\x12\n\nbundle_key\x18\x01 \x01(\t\x12\x14\n\x0cmanifest_key\x18\x02 \x01(\t\x12\x17\n\x0f\x62undle_http_url\x18\x03 \x01(\t\x12\x19\n\x11manifest_http_url\x18\x04 \x01(\t\x12\x1a\n\x12\x65xpires_in_seconds\x18\x05 \x01(\x03\x12 \n\x18\x65xpected_checksum_sha256\x18\x06 \x01(\t\"[\n\x15ReportProgressRequest\x12\x10\n\x08\x61gent_id\x18\x01 \x01(\t\x12\x0e\n\x06job_id\x18\x02 \x01(\t\x12\x0f\n\x07percent\x18\x03 \x01(\x05\x12\x0f\n\x07message\x18\x04 \x01(\t\"8\n\x13ReportProgressReply\x12\n\n\x02ok\x18\x01 \x01(\x08\x12\x15\n\rjob_cancelled\x18\x02 \x01(\x08\"\xc9\x01\n\x12\x43ompleteJobRequest\x12\x10\n\x08\x61gent_id\x18\x01 \x01(\t\x12\x0e\n\x06job_id\x18\x02 \x01(\t\x12\x0f\n\x07success\x18\x03 \x01(\x08\x12\x12\n\nerror_code\x18\x04 \x01(\t\x12\x15\n\rerror_message\x18\x05 \x01(\t\x12\x12\n\nbundle_key\x18\x06 \x01(\t\x12\x14\n\x0cmanifest_key\x18\x07 \x01(\t\x12\x12\n\nsize_bytes\x18\x08 \x01(\x03\x12\x17\n\x0f\x63hecksum_sha256\x18\t \x01(\t\"\x1e\n\x10\x43ompleteJobReply\x12\n\n\x02ok\x18\x01 \x01(\x08*b\n\rStorageIntent\x12\x1e\n\x1aSTORAGE_INTENT_UNSPECIFIED\x10\x00\x12\x18\n\x14STORAGE_INTENT_WRITE\x10\x01\x12\x17\n\x13STORAGE_INTENT_READ\x10\x02\x32\xe0\x03\n\x0c\x41gentControl\x12Q\n\tHeartbeat\x12\".devault.agent.v1.HeartbeatRequest\x1a .devault.agent.v1.HeartbeatReply\x12Q\n\tLeaseJobs\x12\".devault.agent.v1.LeaseJobsRequest\x1a .devault.agent.v1.LeaseJobsReply\x12o\n\x13RequestStorageGrant\x12,.devault.agent.v1.RequestStorageGrantRequest\x1a*.devault.agent.v1.RequestStorageGrantReply\x12`\n\x0eReportProgress\x12\'.devault.agent.v1.ReportProgressRequest\x1a%.devault.agent.v1.ReportProgressReply\x12W\n\x0b\x43ompleteJob\x12$.devault.agent.v1.CompleteJobRequest\x1a\".devault.agent.v1.CompleteJobReplyb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0b\x61gent.proto\x12\x10\x64\x65vault.agent.v1\"@\n\x0fRegisterRequest\x12\x10\n\x08\x61gent_id\x18\x01 \x01(\t\x12\x1b\n\x13registration_secret\x18\x02 \x01(\t\"^\n\rRegisterReply\x12\n\n\x02ok\x18\x01 \x01(\x08\x12\x14\n\x0c\x62\x65\x61rer_token\x18\x02 \x01(\t\x12\x1a\n\x12\x65xpires_in_seconds\x18\x03 \x01(\x03\x12\x0f\n\x07message\x18\x04 \x01(\t\"$\n\x10HeartbeatRequest\x12\x10\n\x08\x61gent_id\x18\x01 \x01(\t\"\x1c\n\x0eHeartbeatReply\x12\n\n\x02ok\x18\x01 \x01(\x08\"6\n\x10LeaseJobsRequest\x12\x10\n\x08\x61gent_id\x18\x01 \x01(\t\x12\x10\n\x08max_jobs\x18\x02 \x01(\x05\"M\n\x08JobLease\x12\x0e\n\x06job_id\x18\x01 \x01(\t\x12\x0c\n\x04kind\x18\x02 \x01(\t\x12\x0e\n\x06plugin\x18\x03 \x01(\t\x12\x13\n\x0b\x63onfig_json\x18\x04 \x01(\t\":\n\x0eLeaseJobsReply\x12(\n\x04jobs\x18\x01 \x03(\x0b\x32\x1a.devault.agent.v1.JobLease\"o\n\x1aRequestStorageGrantRequest\x12\x10\n\x08\x61gent_id\x18\x01 \x01(\t\x12\x0e\n\x06job_id\x18\x02 \x01(\t\x12/\n\x06intent\x18\x03 \x01(\x0e\x32\x1f.devault.agent.v1.StorageIntent\"\xb6\x01\n\x18RequestStorageGrantReply\x12\x12\n\nbundle_key\x18\x01 \x01(\t\x12\x14\n\x0cmanifest_key\x18\x02 \x01(\t\x12\x17\n\x0f\x62undle_http_url\x18\x03 \x01(\t\x12\x19\n\x11manifest_http_url\x18\x04 \x01(\t\x12\x1a\n\x12\x65xpires_in_seconds\x18\x05 \x01(\x03\x12 \n\x18\x65xpected_checksum_sha256\x18\x06 \x01(\t\"[\n\x15ReportProgressRequest\x12\x10\n\x08\x61gent_id\x18\x01 \x01(\t\x12\x0e\n\x06job_id\x18\x02 \x01(\t\x12\x0f\n\x07percent\x18\x03 \x01(\x05\x12\x0f\n\x07message\x18\x04 \x01(\t\"8\n\x13ReportProgressReply\x12\n\n\x02ok\x18\x01 \x01(\x08\x12\x15\n\rjob_cancelled\x18\x02 \x01(\x08\"\xc9\x01\n\x12\x43ompleteJobRequest\x12\x10\n\x08\x61gent_id\x18\x01 \x01(\t\x12\x0e\n\x06job_id\x18\x02 \x01(\t\x12\x0f\n\x07success\x18\x03 \x01(\x08\x12\x12\n\nerror_code\x18\x04 \x01(\t\x12\x15\n\rerror_message\x18\x05 \x01(\t\x12\x12\n\nbundle_key\x18\x06 \x01(\t\x12\x14\n\x0cmanifest_key\x18\x07 \x01(\t\x12\x12\n\nsize_bytes\x18\x08 \x01(\x03\x12\x17\n\x0f\x63hecksum_sha256\x18\t \x01(\t\"\x1e\n\x10\x43ompleteJobReply\x12\n\n\x02ok\x18\x01 \x01(\x08*b\n\rStorageIntent\x12\x1e\n\x1aSTORAGE_INTENT_UNSPECIFIED\x10\x00\x12\x18\n\x14STORAGE_INTENT_WRITE\x10\x01\x12\x17\n\x13STORAGE_INTENT_READ\x10\x02\x32\xb0\x04\n\x0c\x41gentControl\x12N\n\x08Register\x12!.devault.agent.v1.RegisterRequest\x1a\x1f.devault.agent.v1.RegisterReply\x12Q\n\tHeartbeat\x12\".devault.agent.v1.HeartbeatRequest\x1a .devault.agent.v1.HeartbeatReply\x12Q\n\tLeaseJobs\x12\".devault.agent.v1.LeaseJobsRequest\x1a .devault.agent.v1.LeaseJobsReply\x12o\n\x13RequestStorageGrant\x12,.devault.agent.v1.RequestStorageGrantRequest\x1a*.devault.agent.v1.RequestStorageGrantReply\x12`\n\x0eReportProgress\x12\'.devault.agent.v1.ReportProgressRequest\x1a%.devault.agent.v1.ReportProgressReply\x12W\n\x0b\x43ompleteJob\x12$.devault.agent.v1.CompleteJobRequest\x1a\".devault.agent.v1.CompleteJobReplyb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'agent_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
-  _globals['_STORAGEINTENT']._serialized_start=981
-  _globals['_STORAGEINTENT']._serialized_end=1079
-  _globals['_HEARTBEATREQUEST']._serialized_start=33
-  _globals['_HEARTBEATREQUEST']._serialized_end=69
-  _globals['_HEARTBEATREPLY']._serialized_start=71
-  _globals['_HEARTBEATREPLY']._serialized_end=99
-  _globals['_LEASEJOBSREQUEST']._serialized_start=101
-  _globals['_LEASEJOBSREQUEST']._serialized_end=155
-  _globals['_JOBLEASE']._serialized_start=157
-  _globals['_JOBLEASE']._serialized_end=234
-  _globals['_LEASEJOBSREPLY']._serialized_start=236
-  _globals['_LEASEJOBSREPLY']._serialized_end=294
-  _globals['_REQUESTSTORAGEGRANTREQUEST']._serialized_start=296
-  _globals['_REQUESTSTORAGEGRANTREQUEST']._serialized_end=407
-  _globals['_REQUESTSTORAGEGRANTREPLY']._serialized_start=410
-  _globals['_REQUESTSTORAGEGRANTREPLY']._serialized_end=592
-  _globals['_REPORTPROGRESSREQUEST']._serialized_start=594
-  _globals['_REPORTPROGRESSREQUEST']._serialized_end=685
-  _globals['_REPORTPROGRESSREPLY']._serialized_start=687
-  _globals['_REPORTPROGRESSREPLY']._serialized_end=743
-  _globals['_COMPLETEJOBREQUEST']._serialized_start=746
-  _globals['_COMPLETEJOBREQUEST']._serialized_end=947
-  _globals['_COMPLETEJOBREPLY']._serialized_start=949
-  _globals['_COMPLETEJOBREPLY']._serialized_end=979
-  _globals['_AGENTCONTROL']._serialized_start=1082
-  _globals['_AGENTCONTROL']._serialized_end=1562
+  _globals['_STORAGEINTENT']._serialized_start=1143
+  _globals['_STORAGEINTENT']._serialized_end=1241
+  _globals['_REGISTERREQUEST']._serialized_start=33
+  _globals['_REGISTERREQUEST']._serialized_end=97
+  _globals['_REGISTERREPLY']._serialized_start=99
+  _globals['_REGISTERREPLY']._serialized_end=193
+  _globals['_HEARTBEATREQUEST']._serialized_start=195
+  _globals['_HEARTBEATREQUEST']._serialized_end=231
+  _globals['_HEARTBEATREPLY']._serialized_start=233
+  _globals['_HEARTBEATREPLY']._serialized_end=261
+  _globals['_LEASEJOBSREQUEST']._serialized_start=263
+  _globals['_LEASEJOBSREQUEST']._serialized_end=317
+  _globals['_JOBLEASE']._serialized_start=319
+  _globals['_JOBLEASE']._serialized_end=396
+  _globals['_LEASEJOBSREPLY']._serialized_start=398
+  _globals['_LEASEJOBSREPLY']._serialized_end=456
+  _globals['_REQUESTSTORAGEGRANTREQUEST']._serialized_start=458
+  _globals['_REQUESTSTORAGEGRANTREQUEST']._serialized_end=569
+  _globals['_REQUESTSTORAGEGRANTREPLY']._serialized_start=572
+  _globals['_REQUESTSTORAGEGRANTREPLY']._serialized_end=754
+  _globals['_REPORTPROGRESSREQUEST']._serialized_start=756
+  _globals['_REPORTPROGRESSREQUEST']._serialized_end=847
+  _globals['_REPORTPROGRESSREPLY']._serialized_start=849
+  _globals['_REPORTPROGRESSREPLY']._serialized_end=905
+  _globals['_COMPLETEJOBREQUEST']._serialized_start=908
+  _globals['_COMPLETEJOBREQUEST']._serialized_end=1109
+  _globals['_COMPLETEJOBREPLY']._serialized_start=1111
+  _globals['_COMPLETEJOBREPLY']._serialized_end=1141
+  _globals['_AGENTCONTROL']._serialized_start=1244
+  _globals['_AGENTCONTROL']._serialized_end=1804
 # @@protoc_insertion_point(module_scope)

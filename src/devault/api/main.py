@@ -70,3 +70,9 @@ def metrics() -> Response:
 @app.get("/healthz")
 def healthz() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/version")
+def version() -> dict[str, str]:
+    """Control plane release version (HTTP); pair with Agent build and gRPC health checks."""
+    return {"service": "devault-api", "version": __version__}

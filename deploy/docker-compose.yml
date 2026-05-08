@@ -86,6 +86,17 @@ services:
         condition: service_started
       minio-init:
         condition: service_completed_successfully
+    # Uvicorn lifespan starts gRPC on :50051; wait until HTTP is up so Envoy/agents do not hit connection refused.
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          'python -c "import urllib.request; urllib.request.urlopen(''http://127.0.0.1:8000/healthz'', timeout=4).read()"',
+        ]
+      interval: 3s
+      timeout: 5s
+      retries: 5
+      start_period: 120s
 
   scheduler:
     build:
@@ -104,7 +115,7 @@ services:
       redis:
         condition: service_started
       api:
-        condition: service_started
+        condition: service_healthy
 
   prometheus:
     image: prom/prometheus:v2.55.1
@@ -119,7 +130,7 @@ services:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
     depends_on:
       api:
-        condition: service_started
+        condition: service_healthy
 
   agent:
     build:
@@ -136,7 +147,7 @@ services:
       - agent_restore:/restore
     depends_on:
       api:
-        condition: service_started
+        condition: service_healthy
       minio-init:
         condition: service_completed_successfully
 

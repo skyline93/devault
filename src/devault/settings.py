@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from typing import Self
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -46,8 +47,83 @@ class Settings(BaseSettings):
         default=None,
         description="Agent only: control plane address host:port for gRPC",
     )
+
+    # --- gRPC server (control plane): TLS + optional mTLS ---
+    grpc_server_tls_cert_path: str | None = Field(
+        default=None,
+        description="PEM server certificate chain for gRPC TLS (with grpc_server_tls_key_path)",
+    )
+    grpc_server_tls_key_path: str | None = Field(
+        default=None,
+        description="PEM private key for gRPC server TLS",
+    )
+    grpc_server_tls_client_ca_path: str | None = Field(
+        default=None,
+        description="If set, require client certificates signed by this CA (mTLS)",
+    )
+
+    # --- gRPC server: rate limit + audit ---
+    grpc_rps_per_peer: float = Field(
+        default=0.0,
+        ge=0.0,
+        description="Max sustained RPCs per second per gRPC peer(); 0 disables",
+    )
+    grpc_rps_burst_per_peer: float = Field(
+        default=40.0,
+        ge=1.0,
+        description="Token bucket burst for grpc_rps_per_peer",
+    )
+    grpc_audit_log: bool = Field(
+        default=True,
+        description="Emit JSON lines to logger devault.grpc.audit for each Agent RPC",
+    )
+
+    # --- gRPC Register bootstrap (control plane + Agent) ---
+    grpc_registration_secret: str | None = Field(
+        default=None,
+        description="If set, Register RPC accepts this secret and returns DEVAULT_API_TOKEN",
+    )
+
+    # --- gRPC client (Agent): TLS toward gateway or control plane ---
+    grpc_tls_ca_path: str | None = Field(
+        default=None,
+        description="Agent: PEM trust bundle to verify server (enables TLS on channel)",
+    )
+    grpc_tls_client_cert_path: str | None = Field(
+        default=None,
+        description="Agent: optional client certificate PEM for mTLS",
+    )
+    grpc_tls_client_key_path: str | None = Field(
+        default=None,
+        description="Agent: optional client private key PEM for mTLS",
+    )
+    grpc_tls_server_name: str | None = Field(
+        default=None,
+        description="Agent: TLS server name override for certificate verification (SNI)",
+    )
+
     job_lease_ttl_seconds: int = Field(default=1800, ge=60)
     presign_ttl_seconds: int = Field(default=3600, ge=60)
+
+    @model_validator(mode="after")
+    def _grpc_tls_paths_consistent(self) -> Self:
+        sc, sk = self.grpc_server_tls_cert_path, self.grpc_server_tls_key_path
+        if (sc is None) ^ (sk is None):
+            raise ValueError(
+                "DEVAULT_GRPC_SERVER_TLS_CERT_PATH and DEVAULT_GRPC_SERVER_TLS_KEY_PATH "
+                "must be set together"
+            )
+        if self.grpc_server_tls_client_ca_path and (sc is None or sk is None):
+            raise ValueError(
+                "DEVAULT_GRPC_SERVER_TLS_CLIENT_CA_PATH requires server TLS cert and key"
+            )
+        cc, ck = self.grpc_tls_client_cert_path, self.grpc_tls_client_key_path
+        if (cc is None) ^ (ck is None):
+            raise ValueError(
+                "DEVAULT_GRPC_TLS_CLIENT_CERT_PATH and DEVAULT_GRPC_TLS_CLIENT_KEY_PATH "
+                "must be set together"
+            )
+        return self
 
     @property
     def allowed_prefix_list(self) -> list[str] | None:

@@ -6,6 +6,7 @@ import os
 import sys
 import time
 import uuid
+from pathlib import Path
 from types import SimpleNamespace
 
 import grpc
@@ -18,16 +19,35 @@ from devault.plugins.file import (
     run_file_backup_with_presigned_urls,
     run_file_restore_with_presigned_bundle,
 )
-from devault.settings import get_settings
+from devault.settings import Settings, get_settings
 
 logger = logging.getLogger(__name__)
 
 
-def _metadata() -> list[tuple[str, str]]:
-    s = get_settings()
-    if not s.api_token:
+def _build_channel(target: str, *, settings: Settings) -> grpc.Channel:
+    opts: list[tuple[str, str]] = []
+    if settings.grpc_tls_server_name:
+        opts.append(("grpc.ssl_target_name_override", settings.grpc_tls_server_name))
+    if settings.grpc_tls_ca_path:
+        ca = Path(settings.grpc_tls_ca_path).read_bytes()
+        client_key: bytes | None = None
+        client_chain: bytes | None = None
+        if settings.grpc_tls_client_cert_path and settings.grpc_tls_client_key_path:
+            client_chain = Path(settings.grpc_tls_client_cert_path).read_bytes()
+            client_key = Path(settings.grpc_tls_client_key_path).read_bytes()
+        creds = grpc.ssl_channel_credentials(
+            root_certificates=ca,
+            private_key=client_key,
+            certificate_chain=client_chain,
+        )
+        return grpc.secure_channel(target, creds, options=opts or None)
+    return grpc.insecure_channel(target, options=opts or None)
+
+
+def _metadata(token: str | None) -> list[tuple[str, str]]:
+    if not token:
         return []
-    return [("authorization", f"Bearer {s.api_token}")]
+    return [("authorization", f"Bearer {token}")]
 
 
 def _job_view(job_id: str, lease: agent_pb2.JobLease, cfg: dict) -> SimpleNamespace:
@@ -44,14 +64,41 @@ def _job_view(job_id: str, lease: agent_pb2.JobLease, cfg: dict) -> SimpleNamesp
     )
 
 
+def _bootstrap_token_if_needed(stub: agent_pb2_grpc.AgentControlStub, agent_id: str, token: dict) -> None:
+    if token.get("value"):
+        return
+    s = get_settings()
+    if s.api_token:
+        token["value"] = s.api_token
+        return
+    if not s.grpc_registration_secret:
+        logger.error(
+            "No DEVAULT_API_TOKEN and no DEVAULT_GRPC_REGISTRATION_SECRET; cannot authenticate",
+        )
+        raise SystemExit(2)
+    reply = stub.Register(
+        agent_pb2.RegisterRequest(
+            agent_id=agent_id,
+            registration_secret=s.grpc_registration_secret,
+        ),
+        metadata=[],
+    )
+    if not reply.ok or not reply.bearer_token:
+        logger.error("Register failed: %s", reply.message or "unknown")
+        raise SystemExit(2)
+    token["value"] = reply.bearer_token
+    logger.info("obtained API token via Register (bootstrap)")
+
+
 def _run_one_job(
     stub: agent_pb2_grpc.AgentControlStub,
     agent_id: str,
     lease: agent_pb2.JobLease,
+    bearer: str,
 ) -> None:
     s = get_settings()
     job_id = lease.job_id
-    md = _metadata()
+    md = _metadata(bearer)
     cfg = json.loads(lease.config_json)
     try:
         if lease.kind == JobKind.BACKUP.value:
@@ -148,12 +195,24 @@ def run_forever() -> None:
     agent_id = os.environ.get("DEVAULT_AGENT_ID") or str(uuid.uuid4())
     logger.info("DeVault agent %s starting (DeVault %s)", agent_id, __version__)
 
-    channel = grpc.insecure_channel(target)
+    token: dict[str, str | None] = {"value": None}
+    channel = _build_channel(target, settings=s)
     stub = agent_pb2_grpc.AgentControlStub(channel)
+
+    try:
+        _bootstrap_token_if_needed(stub, agent_id, token)
+    except grpc.RpcError as e:
+        logger.exception("Register RPC failed: %s", e.details())
+        raise SystemExit(2) from e
+
+    bearer = token["value"]
+    if not bearer:
+        logger.error("No bearer token after bootstrap")
+        raise SystemExit(2)
 
     while True:
         try:
-            md = _metadata()
+            md = _metadata(bearer)
             hb = stub.Heartbeat(
                 agent_pb2.HeartbeatRequest(agent_id=agent_id),
                 metadata=md,
@@ -168,7 +227,7 @@ def run_forever() -> None:
                 time.sleep(2.0)
                 continue
             for job in leased.jobs:
-                _run_one_job(stub, agent_id, job)
+                _run_one_job(stub, agent_id, job, bearer)
         except grpc.RpcError as e:
             logger.exception("rpc error: %s", e.details())
             time.sleep(5.0)

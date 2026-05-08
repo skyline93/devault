@@ -22,11 +22,18 @@ Docker Compose 中 **仅 api** 在启动时执行 `alembic upgrade head`（**sch
 |------|------|
 | `http://127.0.0.1:8000/docs` | Swagger |
 | `http://127.0.0.1:50051` | **Agent gRPC**（与 HTTP 同进程，由 `DEVAULT_GRPC_LISTEN` 开启；生产可经网关反代） |
+| `http://127.0.0.1:8000/version` | 控制面版本（JSON） |
 | `http://127.0.0.1:8000/metrics` | Prometheus 指标 |
 | `http://127.0.0.1:8000/ui/jobs` | 简易 UI：策略/调度 CRUD、列表内「立即备份」「恢复」、任务取消/重试（Basic 密码为 `DEVAULT_API_TOKEN`） |
 | `/api/v1/policies`、`/api/v1/schedules` | 策略与 Cron 定时 CRUD |
 
 定时任务由 **`scheduler` 服务**（`devault-scheduler`）只负责**创建待处理任务**；**`agent` 服务**通过 gRPC **拉取租约**并执行备份/恢复，经预签名 URL 与 **MinIO（S3）** 直传。控制面 `DEVAULT_STORAGE_BACKEND` 需为 **`s3`** 才能生成预签名。
+
+### gRPC TLS、Envoy 网关与审计（阶段 A）
+
+- **TLS / mTLS / 限流 / 审计 / Register 引导 / 标准 Health**：见 [`docs/grpc-tls.md`](docs/grpc-tls.md)。  
+- **Envoy TLS 终结示例**（Agent → `50052` TLS → 内网 `api:50051` 明文）：先执行 `bash scripts/gen_grpc_dev_tls.sh`，再  
+  `docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.grpc-tls.yml up --build`。
 
 ### 对象存储桶（企业约定）
 
@@ -144,7 +151,7 @@ export DEVAULT_ALLOWED_PATH_PREFIXES=/data,/restore
 devault-agent
 ```
 
-修改 `proto/agent.proto` 后，在项目根目录执行 **`bash scripts/gen_proto.sh`**（需已安装 `grpcio-tools`），并检查 `agent_pb2_grpc.py` 中的 **相对导入**（`from . import agent_pb2`）。
+修改 `proto/agent.proto`（含 `Register` 等 RPC）后，在项目根目录执行 **`bash scripts/gen_proto.sh`**（需已安装 `grpcio-tools`），并检查 `agent_pb2_grpc.py` 中的 **相对导入**（`from . import agent_pb2`）。
 
 仅跑插件单元测试时仍可使用 `DEVAULT_STORAGE_BACKEND=local`，该路径不经过 Agent 预签名流水线。
 
