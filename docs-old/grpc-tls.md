@@ -52,7 +52,7 @@ docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.grpc-tls.ym
 
 证书输出目录：`deploy/tls/dev/`（已在 `.gitignore` 中忽略）。`grpc-gateway` 监听 **50052**（TLS），管理接口 **9901**。
 
-`docker-compose.yml` 中 **`api` 配有 `healthcheck`**（轮询 `http://127.0.0.1:8000/healthz`，`start_period` 覆盖 alembic + 冷启动）；**`grpc-gateway` / `agent` / `scheduler` / `prometheus`** 对 `api` 使用 **`condition: service_healthy`**，避免 Envoy 连上游 `api:50051` 时出现 **connection refused**（容器已起但 gRPC 尚未监听）。
+`docker-compose.yml` 中 **`api` 配有 `healthcheck`**（轮询 `http://127.0.0.1:8000/healthz`，`start_period` 覆盖 alembic + 冷启动）；**`grpc-gateway` / `agent` / `scheduler`**（以及可选叠加的 **Prometheus**）对 `api` 使用 **`condition: service_healthy`**，避免 Envoy 连上游 `api:50051` 时出现 **connection refused**（容器已起但 gRPC 尚未监听）。
 
 Envoy 下行 TLS 必须在 `common_tls_context` 中声明 **`alpn_protocols`**（含 **`h2`**），否则 Python `grpc.secure_channel` 可能报错：`Cannot check peer: missing selected ALPN property`。仓库内 `deploy/envoy/envoy-grpc-tls.yaml` 已包含该配置。
 

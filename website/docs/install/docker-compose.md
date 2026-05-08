@@ -15,6 +15,16 @@ cd deploy
 docker compose up --build -d
 ```
 
+## 可选：Prometheus
+
+核心栈不含 Prometheus。需要本地抓取 **`/metrics`** 时，在 `deploy/` 下叠加：
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prometheus.yml up -d
+```
+
+（自仓库根目录请将 `-f` 指向 `deploy/docker-compose.yml` 与 `deploy/docker-compose.prometheus.yml`。）
+
 ## 服务角色
 
 | 服务 | 说明 |
@@ -26,7 +36,8 @@ docker compose up --build -d
 | **api** | 控制面：HTTP +（默认开启的）gRPC；启动命令内含 `alembic upgrade head` 与 `uvicorn` |
 | **scheduler** | 仅负责按 Cron **创建任务**；**不**执行 `alembic` |
 | **agent** | 边缘 Agent：`DEVAULT_GRPC_TARGET=api:50051`，挂载 `demo_data` → `/data`，命名卷 → `/restore` |
-| **prometheus**（可选） | 抓取指标示例配置 |
+
+**Prometheus** 已拆到独立文件 **`docker-compose.prometheus.yml`**（见上一节），不再随默认 `up` 启动。
 
 ## 构建说明
 
@@ -35,4 +46,4 @@ docker compose up --build -d
 
 ## gRPC TLS 与网关
 
-若需 TLS 终结、Envoy 等叠加文件，可使用仓库提供的 `docker-compose.grpc-tls.yml` 等叠加方式（见 [TLS 与网关](../security/tls-and-gateway.md)）。
+若需 TLS 终结、Envoy 等叠加文件，可使用仓库提供的 `docker-compose.grpc-tls.yml` 等叠加方式（见 [TLS 与网关](../security/tls-and-gateway.md)）。可与 `docker-compose.prometheus.yml` 同时传入多个 `-f`。

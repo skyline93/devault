@@ -1,5 +1,5 @@
 # DeVault local stack: scrape the control-plane HTTP /metrics endpoint.
-# See deploy/docker-compose.yml service `prometheus`.
+# Used by optional overlay: deploy/docker-compose.prometheus.yml
 
 global:
   scrape_interval: 15s

@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`deploy/docker-compose.prometheus.yml`**：可选叠加文件，用于本地 Prometheus 抓取 `api` 的 `/metrics`（默认 `docker compose up` 不再启动 Prometheus）。
+
 ### Changed
 
 ### Deprecated

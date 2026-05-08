@@ -56,6 +56,9 @@ cd deploy
 docker compose up --build -d
 ```
 
+可选：在同一目录叠加 **Prometheus**（抓取 `api:8000/metrics`）时执行  
+`docker compose -f docker-compose.yml -f docker-compose.prometheus.yml up -d`（或自仓库根目录为两个 `-f deploy/...` 路径）。
+
 ### Docker 构建（依赖只看 pyproject.toml）
 
 - 镜像内通过 **`pip install -e .`** 安装。  

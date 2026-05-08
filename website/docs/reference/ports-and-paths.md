@@ -15,7 +15,7 @@ description: 默认端口、HTTP 路由与 Agent 路径约定
 | **5432** | PostgreSQL |
 | **6379** | Redis |
 | **9000** / **9001** | MinIO API / 控制台 |
-| **9090** | Prometheus（若启用示例服务） |
+| **9090** | Prometheus（仅在使用 `deploy/docker-compose.prometheus.yml` 叠加时） |
 
 网关叠加时可能对外暴露 **50052** 等 TLS 端口，见 `deploy/docker-compose.grpc-tls.yml`。
 

@@ -8,7 +8,7 @@ description: Prometheus、健康检查与日志
 
 ## Prometheus
 
-控制面暴露 **`GET /metrics`**（Prometheus 文本格式）。`deploy/docker-compose.yml` 中包含 **prometheus** 服务示例，将抓取目标指向 API。
+控制面暴露 **`GET /metrics`**（Prometheus 文本格式）。本地 Compose 示例将 Prometheus 放在 **`deploy/docker-compose.prometheus.yml`**（与主栈叠加使用），抓取目标为 **`api:8000`**（见 `deploy/prometheus.yml`）。
 
 常用排查步骤：
 
