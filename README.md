@@ -1,10 +1,13 @@
 # DeVault
 
-开发者向备份平台。当前实现 **控制面（HTTP API + gRPC + Postgres/Redis）** 与 **边缘 Agent（仅 gRPC + 对象存储数据面）** 分离，符合 [`docs/target-architecture.md`](docs/target-architecture.md) 中的 **Pull、经网关可扩展的 gRPC、统一 S3 存储** 模型。能力上仍包括 **文件全量备份/恢复**、**策略、定时、任务取消/重试、同策略并发锁、Prometheus 指标、简易 Web UI**（详见 [`docs/development-design.md`](docs/development-design.md)）。
+开发者向备份平台：当前实现 **控制面（HTTP API + gRPC + Postgres/Redis）** 与 **边缘 Agent（仅 gRPC + 对象存储数据面）** 分离，采用 **Pull 模型**、可经网关扩展的 **gRPC**，以及统一的 **S3 兼容存储** 数据面。能力包括 **文件全量备份/恢复**、**策略与 Cron 定时**、**任务取消/重试**、**同策略并发锁**、**Prometheus 指标**、**简易 Web UI**。
 
-- 产品愿景：[`docs/README.md`](docs/README.md)  
-- 目标架构：[`docs/target-architecture.md`](docs/target-architecture.md)  
-- 开发设计：[`docs/development-design.md`](docs/development-design.md)
+## 文档
+
+完整说明见 **Docusaurus 文档站**（源码在 `website/`，与 `docs-old/` 归档设计稿分离）：
+
+- **本地预览**：`cd website && npm ci && npm start`，浏览器打开 <http://localhost:3000>  
+- **在线站点**：部署后将生产 URL 写入 `website/docusaurus.config.ts` 的 `url` / `baseUrl` 并发布静态资源（见 `website/README.md`）
 
 ### 迁移数据库
 
@@ -31,13 +34,13 @@ Docker Compose 中 **仅 api** 在启动时执行 `alembic upgrade head`（**sch
 
 ### gRPC TLS、Envoy 网关与审计（阶段 A）
 
-- **TLS / mTLS / 限流 / 审计 / Register 引导 / 标准 Health**：见 [`docs/grpc-tls.md`](docs/grpc-tls.md)。  
+- 说明与操作步骤见文档站：[TLS 与网关](website/docs/security/tls-and-gateway.md)（构建后路径为 `/docs/security/tls-and-gateway`）。  
 - **Envoy TLS 终结示例**（Agent → `50052` TLS → 内网 `api:50051` 明文）：先执行 `bash scripts/gen_grpc_dev_tls.sh`，再  
   `docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.grpc-tls.yml up --build`。
 
 ### S3 大对象与恢复流式（阶段 B）
 
-- **Multipart 分片上传、分片重试、恢复流式校验**：见 [`docs/s3-data-plane.md`](docs/s3-data-plane.md)。  
+- 见文档站：[大对象与恢复](website/docs/storage/large-objects.md)、[存储调优](website/docs/storage/tuning.md)。  
 - 相关环境变量：`DEVAULT_S3_MULTIPART_THRESHOLD_BYTES`、`DEVAULT_S3_MULTIPART_PART_SIZE_BYTES`。
 
 ### 对象存储桶（企业约定）

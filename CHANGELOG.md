@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **文档站**：仓库根目录 `website/` 新增 Docusaurus 3 站点（中文文档，与 `docs-old/docusaurus-information-architecture.md` 信息架构一致）；CI 工作流 `.github/workflows/docs.yml` 对 `website/**` 执行 `npm ci` 与 `npm run build`。
+
 ### Changed
 
 ### Deprecated
