@@ -21,6 +21,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.0] - 2026-05-08
+
+### Added
+
+- **S3 Multipart 备份路径**：`RequestStorageGrant` 携带 `bundle_content_length`；超过阈值时返回分片预签名；`CompleteJob` 触发控制面 `complete_multipart_upload`（[`docs/s3-data-plane.md`](docs/s3-data-plane.md)）。
+- **配置**：`DEVAULT_S3_MULTIPART_THRESHOLD_BYTES`、`DEVAULT_S3_MULTIPART_PART_SIZE_BYTES`。
+- **分片上传重试**：Agent 侧每片 PUT 指数退避。
+- **单元测试**：`tests/test_multipart_plan.py`（分片规划与 10k 上限）。
+
+### Changed
+
+- **Agent 备份顺序**：先本地打 tarball，再申请存储授权并上传（支持 Multipart）。
+- **单 PUT bundle**：改为从磁盘 **流式** 读取上传，降低内存峰值。
+- **预签名恢复**：`httpx` **流式下载** + 分块 SHA-256，避免整包进内存。
+
+### Security
+
+- 预签名仍按 **作业 object key** 签发；STS 仍属后续工作（见 enterprise-backlog 阶段 B P2）。
+
+---
+
 ## [0.2.0] - 2026-05-08
 
 ### Added

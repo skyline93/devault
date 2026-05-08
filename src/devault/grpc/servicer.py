@@ -7,6 +7,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 import grpc
+from botocore.exceptions import ClientError
 from sqlalchemy import exists, or_, select, update
 from sqlalchemy.orm import Session, aliased
 
@@ -20,6 +21,11 @@ from devault.observability.metrics import JOB_DURATION_SECONDS, JOB_TOTAL
 from devault.plugins.file.plugin import artifact_object_keys
 from devault.settings import Settings, get_settings
 from devault.storage import get_storage
+from devault.storage.multipart import (
+    build_multipart_part_presigns,
+    effective_part_size_bytes,
+    start_multipart_upload,
+)
 from devault.storage.presign import (
     presign_get_object,
     presign_put_object,
@@ -277,17 +283,49 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
                     if job.kind != JobKind.BACKUP.value:
                         context.abort(grpc.StatusCode.INVALID_ARGUMENT, "WRITE only for backup jobs")
                     bundle_key, manifest_key = artifact_object_keys(settings, job.id)
-                    reply = agent_pb2.RequestStorageGrantReply(
-                        bundle_key=bundle_key,
-                        manifest_key=manifest_key,
-                        bundle_http_url=presign_put_object(
-                            client, bucket=bucket, key=bundle_key, expires_in=ttl
-                        ),
-                        manifest_http_url=presign_put_object(
-                            client, bucket=bucket, key=manifest_key, expires_in=ttl
-                        ),
-                        expires_in_seconds=ttl,
+                    manifest_url = presign_put_object(
+                        client, bucket=bucket, key=manifest_key, expires_in=ttl
                     )
+                    blen = int(request.bundle_content_length or 0)
+                    if blen >= int(settings.s3_multipart_threshold_bytes):
+                        upload_id = start_multipart_upload(
+                            client, bucket=bucket, key=bundle_key
+                        )
+                        eff_ps = effective_part_size_bytes(
+                            blen, int(settings.s3_multipart_part_size_bytes)
+                        )
+                        pairs = build_multipart_part_presigns(
+                            client,
+                            bucket=bucket,
+                            key=bundle_key,
+                            upload_id=upload_id,
+                            content_length=blen,
+                            part_size=eff_ps,
+                            expires_in=ttl,
+                        )
+                        reply = agent_pb2.RequestStorageGrantReply(
+                            bundle_key=bundle_key,
+                            manifest_key=manifest_key,
+                            bundle_http_url="",
+                            manifest_http_url=manifest_url,
+                            expires_in_seconds=ttl,
+                            bundle_multipart_upload_id=upload_id,
+                            bundle_multipart_parts=[
+                                agent_pb2.BundlePartPresign(part_number=a, http_put_url=b)
+                                for a, b in pairs
+                            ],
+                            bundle_multipart_part_size_bytes=eff_ps,
+                        )
+                    else:
+                        reply = agent_pb2.RequestStorageGrantReply(
+                            bundle_key=bundle_key,
+                            manifest_key=manifest_key,
+                            bundle_http_url=presign_put_object(
+                                client, bucket=bucket, key=bundle_key, expires_in=ttl
+                            ),
+                            manifest_http_url=manifest_url,
+                            expires_in_seconds=ttl,
+                        )
                     job.status = JobStatus.UPLOADING.value
                     db.commit()
                     return reply
@@ -395,7 +433,61 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
                                 grpc.StatusCode.INVALID_ARGUMENT,
                                 "bundle/manifest keys required",
                             )
-                        if not storage.exists(bundle_key) or not storage.exists(manifest_key):
+                        mpu_id = (request.bundle_multipart_upload_id or "").strip()
+                        mpu_json = (request.bundle_multipart_parts_json or "").strip()
+                        if mpu_id and mpu_json:
+                            try:
+                                parts_raw = json.loads(mpu_json)
+                            except json.JSONDecodeError:
+                                context.abort(
+                                    grpc.StatusCode.INVALID_ARGUMENT,
+                                    "invalid bundle_multipart_parts_json",
+                                )
+                                raise RuntimeError("unreachable")
+                            if not isinstance(parts_raw, list) or not parts_raw:
+                                context.abort(
+                                    grpc.StatusCode.INVALID_ARGUMENT,
+                                    "multipart parts list required",
+                                )
+                                raise RuntimeError("unreachable")
+                            parts_sorted = sorted(
+                                parts_raw,
+                                key=lambda x: int(x.get("PartNumber", 0)),
+                            )
+                            parts_boto = [
+                                {
+                                    "PartNumber": int(p["PartNumber"]),
+                                    "ETag": str(p["ETag"]),
+                                }
+                                for p in parts_sorted
+                            ]
+                            s3c = s3_client_from_settings(settings)
+                            try:
+                                s3c.complete_multipart_upload(
+                                    Bucket=settings.s3_bucket,
+                                    Key=bundle_key,
+                                    UploadId=mpu_id,
+                                    MultipartUpload={"Parts": parts_boto},
+                                )
+                            except ClientError as e:
+                                context.abort(
+                                    grpc.StatusCode.FAILED_PRECONDITION,
+                                    f"S3 complete_multipart_upload failed: {e}",
+                                )
+                                raise RuntimeError("unreachable") from e
+                            if not storage.exists(bundle_key) or not storage.exists(manifest_key):
+                                context.abort(
+                                    grpc.StatusCode.FAILED_PRECONDITION,
+                                    "artifact objects missing after multipart complete",
+                                )
+                                raise RuntimeError("unreachable")
+                        elif mpu_id or mpu_json:
+                            context.abort(
+                                grpc.StatusCode.INVALID_ARGUMENT,
+                                "bundle_multipart_upload_id and bundle_multipart_parts_json must both be set",
+                            )
+                            raise RuntimeError("unreachable")
+                        elif not storage.exists(bundle_key) or not storage.exists(manifest_key):
                             context.abort(
                                 grpc.StatusCode.FAILED_PRECONDITION,
                                 "artifact objects missing",

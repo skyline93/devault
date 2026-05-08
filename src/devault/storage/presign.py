@@ -47,3 +47,25 @@ def presign_get_object(
         Params={"Bucket": bucket, "Key": key},
         ExpiresIn=expires_in,
     )
+
+
+def presign_upload_part(
+    client: BaseClient,
+    *,
+    bucket: str,
+    key: str,
+    upload_id: str,
+    part_number: int,
+    expires_in: int,
+) -> str:
+    return client.generate_presigned_url(
+        "upload_part",
+        Params={
+            "Bucket": bucket,
+            "Key": key,
+            "UploadId": upload_id,
+            "PartNumber": part_number,
+        },
+        ExpiresIn=expires_in,
+        HttpMethod="PUT",
+    )

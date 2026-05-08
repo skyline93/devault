@@ -14,10 +14,12 @@ import grpc
 from devault import __version__
 from devault.core.enums import JobKind
 from devault.grpc_gen import agent_pb2, agent_pb2_grpc
-from devault.plugins.file import (
-    FileBackupError,
-    run_file_backup_with_presigned_urls,
-    run_file_restore_with_presigned_bundle,
+from devault.plugins.file import FileBackupError, run_file_restore_with_presigned_bundle
+from devault.plugins.file.plugin import (
+    BackupOutcome,
+    _build_backup_tarball,
+    artifact_object_keys,
+    upload_backup_via_storage_grant,
 )
 from devault.settings import Settings, get_settings
 
@@ -102,42 +104,67 @@ def _run_one_job(
     cfg = json.loads(lease.config_json)
     try:
         if lease.kind == JobKind.BACKUP.value:
-            g = stub.RequestStorageGrant(
-                agent_pb2.RequestStorageGrantRequest(
-                    agent_id=agent_id,
-                    job_id=job_id,
-                    intent=agent_pb2.STORAGE_INTENT_WRITE,
-                ),
-                metadata=md,
-            )
             job_stub = _job_view(job_id, lease, cfg)
-            outcome = run_file_backup_with_presigned_urls(
-                job=job_stub,
-                settings=s,
-                bundle_put_url=g.bundle_http_url,
-                manifest_put_url=g.manifest_http_url,
+            bid = uuid.UUID(job_id)
+            bundle_key, manifest_key = artifact_object_keys(s, bid)
+            tmp_path, manifest, size_bytes, checksum = _build_backup_tarball(
+                job_stub,
+                s,
+                bundle_key=bundle_key,
+                manifest_key=manifest_key,
             )
-            stub.ReportProgress(
-                agent_pb2.ReportProgressRequest(
-                    agent_id=agent_id,
-                    job_id=job_id,
-                    percent=95,
-                    message="uploaded",
-                ),
-                metadata=md,
-            )
-            stub.CompleteJob(
-                agent_pb2.CompleteJobRequest(
-                    agent_id=agent_id,
-                    job_id=job_id,
-                    success=True,
-                    bundle_key=outcome.bundle_key,
-                    manifest_key=outcome.manifest_key,
-                    size_bytes=outcome.size_bytes,
-                    checksum_sha256=outcome.checksum_sha256,
-                ),
-                metadata=md,
-            )
+            try:
+                manifest_bytes = json.dumps(manifest, indent=2).encode("utf-8")
+                g = stub.RequestStorageGrant(
+                    agent_pb2.RequestStorageGrantRequest(
+                        agent_id=agent_id,
+                        job_id=job_id,
+                        intent=agent_pb2.STORAGE_INTENT_WRITE,
+                        bundle_content_length=size_bytes,
+                    ),
+                    metadata=md,
+                )
+                parts_json = upload_backup_via_storage_grant(
+                    tmp_path,
+                    manifest_bytes,
+                    g,
+                    timeout=7200.0,
+                )
+                outcome = BackupOutcome(
+                    bundle_key=g.bundle_key,
+                    manifest_key=g.manifest_key,
+                    size_bytes=size_bytes,
+                    checksum_sha256=checksum,
+                    manifest=manifest,
+                )
+                stub.ReportProgress(
+                    agent_pb2.ReportProgressRequest(
+                        agent_id=agent_id,
+                        job_id=job_id,
+                        percent=95,
+                        message="uploaded",
+                    ),
+                    metadata=md,
+                )
+                stub.CompleteJob(
+                    agent_pb2.CompleteJobRequest(
+                        agent_id=agent_id,
+                        job_id=job_id,
+                        success=True,
+                        bundle_key=outcome.bundle_key,
+                        manifest_key=outcome.manifest_key,
+                        size_bytes=outcome.size_bytes,
+                        checksum_sha256=outcome.checksum_sha256,
+                        bundle_multipart_upload_id=g.bundle_multipart_upload_id or "",
+                        bundle_multipart_parts_json=parts_json or "",
+                    ),
+                    metadata=md,
+                )
+            finally:
+                try:
+                    tmp_path.unlink(missing_ok=True)
+                except OSError:
+                    pass
         elif lease.kind == JobKind.RESTORE.value:
             g = stub.RequestStorageGrant(
                 agent_pb2.RequestStorageGrantRequest(

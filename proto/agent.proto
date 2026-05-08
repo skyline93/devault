@@ -61,6 +61,14 @@ message RequestStorageGrantRequest {
   string agent_id = 1;
   string job_id = 2;
   StorageIntent intent = 3;
+  // Backup WRITE: bundle byte size after local tarball is built. If >= control plane
+  // multipart threshold, reply uses bundle_multipart_* instead of bundle_http_url.
+  int64 bundle_content_length = 4;
+}
+
+message BundlePartPresign {
+  int32 part_number = 1;
+  string http_put_url = 2;
 }
 
 message RequestStorageGrantReply {
@@ -71,6 +79,12 @@ message RequestStorageGrantReply {
   int64 expires_in_seconds = 5;
   // For READ: client should verify the downloaded bundle against this digest.
   string expected_checksum_sha256 = 6;
+  // When non-empty, upload bundle via S3 multipart using these presigned PUTs, then
+  // send bundle_multipart_upload_id + bundle_multipart_parts_json on CompleteJob.
+  string bundle_multipart_upload_id = 7;
+  repeated BundlePartPresign bundle_multipart_parts = 8;
+  // Byte size of parts 1..N-1 (last part may be smaller); matches control plane calculation.
+  int64 bundle_multipart_part_size_bytes = 9;
 }
 
 message ReportProgressRequest {
@@ -95,6 +109,10 @@ message CompleteJobRequest {
   string manifest_key = 7;
   int64 size_bytes = 8;
   string checksum_sha256 = 9;
+  // After multipart bundle upload: same upload_id as grant; JSON array of
+  // {"PartNumber":1,"ETag":"..."} (ETag values as returned by S3 / presigned PUT).
+  string bundle_multipart_upload_id = 10;
+  string bundle_multipart_parts_json = 11;
 }
 
 message CompleteJobReply {

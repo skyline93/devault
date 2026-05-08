@@ -105,6 +105,18 @@ class Settings(BaseSettings):
     job_lease_ttl_seconds: int = Field(default=1800, ge=60)
     presign_ttl_seconds: int = Field(default=3600, ge=60)
 
+    # S3 bundle upload (Agent path): multipart when bundle >= threshold (bytes)
+    s3_multipart_threshold_bytes: int = Field(
+        default=32 * 1024 * 1024,
+        ge=1,
+        description="Use multipart presigned upload for bundle when size >= this",
+    )
+    s3_multipart_part_size_bytes: int = Field(
+        default=16 * 1024 * 1024,
+        ge=5 * 1024 * 1024,
+        description="Target part size (S3 requires >= 5MiB except last part)",
+    )
+
     @model_validator(mode="after")
     def _grpc_tls_paths_consistent(self) -> Self:
         sc, sk = self.grpc_server_tls_cert_path, self.grpc_server_tls_key_path

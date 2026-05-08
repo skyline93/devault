@@ -29,7 +29,9 @@
 - [x] 观测：Prometheus 指标、`/metrics`
 - [x] 人机入口：HTTP API、CLI、简易 Web UI（HTTP Basic + `DEVAULT_API_TOKEN`）
 - [x] Compose 一键演示部署（含 MinIO、Agent 挂载示例数据）
-- [x] **应用版本号（单仓单版本）**：`pyproject.toml` 与 `devault.__version__` 均为 `0.1.0`；Agent 启动日志会打印该版本；**尚无**控制面与 Agent 之间的协议级版本交换与兼容性校验。
+- [x] **应用版本号（单仓单版本）**：以 `pyproject.toml` / `devault.__version__` 为准；Agent 启动日志会打印版本。
+- [x] **阶段 B（数据面）**：S3 Multipart 大 bundle、分片上传重试、预签名恢复 **流式下载 + 分块校验**；单对象 PUT 从磁盘流式上传（见 [`s3-data-plane.md`](./s3-data-plane.md)）。
+- [ ] **协议级版本协商**：Heartbeat / Register 扩展 `min_supported_agent` 等（见阶段 I）。
 
 ---
 
@@ -57,13 +59,14 @@
 
 | 状态 | 优先级 | 待办项 | 说明与验收要点 |
 |------|--------|--------|----------------|
-| [ ] | P0 | **S3 分块上传（Multipart）** | 大 artifact 走 `CreateMultipartUpload` / `UploadPart` / `CompleteMultipart`；预签名策略扩展（多 URL 或会话式凭证）。 |
-| [ ] | P0 | **断点续传与重试策略** | Agent 侧记录已上传 Part ETag；失败后可续传；与控制面 `CompleteJob` 校验对象存在性逻辑一致。 |
-| [ ] | P1 | **恢复侧大文件流式下载** | 当前预签名恢复路径若存在整包进内存风险，改为流式写入磁盘并边下边校验（与 `development-design.md` 风险表「禁止一次性读入 artifact」一致）。 |
-| [ ] | P1 | **预签名权限最小化** | 按 job、按 key 前缀限制；WRITE 与 READ 分离；过期时间与作业 SLA 对齐；文档化各云厂商差异（MinIO vs AWS）。 |
-| [ ] | P2 | **可选 STS / 临时 IAM 角色** | 在云托管部署中，控制面用 IAM 角色代发临时凭证，替代长寿命控制面 AK/SK（与目标文档「IAM 临时凭证视部署而定」一致）。 |
+| [x] | P0 | **S3 分块上传（Multipart）** | 当 `bundle_content_length >= DEVAULT_S3_MULTIPART_THRESHOLD_BYTES`：`CreateMultipartUpload` + 每段 `upload_part` 预签名 + `CompleteJob` 时控制面 `complete_multipart_upload`。见 [`docs/s3-data-plane.md`](./s3-data-plane.md)。 |
+| [x] | P0 | **分片上传同进程重试** | Agent 对单个分片 PUT **指数退避**重试；范围限定为 **同一进程、同一租约周期内**、当前预签名仍有效。 |
+| [ ] | P1 | **Multipart 跨重启 / 跨进程断点续传** | 持久化 `UploadId`、已完成 **PartNumber + ETag**（本地状态目录或控制面表 + API）；Agent 重启后 **`ListParts`** 或等价查询续传未完成分片；与 **租约续期 / 预签名刷新**、`AbortMultipartUpload` 超时清理协同；可观测（指标与日志）。 |
+| [x] | P1 | **恢复侧大文件流式下载** | 预签名恢复改为 **httpx stream + 分块 SHA-256**，不再整包 `read_bytes()`。 |
+| [x] | P1 | **预签名权限最小化** | 仍按 **job 维度** 的 object key；manifest 与 bundle 分离；TTL 与 `DEVAULT_PRESIGN_TTL_SECONDS` 对齐；云差异见 [`docs/s3-data-plane.md`](./s3-data-plane.md)。 |
+| [ ] | P2 | **STS / AssumeRole 临时凭证（控制面 → S3）** | 控制面通过 **IAM 角色链**（如 `AssumeRole`）获取 **短时** `AccessKeyId/Secret/SessionToken`，用于 `create_multipart_upload` / `complete_multipart_upload` / `head_object` 等；**不**把长期 AK/SK 写入镜像或 ConfigMap；与 IRSA、EC2 实例配置、Vault 动态秘钥等部署模式文档化；与现有 `DEVAULT_S3_*` 静态密钥 **二选一或降级链**。 |
 
-**依赖**：阶段 A 中存储授权接口需能承载「多 part」或「会话 token」语义。
+**依赖**：阶段 A 中存储授权接口需能承载「多 part」或「会话 token」语义；**跨重启续传**依赖租约与预签名策略可扩展；**STS** 依赖云账号与信任策略落地。
 
 ---
 
@@ -192,7 +195,8 @@
 | Epic ID | 名称 | 主要覆盖阶段 |
 |---------|------|----------------|
 | E-ARCH-001 | 传输安全与网关 | A |
-| E-DATA-001 | 大对象与续传 | B |
+| E-DATA-001 | 大对象与续传（Multipart + 流式） | B |
+| E-DATA-002 | Multipart 跨重启续传 + STS 临时凭证 | B（待办） |
 | E-DB-001 | 数据库备份 MVP | C |
 | E-MT-001 | 租户与 RBAC | D |
 | E-GOV-001 | 加密、保留、合规 | E |
@@ -210,3 +214,5 @@
 | 2026-05-08 | 初稿：基于 `development-design.md`、`target-architecture.md` 与当前代码实现整理企业级待办清单。 |
 | 2026-05-08 | 新增阶段 I：版本管理、控制面/Agent 双端校验、CHANGELOG 约定；Epic `E-VER-001`；基线补充版本号现状。 |
 | 2026-05-08 | **阶段 A 落地**：TLS/mTLS、Envoy 示例、限流与审计、`Register`、Health、`GET /version`、[`grpc-tls.md`](./grpc-tls.md)；发布 **0.2.0**。 |
+| 2026-05-08 | **阶段 B（P0/P1）落地**：S3 Multipart、分片上传重试、流式恢复、单 PUT 流式上传；[`s3-data-plane.md`](./s3-data-plane.md)；发布 **0.3.0**（STS 仍为待办）。 |
+| 2026-05-08 | 阶段 B 表拆分为「同进程重试」[x] 与显式待办：**跨重启 Multipart 续传** [ ]、**STS/AssumeRole** [ ]；新增 Epic **E-DATA-002**。 |

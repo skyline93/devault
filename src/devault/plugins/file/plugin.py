@@ -5,6 +5,7 @@ import json
 import os
 import tarfile
 import tempfile
+import time
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -15,6 +16,7 @@ import pathspec
 from sqlalchemy.orm import Session
 
 from devault.db.models import Artifact, Job
+from devault.grpc_gen import agent_pb2
 from devault.settings import Settings
 from devault.storage.types import Storage
 
@@ -212,9 +214,9 @@ def run_file_backup(
 
 
 def http_put_presigned_file(url: str, path: Path, *, timeout: float = 7200.0) -> None:
-    data = path.read_bytes()
-    with httpx.Client(timeout=timeout) as client:
-        r = client.put(url, content=data)
+    """Stream from disk to avoid loading the whole bundle into memory."""
+    with path.open("rb") as body, httpx.Client(timeout=timeout) as client:
+        r = client.put(url, content=body)
         r.raise_for_status()
 
 
@@ -224,12 +226,79 @@ def http_put_presigned_bytes(url: str, data: bytes, *, timeout: float = 600.0) -
         r.raise_for_status()
 
 
-def http_download_file(url: str, dest: Path, *, timeout: float = 7200.0) -> None:
+def _http_put_presigned_chunk_with_retries(
+    url: str,
+    data: bytes,
+    *,
+    timeout: float = 7200.0,
+    attempts: int = 6,
+) -> str:
+    delay = 1.0
+    last_err: BaseException | None = None
+    for _ in range(attempts):
+        try:
+            with httpx.Client(timeout=timeout) as client:
+                r = client.put(url, content=data)
+                r.raise_for_status()
+            etag = (r.headers.get("etag") or "").strip()
+            if not etag:
+                raise FileBackupError("UPLOAD", "S3 part upload response missing ETag")
+            return etag
+        except (httpx.HTTPError, OSError, FileBackupError) as e:
+            last_err = e
+            time.sleep(delay)
+            delay = min(delay * 2.0, 30.0)
+    raise FileBackupError("UPLOAD", f"S3 multipart part upload failed: {last_err!r}") from last_err
+
+
+def http_download_file_streaming_sha256(url: str, dest: Path, *, timeout: float = 7200.0) -> str:
+    """Download to ``dest`` and return SHA-256 hex of bytes written (streaming)."""
     dest.parent.mkdir(parents=True, exist_ok=True)
-    with httpx.Client(timeout=timeout, follow_redirects=True) as client:
-        r = client.get(url)
-        r.raise_for_status()
-        dest.write_bytes(r.content)
+    h = hashlib.sha256()
+    with dest.open("wb") as out, httpx.Client(timeout=timeout, follow_redirects=True) as client:
+        with client.stream("GET", url) as r:
+            r.raise_for_status()
+            for chunk in r.iter_bytes(1024 * 1024):
+                out.write(chunk)
+                h.update(chunk)
+    return h.hexdigest()
+
+
+def upload_backup_via_storage_grant(
+    tmp_path: Path,
+    manifest_bytes: bytes,
+    grant: agent_pb2.RequestStorageGrantReply,
+    *,
+    timeout: float = 7200.0,
+) -> str | None:
+    """Upload manifest and bundle (single PUT or multipart). Returns JSON for CompleteJob multipart fields or None."""
+    http_put_presigned_bytes(grant.manifest_http_url, manifest_bytes, timeout=timeout)
+    if grant.bundle_multipart_upload_id:
+        ps = int(grant.bundle_multipart_part_size_bytes or 0)
+        parts_sorted = sorted(grant.bundle_multipart_parts, key=lambda p: p.part_number)
+        if not parts_sorted or ps <= 0:
+            raise FileBackupError("INVALID_GRANT", "invalid multipart grant")
+        meta: list[dict] = []
+        with tmp_path.open("rb") as f:
+            n = len(parts_sorted)
+            for i, part in enumerate(parts_sorted):
+                if i < n - 1:
+                    chunk = f.read(ps)
+                else:
+                    chunk = f.read()
+                if not chunk:
+                    raise FileBackupError("UPLOAD", f"empty chunk for multipart part {part.part_number}")
+                etag = _http_put_presigned_chunk_with_retries(
+                    part.http_put_url,
+                    chunk,
+                    timeout=timeout,
+                )
+                meta.append({"PartNumber": part.part_number, "ETag": etag})
+        return json.dumps(meta)
+    if not grant.bundle_http_url:
+        raise FileBackupError("INVALID_GRANT", "missing bundle_http_url")
+    http_put_presigned_file(grant.bundle_http_url, tmp_path, timeout=timeout)
+    return None
 
 
 def run_file_backup_with_presigned_urls(
@@ -348,8 +417,10 @@ def run_file_restore_with_presigned_bundle(
     with tempfile.NamedTemporaryFile(suffix=".tar.gz", delete=False) as tmp:
         bundle_local = Path(tmp.name)
     try:
-        http_download_file(bundle_get_url, bundle_local)
-        _extract_bundle(bundle_local, target, expected_checksum_sha256)
+        digest = http_download_file_streaming_sha256(bundle_get_url, bundle_local)
+        if digest.lower() != expected_checksum_sha256.lower():
+            raise FileBackupError("CHECKSUM_MISMATCH", "Downloaded bundle checksum mismatch")
+        _extract_bundle(bundle_local, target, digest)
     finally:
         try:
             bundle_local.unlink(missing_ok=True)

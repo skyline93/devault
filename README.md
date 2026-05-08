@@ -35,6 +35,11 @@ Docker Compose 中 **仅 api** 在启动时执行 `alembic upgrade head`（**sch
 - **Envoy TLS 终结示例**（Agent → `50052` TLS → 内网 `api:50051` 明文）：先执行 `bash scripts/gen_grpc_dev_tls.sh`，再  
   `docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.grpc-tls.yml up --build`。
 
+### S3 大对象与恢复流式（阶段 B）
+
+- **Multipart 分片上传、分片重试、恢复流式校验**：见 [`docs/s3-data-plane.md`](docs/s3-data-plane.md)。  
+- 相关环境变量：`DEVAULT_S3_MULTIPART_THRESHOLD_BYTES`、`DEVAULT_S3_MULTIPART_PART_SIZE_BYTES`。
+
 ### 对象存储桶（企业约定）
 
 - **应用不会在运行时创建 S3/MinIO 桶**（不提供 `CreateBucket`），便于 IAM 最小权限与合规审计。
