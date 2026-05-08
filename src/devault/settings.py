@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from pathlib import Path
 from typing import Self
 
 from pydantic import Field, field_validator, model_validator
@@ -116,6 +117,10 @@ class Settings(BaseSettings):
         ge=5 * 1024 * 1024,
         description="Target part size (S3 requires >= 5MiB except last part)",
     )
+    agent_multipart_state_dir: str | None = Field(
+        default=None,
+        description="Agent only: base directory for multipart resume checkpoints and WIP bundle",
+    )
 
     @model_validator(mode="after")
     def _grpc_tls_paths_consistent(self) -> Self:
@@ -136,6 +141,12 @@ class Settings(BaseSettings):
                 "must be set together"
             )
         return self
+
+    @property
+    def agent_multipart_state_root(self) -> Path:
+        if self.agent_multipart_state_dir:
+            return Path(self.agent_multipart_state_dir).expanduser()
+        return Path.home() / ".cache" / "devault-agent"
 
     @property
     def allowed_prefix_list(self) -> list[str] | None:

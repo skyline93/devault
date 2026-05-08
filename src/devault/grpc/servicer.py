@@ -17,13 +17,21 @@ from devault.db.models import Artifact, Job
 from devault.db.session import SessionLocal
 from devault.grpc.rpc_governance import grpc_governance
 from devault.grpc_gen import agent_pb2, agent_pb2_grpc
-from devault.observability.metrics import JOB_DURATION_SECONDS, JOB_TOTAL
+from devault.observability.metrics import (
+    JOB_DURATION_SECONDS,
+    JOB_TOTAL,
+    MULTIPART_RESUME_GRANTS_TOTAL,
+)
 from devault.plugins.file.plugin import artifact_object_keys
 from devault.settings import Settings, get_settings
 from devault.storage import get_storage
 from devault.storage.multipart import (
+    abort_multipart_upload_best_effort,
     build_multipart_part_presigns,
+    build_multipart_part_presigns_missing,
     effective_part_size_bytes,
+    list_uploaded_multipart_parts,
+    multipart_upload_is_complete,
     start_multipart_upload,
 )
 from devault.storage.presign import (
@@ -287,36 +295,129 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
                         client, bucket=bucket, key=manifest_key, expires_in=ttl
                     )
                     blen = int(request.bundle_content_length or 0)
-                    if blen >= int(settings.s3_multipart_threshold_bytes):
-                        upload_id = start_multipart_upload(
-                            client, bucket=bucket, key=bundle_key
-                        )
-                        eff_ps = effective_part_size_bytes(
-                            blen, int(settings.s3_multipart_part_size_bytes)
-                        )
-                        pairs = build_multipart_part_presigns(
-                            client,
-                            bucket=bucket,
-                            key=bundle_key,
-                            upload_id=upload_id,
-                            content_length=blen,
-                            part_size=eff_ps,
-                            expires_in=ttl,
-                        )
-                        reply = agent_pb2.RequestStorageGrantReply(
-                            bundle_key=bundle_key,
-                            manifest_key=manifest_key,
-                            bundle_http_url="",
-                            manifest_http_url=manifest_url,
-                            expires_in_seconds=ttl,
-                            bundle_multipart_upload_id=upload_id,
-                            bundle_multipart_parts=[
-                                agent_pb2.BundlePartPresign(part_number=a, http_put_url=b)
-                                for a, b in pairs
-                            ],
-                            bundle_multipart_part_size_bytes=eff_ps,
-                        )
+                    resume_id = (request.resume_bundle_multipart_upload_id or "").strip()
+                    threshold = int(settings.s3_multipart_threshold_bytes)
+                    cfg_ps = int(settings.s3_multipart_part_size_bytes)
+
+                    if blen >= threshold:
+                        eff_ps = effective_part_size_bytes(blen, cfg_ps)
+                        if resume_id:
+                            if not job.bundle_wip_multipart_upload_id:
+                                context.abort(
+                                    grpc.StatusCode.INVALID_ARGUMENT,
+                                    "no in-progress multipart upload for this job",
+                                )
+                                raise RuntimeError("unreachable")
+                            if resume_id != job.bundle_wip_multipart_upload_id:
+                                context.abort(
+                                    grpc.StatusCode.INVALID_ARGUMENT,
+                                    "resume_bundle_multipart_upload_id does not match job WIP",
+                                )
+                                raise RuntimeError("unreachable")
+                            if job.bundle_wip_content_length != blen or job.bundle_wip_part_size_bytes != eff_ps:
+                                context.abort(
+                                    grpc.StatusCode.INVALID_ARGUMENT,
+                                    "multipart resume dimensions mismatch",
+                                )
+                                raise RuntimeError("unreachable")
+                            uploaded = list_uploaded_multipart_parts(
+                                client, bucket=bucket, key=bundle_key, upload_id=resume_id
+                            )
+                            if multipart_upload_is_complete(
+                                content_length=blen,
+                                configured_part_size=cfg_ps,
+                                uploaded=uploaded,
+                            ):
+                                reply = agent_pb2.RequestStorageGrantReply(
+                                    bundle_key=bundle_key,
+                                    manifest_key=manifest_key,
+                                    bundle_http_url="",
+                                    manifest_http_url=manifest_url,
+                                    expires_in_seconds=ttl,
+                                    bundle_multipart_upload_id=resume_id,
+                                    bundle_multipart_parts=[],
+                                    bundle_multipart_part_size_bytes=eff_ps,
+                                    bundle_multipart_completed_parts_json=json.dumps(uploaded),
+                                )
+                            else:
+                                done_nums = {int(p["PartNumber"]) for p in uploaded}
+                                pairs = build_multipart_part_presigns_missing(
+                                    client,
+                                    bucket=bucket,
+                                    key=bundle_key,
+                                    upload_id=resume_id,
+                                    content_length=blen,
+                                    part_size=cfg_ps,
+                                    expires_in=ttl,
+                                    skip_part_numbers=done_nums,
+                                )
+                                MULTIPART_RESUME_GRANTS_TOTAL.inc()
+                                reply = agent_pb2.RequestStorageGrantReply(
+                                    bundle_key=bundle_key,
+                                    manifest_key=manifest_key,
+                                    bundle_http_url="",
+                                    manifest_http_url=manifest_url,
+                                    expires_in_seconds=ttl,
+                                    bundle_multipart_upload_id=resume_id,
+                                    bundle_multipart_parts=[
+                                        agent_pb2.BundlePartPresign(part_number=a, http_put_url=b)
+                                        for a, b in pairs
+                                    ],
+                                    bundle_multipart_part_size_bytes=eff_ps,
+                                )
+                        else:
+                            if job.bundle_wip_multipart_upload_id:
+                                abort_multipart_upload_best_effort(
+                                    client,
+                                    bucket=bucket,
+                                    key=bundle_key,
+                                    upload_id=job.bundle_wip_multipart_upload_id,
+                                )
+                                job.bundle_wip_multipart_upload_id = None
+                                job.bundle_wip_content_length = None
+                                job.bundle_wip_part_size_bytes = None
+                                db.flush()
+
+                            upload_id = start_multipart_upload(
+                                client, bucket=bucket, key=bundle_key
+                            )
+                            job.bundle_wip_multipart_upload_id = upload_id
+                            job.bundle_wip_content_length = blen
+                            job.bundle_wip_part_size_bytes = eff_ps
+                            pairs = build_multipart_part_presigns(
+                                client,
+                                bucket=bucket,
+                                key=bundle_key,
+                                upload_id=upload_id,
+                                content_length=blen,
+                                part_size=cfg_ps,
+                                expires_in=ttl,
+                            )
+                            reply = agent_pb2.RequestStorageGrantReply(
+                                bundle_key=bundle_key,
+                                manifest_key=manifest_key,
+                                bundle_http_url="",
+                                manifest_http_url=manifest_url,
+                                expires_in_seconds=ttl,
+                                bundle_multipart_upload_id=upload_id,
+                                bundle_multipart_parts=[
+                                    agent_pb2.BundlePartPresign(part_number=a, http_put_url=b)
+                                    for a, b in pairs
+                                ],
+                                bundle_multipart_part_size_bytes=eff_ps,
+                            )
                     else:
+                        if job.bundle_wip_multipart_upload_id:
+                            abort_multipart_upload_best_effort(
+                                client,
+                                bucket=bucket,
+                                key=bundle_key,
+                                upload_id=job.bundle_wip_multipart_upload_id,
+                            )
+                            job.bundle_wip_multipart_upload_id = None
+                            job.bundle_wip_content_length = None
+                            job.bundle_wip_part_size_bytes = None
+                            db.flush()
                         reply = agent_pb2.RequestStorageGrantReply(
                             bundle_key=bundle_key,
                             manifest_key=manifest_key,
@@ -503,6 +604,9 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
                             encrypted=False,
                         )
                         db.add(art)
+                        job.bundle_wip_multipart_upload_id = None
+                        job.bundle_wip_content_length = None
+                        job.bundle_wip_part_size_bytes = None
                         job.status = JobStatus.SUCCESS.value
                         job.finished_at = datetime.now(timezone.utc)
                         JOB_TOTAL.labels(kind="backup", plugin=job.plugin, status="success").inc()
@@ -511,6 +615,20 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
                         job.finished_at = datetime.now(timezone.utc)
                         JOB_TOTAL.labels(kind="restore", plugin=job.plugin, status="success").inc()
                 else:
+                    if job.kind == JobKind.BACKUP.value and settings.storage_backend == "s3":
+                        uid = job.bundle_wip_multipart_upload_id
+                        if uid:
+                            s3c = s3_client_from_settings(settings)
+                            bk, _mk = artifact_object_keys(settings, job.id)
+                            abort_multipart_upload_best_effort(
+                                s3c,
+                                bucket=settings.s3_bucket,
+                                key=bk,
+                                upload_id=uid,
+                            )
+                    job.bundle_wip_multipart_upload_id = None
+                    job.bundle_wip_content_length = None
+                    job.bundle_wip_part_size_bytes = None
                     job.status = JobStatus.FAILED.value
                     job.error_code = (request.error_code or "FAILED")[:64]
                     job.error_message = (request.error_message or "")[:8000]

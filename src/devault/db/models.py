@@ -76,6 +76,10 @@ class Job(Base):
         DateTime(timezone=True),
         nullable=True,
     )
+    # In-progress S3 multipart bundle upload (Agent resume across restarts; cleared on terminal CompleteJob).
+    bundle_wip_multipart_upload_id: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    bundle_wip_content_length: Mapped[int | None] = mapped_column(BigInteger(), nullable=True)
+    bundle_wip_part_size_bytes: Mapped[int | None] = mapped_column(BigInteger(), nullable=True)
 
     artifact: Mapped["Artifact | None"] = relationship(
         "Artifact",

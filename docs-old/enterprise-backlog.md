@@ -76,7 +76,7 @@
 |------|--------|--------|----------------|
 | [x] | P0 | **S3 分块上传（Multipart）** | 当 `bundle_content_length >= DEVAULT_S3_MULTIPART_THRESHOLD_BYTES`：`CreateMultipartUpload` + 每段 `upload_part` 预签名 + `CompleteJob` 时控制面 `complete_multipart_upload`。见 [`docs/s3-data-plane.md`](./s3-data-plane.md)。 |
 | [x] | P0 | **分片上传同进程重试** | Agent 对单个分片 PUT **指数退避**重试；范围限定为 **同一进程、同一租约周期内**、当前预签名仍有效。 |
-| [ ] | P1 | **Multipart 跨重启 / 跨进程断点续传** | 持久化 `UploadId`、已完成 **PartNumber + ETag**（本地状态目录或控制面表 + API）；Agent 重启后 **`ListParts`** 或等价查询续传未完成分片；与 **租约续期 / 预签名刷新**、`AbortMultipartUpload` 超时清理协同；可观测（指标与日志）。 |
+| [x] | P1 | **Multipart 跨重启 / 跨进程断点续传** | 持久化 `UploadId`、已完成 **PartNumber + ETag**（`jobs.bundle_wip_*` + Agent `~/.cache/devault-agent/multipart/<job_id>/`）；`RequestStorageGrant` 支持 **`resume_bundle_multipart_upload_id`**，控制面 **`ListParts`** 后补签缺失分片；齐片时 **`bundle_multipart_completed_parts_json`**；新 MPU / `CompleteJob` 失败时 **Abort** 孤儿上传；指标 **`devault_multipart_resume_grants_total`**。见 [`s3-data-plane.md`](./s3-data-plane.md) §3。 |
 | [x] | P1 | **恢复侧大文件流式下载** | 预签名恢复改为 **httpx stream + 分块 SHA-256**，不再整包 `read_bytes()`。 |
 | [x] | P1 | **预签名权限最小化** | 仍按 **job 维度** 的 object key；manifest 与 bundle 分离；TTL 与 `DEVAULT_PRESIGN_TTL_SECONDS` 对齐；云差异见 [`docs/s3-data-plane.md`](./s3-data-plane.md)。 |
 | [ ] | P2 | **STS / AssumeRole 临时凭证（控制面 → S3）** | 控制面通过 **IAM 角色链**（如 `AssumeRole`）获取 **短时** `AccessKeyId/Secret/SessionToken`，用于 `create_multipart_upload` / `complete_multipart_upload` / `head_object` 等；**不**把长期 AK/SK 写入镜像或 ConfigMap；与 IRSA、EC2 实例配置、Vault 动态秘钥等部署模式文档化；与现有 `DEVAULT_S3_*` 静态密钥 **二选一或降级链**。 |
@@ -232,7 +232,7 @@
 |---------|------|--------|-------------------|
 | E-ARCH-001 | 传输安全与网关 | M1 | A |
 | E-DATA-001 | 大对象与续传（Multipart + 流式） | M1 | B（已完成主线） |
-| E-DATA-002 | Multipart 跨重启续传 + STS 临时凭证 | M1 | B（待办） |
+| E-DATA-002 | Multipart 跨重启续传 + STS 临时凭证 | M1 | B（续传已交付；STS 仍待办） |
 | E-VER-001 | 版本、双端兼容与 CHANGELOG | M1 | I |
 | E-MT-001 | 租户与 RBAC | M1 | D |
 | E-GOV-001 | 加密、保留、合规 | M1 | E |
@@ -269,3 +269,4 @@
 | 2026-05-08 | **阶段 B（P0/P1）落地**：S3 Multipart、分片上传重试、流式恢复、单 PUT 流式上传；[`s3-data-plane.md`](./s3-data-plane.md)；发布 **0.3.0**（STS 仍为待办）。 |
 | 2026-05-08 | 阶段 B 表拆分为「同进程重试」[x] 与显式待办：**跨重启 Multipart 续传** [ ]、**STS/AssumeRole** [ ]；新增 Epic **E-DATA-002**。 |
 | 2026-05-08 | **重组**：引入里程碑 **M1（平台）/ M2（数据库备份）**；原阶段 C 移至 M2；原 A/B/D/E/F/G/H/I 归入 M1 并重新编号章节；新增实施路线说明、Epic「里程碑」列、重组对照表；基线表述与第三节 `GET /version` 说明对齐现状。 |
+| 2026-05-08 | **M1·二 P1**：Multipart **跨重启/跨进程续传** 落地（proto、`jobs.bundle_wip_*`、ListParts 补签、Agent checkpoint、Prometheus）；发布 **0.4.0**；`E-DATA-002` 中续传子项完成，STS 仍为待办。 |

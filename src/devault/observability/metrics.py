@@ -20,3 +20,8 @@ POLICY_LOCK_CONTENTION = Counter(
     "Backup skipped or failed due to policy lock",
     ["plugin"],
 )
+
+MULTIPART_RESUME_GRANTS_TOTAL = Counter(
+    "devault_multipart_resume_grants_total",
+    "Storage grants that continued an in-flight multipart upload (ListParts + partial presigns)",
+)

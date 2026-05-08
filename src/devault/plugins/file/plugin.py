@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from devault.db.models import Artifact, Job
 from devault.grpc_gen import agent_pb2
 from devault.settings import Settings
+from devault.storage.multipart import part_count
 from devault.storage.types import Storage
 
 
@@ -264,36 +265,135 @@ def http_download_file_streaming_sha256(url: str, dest: Path, *, timeout: float 
     return h.hexdigest()
 
 
+def write_multipart_checkpoint(
+    path: Path,
+    *,
+    upload_id: str,
+    bundle_key: str,
+    manifest_key: str,
+    content_length: int,
+    part_size: int,
+    checksum_sha256: str,
+    manifest: dict,
+    parts: list[dict],
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "upload_id": upload_id,
+                "bundle_key": bundle_key,
+                "manifest_key": manifest_key,
+                "content_length": content_length,
+                "part_size": part_size,
+                "checksum_sha256": checksum_sha256,
+                "manifest": manifest,
+                "parts": parts,
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+
 def upload_backup_via_storage_grant(
     tmp_path: Path,
     manifest_bytes: bytes,
     grant: agent_pb2.RequestStorageGrantReply,
     *,
     timeout: float = 7200.0,
+    multipart_checkpoint_path: Path | None = None,
+    multipart_checkpoint_fields: dict | None = None,
 ) -> str | None:
-    """Upload manifest and bundle (single PUT or multipart). Returns JSON for CompleteJob multipart fields or None."""
+    """Upload manifest and bundle (single PUT or multipart). Returns JSON for CompleteJob multipart fields or None.
+
+    ``multipart_checkpoint_fields`` must include ``manifest`` (dict), ``content_length`` (int),
+    ``checksum_sha256`` (str) when ``multipart_checkpoint_path`` is set for resume support.
+    """
     http_put_presigned_bytes(grant.manifest_http_url, manifest_bytes, timeout=timeout)
     if grant.bundle_multipart_upload_id:
         ps = int(grant.bundle_multipart_part_size_bytes or 0)
+        uid = (grant.bundle_multipart_upload_id or "").strip()
+        completed = (grant.bundle_multipart_completed_parts_json or "").strip()
+        if completed:
+            try:
+                meta_raw = json.loads(completed)
+            except json.JSONDecodeError as e:
+                raise FileBackupError("INVALID_GRANT", "invalid bundle_multipart_completed_parts_json") from e
+            if not isinstance(meta_raw, list) or not meta_raw:
+                raise FileBackupError("INVALID_GRANT", "bundle_multipart_completed_parts_json must be a list")
+            meta = [{"PartNumber": int(p["PartNumber"]), "ETag": str(p["ETag"])} for p in meta_raw]
+            if multipart_checkpoint_path and multipart_checkpoint_fields:
+                mf = multipart_checkpoint_fields
+                write_multipart_checkpoint(
+                    multipart_checkpoint_path,
+                    upload_id=uid,
+                    bundle_key=grant.bundle_key,
+                    manifest_key=grant.manifest_key,
+                    content_length=int(mf["content_length"]),
+                    part_size=ps,
+                    checksum_sha256=str(mf["checksum_sha256"]),
+                    manifest=dict(mf["manifest"]),
+                    parts=meta,
+                )
+            return json.dumps(meta)
+
         parts_sorted = sorted(grant.bundle_multipart_parts, key=lambda p: p.part_number)
         if not parts_sorted or ps <= 0:
             raise FileBackupError("INVALID_GRANT", "invalid multipart grant")
         meta: list[dict] = []
+        if multipart_checkpoint_path and multipart_checkpoint_path.exists():
+            try:
+                ck = json.loads(multipart_checkpoint_path.read_text(encoding="utf-8"))
+                if ck.get("upload_id") == uid:
+                    prev = ck.get("parts") or []
+                    if isinstance(prev, list):
+                        meta = [
+                            {"PartNumber": int(p["PartNumber"]), "ETag": str(p["ETag"])}
+                            for p in prev
+                            if isinstance(p, dict) and "PartNumber" in p and "ETag" in p
+                        ]
+            except (OSError, json.JSONDecodeError, TypeError, ValueError, KeyError):
+                meta = []
+        done = {int(p["PartNumber"]) for p in meta}
+        mf = multipart_checkpoint_fields or {}
+        manifest_d = dict(mf["manifest"]) if isinstance(mf.get("manifest"), dict) else {}
+        flen = tmp_path.stat().st_size
+        total_parts = part_count(flen, ps)
         with tmp_path.open("rb") as f:
-            n = len(parts_sorted)
-            for i, part in enumerate(parts_sorted):
-                if i < n - 1:
+            for part in parts_sorted:
+                pn = int(part.part_number)
+                if pn in done:
+                    continue
+                offset = (pn - 1) * ps
+                f.seek(offset)
+                if pn < total_parts:
                     chunk = f.read(ps)
                 else:
                     chunk = f.read()
                 if not chunk:
-                    raise FileBackupError("UPLOAD", f"empty chunk for multipart part {part.part_number}")
+                    raise FileBackupError("UPLOAD", f"empty chunk for multipart part {pn}")
                 etag = _http_put_presigned_chunk_with_retries(
                     part.http_put_url,
                     chunk,
                     timeout=timeout,
                 )
-                meta.append({"PartNumber": part.part_number, "ETag": etag})
+                meta.append({"PartNumber": pn, "ETag": etag})
+                meta.sort(key=lambda x: int(x["PartNumber"]))
+                if multipart_checkpoint_path and multipart_checkpoint_fields:
+                    write_multipart_checkpoint(
+                        multipart_checkpoint_path,
+                        upload_id=uid,
+                        bundle_key=grant.bundle_key,
+                        manifest_key=grant.manifest_key,
+                        content_length=int(multipart_checkpoint_fields["content_length"]),
+                        part_size=ps,
+                        checksum_sha256=str(multipart_checkpoint_fields["checksum_sha256"]),
+                        manifest=manifest_d,
+                        parts=meta,
+                    )
+        meta.sort(key=lambda x: int(x["PartNumber"]))
         return json.dumps(meta)
     if not grant.bundle_http_url:
         raise FileBackupError("INVALID_GRANT", "missing bundle_http_url")

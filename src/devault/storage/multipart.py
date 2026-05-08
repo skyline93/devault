@@ -39,6 +39,19 @@ def part_count(content_length: int, part_size: int) -> int:
     return max(1, math.ceil(content_length / part_size))
 
 
+def multipart_upload_is_complete(
+    *,
+    content_length: int,
+    configured_part_size: int,
+    uploaded: list[dict[str, object]],
+) -> bool:
+    """True when S3 ListParts covers every expected part number for this object size."""
+    eff_ps = effective_part_size_bytes(content_length, configured_part_size)
+    n = part_count(content_length, eff_ps)
+    have = {int(x["PartNumber"]) for x in uploaded}
+    return have == set(range(1, n + 1))
+
+
 def build_multipart_part_presigns(
     client: "BaseClient",
     *,
@@ -54,6 +67,72 @@ def build_multipart_part_presigns(
     n = part_count(content_length, ps)
     out: list[tuple[int, str]] = []
     for pn in range(1, n + 1):
+        url = presign_upload_part(
+            client,
+            bucket=bucket,
+            key=key,
+            upload_id=upload_id,
+            part_number=pn,
+            expires_in=expires_in,
+        )
+        out.append((pn, url))
+    return out
+
+
+def list_uploaded_multipart_parts(
+    client: "BaseClient",
+    *,
+    bucket: str,
+    key: str,
+    upload_id: str,
+) -> list[dict[str, object]]:
+    """Return S3 ListParts entries as dicts with PartNumber (int) and ETag (str, quoted)."""
+    out: list[dict[str, object]] = []
+    paginator = client.get_paginator("list_parts")
+    for page in paginator.paginate(Bucket=bucket, Key=key, UploadId=upload_id):
+        for p in page.get("Parts", []) or []:
+            out.append(
+                {
+                    "PartNumber": int(p["PartNumber"]),
+                    "ETag": str(p["ETag"]),
+                }
+            )
+    out.sort(key=lambda x: int(x["PartNumber"]))
+    return out
+
+
+def abort_multipart_upload_best_effort(
+    client: "BaseClient",
+    *,
+    bucket: str,
+    key: str,
+    upload_id: str,
+) -> None:
+    """Abort an in-flight multipart upload; ignore missing / already completed."""
+    try:
+        client.abort_multipart_upload(Bucket=bucket, Key=key, UploadId=upload_id)
+    except Exception:
+        pass
+
+
+def build_multipart_part_presigns_missing(
+    client: "BaseClient",
+    *,
+    bucket: str,
+    key: str,
+    upload_id: str,
+    content_length: int,
+    part_size: int,
+    expires_in: int,
+    skip_part_numbers: set[int],
+) -> list[tuple[int, str]]:
+    """Presign only parts not yet uploaded (by part number)."""
+    ps = effective_part_size_bytes(content_length, part_size)
+    n = part_count(content_length, ps)
+    out: list[tuple[int, str]] = []
+    for pn in range(1, n + 1):
+        if pn in skip_part_numbers:
+            continue
         url = presign_upload_part(
             client,
             bucket=bucket,

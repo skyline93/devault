@@ -1,6 +1,6 @@
 # S3 数据面：Multipart、流式与配置
 
-本文对应 [`enterprise-backlog.md`](./enterprise-backlog.md) **阶段 B** 中与对象存储相关的实现说明（**0.3.0**）。
+本文对应 [`enterprise-backlog.md`](./enterprise-backlog.md) **M1 · 二、数据面可靠性** 中与对象存储相关的实现说明（**0.4.0** 起含跨重启 Multipart 续传）。
 
 ---
 
@@ -30,12 +30,14 @@
 
 ---
 
-## 3. 重试与「断点续传」范围
+## 3. 重试与 Multipart 断点续传
 
-- **已实现**：每个分片 PUT 失败时 **指数退避重试**（同一 Agent 进程、同一租约与预签名有效期内）。
-- **待办（见 [`enterprise-backlog.md`](./enterprise-backlog.md) 阶段 B 表）**：
-  - **Multipart 跨重启 / 跨进程断点续传**（持久化 `UploadId` 与已完成 Part，重启后续传；与租约、Abort 策略协同）。
-  - **STS / AssumeRole 临时凭证**（控制面访问 S3 使用短时会话密钥，替代长期静态 AK/SK）。
+- **同进程重试**：每个分片 PUT 失败时 **指数退避重试**（同一 Agent 进程、同一租约与预签名有效期内）。
+- **跨重启 / 跨进程续传（0.4.0+）**：
+  - **控制面**：`jobs.bundle_wip_multipart_upload_id`（及 `bundle_wip_content_length`、`bundle_wip_part_size_bytes`）记录进行中的 MPU；`RequestStorageGrant` 可带 **`resume_bundle_multipart_upload_id`**（须与 WIP 一致），服务端 **`ListParts`** 后仅为缺失分片签发预签名；若 S3 上已齐片，则返回 **`bundle_multipart_completed_parts_json`**，Agent 直接 `CompleteJob`。
+  - **Agent**：`~/.cache/devault-agent/multipart/<job_id>/` 下保留 **`bundle.tar.gz`** 与 **`checkpoint.json`**（含 manifest、校验和、已完成 `PartNumber`+`ETag`）；同一作业在租约回收为 **PENDING** 后再次被拉取时，可继续上传。目录根可通过 **`DEVAULT_AGENT_MULTIPART_STATE_DIR`** 配置。
+  - **孤儿 MPU**：同一作业 **发起新的** Multipart（不带 resume）前，控制面对旧 WIP 调用 **`AbortMultipartUpload`**；作业 **`CompleteJob` 失败**（终态 FAILED）时亦会 Abort 并清空 WIP 列。
+- **待办**：**STS / AssumeRole 临时凭证**（控制面访问 S3 使用短时会话密钥）仍见 [`enterprise-backlog.md`](./enterprise-backlog.md) **M1 · 二** P2 行。
 
 ---
 
@@ -55,7 +57,8 @@
 ## 6. 协议字段（`proto/agent.proto`）
 
 - **`RequestStorageGrantRequest.bundle_content_length`**：备份 WRITE 必填（由当前 Agent 实现保证），用于 Multipart 决策。
-- **`RequestStorageGrantReply`**：`bundle_multipart_*` 与 `bundle_multipart_part_size_bytes`。
+- **`RequestStorageGrantRequest.resume_bundle_multipart_upload_id`**：续传时填写控制面此前返回的 **`bundle_multipart_upload_id`**（须与 DB WIP 一致）。
+- **`RequestStorageGrantReply`**：`bundle_multipart_*`、`bundle_multipart_part_size_bytes`、可选 **`bundle_multipart_completed_parts_json`**（已齐片时由服务端填好，供 `CompleteJob`）。
 - **`CompleteJobRequest`**：`bundle_multipart_upload_id`、`bundle_multipart_parts_json`。
 
 修改 `.proto` 后执行：`bash scripts/gen_proto.sh`。

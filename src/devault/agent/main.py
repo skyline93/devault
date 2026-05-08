@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import shutil
 import sys
 import time
 import uuid
@@ -15,11 +16,17 @@ from devault import __version__
 from devault.core.enums import JobKind
 from devault.grpc_gen import agent_pb2, agent_pb2_grpc
 from devault.plugins.file import FileBackupError, run_file_restore_with_presigned_bundle
+from devault.plugins.file.multipart_wip import (
+    bundle_wip_path,
+    checkpoint_path,
+    clear_job_multipart_state,
+)
 from devault.plugins.file.plugin import (
     BackupOutcome,
     _build_backup_tarball,
     artifact_object_keys,
     upload_backup_via_storage_grant,
+    write_multipart_checkpoint,
 )
 from devault.settings import Settings, get_settings
 
@@ -107,28 +114,73 @@ def _run_one_job(
             job_stub = _job_view(job_id, lease, cfg)
             bid = uuid.UUID(job_id)
             bundle_key, manifest_key = artifact_object_keys(s, bid)
-            tmp_path, manifest, size_bytes, checksum = _build_backup_tarball(
-                job_stub,
-                s,
-                bundle_key=bundle_key,
-                manifest_key=manifest_key,
-            )
+            ck_path = checkpoint_path(s, job_id)
+            wip_bundle = bundle_wip_path(s, job_id)
+
+            resume_upload_id: str | None = None
+            ck_data: dict | None = None
+            if ck_path.exists():
+                try:
+                    ck_data = json.loads(ck_path.read_text(encoding="utf-8"))
+                    resume_upload_id = (ck_data.get("upload_id") or "").strip() or None
+                except (OSError, json.JSONDecodeError, TypeError):
+                    ck_data = None
+                    resume_upload_id = None
+
+            if resume_upload_id and wip_bundle.is_file() and ck_data is not None:
+                tmp_path = wip_bundle
+                manifest = ck_data["manifest"]
+                size_bytes = int(ck_data["content_length"])
+                checksum = str(ck_data["checksum_sha256"])
+            else:
+                if ck_path.exists() or wip_bundle.parent.is_dir():
+                    clear_job_multipart_state(s, job_id)
+                tmp_path, manifest, size_bytes, checksum = _build_backup_tarball(
+                    job_stub,
+                    s,
+                    bundle_key=bundle_key,
+                    manifest_key=manifest_key,
+                )
+                if size_bytes >= int(s.s3_multipart_threshold_bytes):
+                    wip_bundle.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.move(str(tmp_path), str(wip_bundle))
+                    tmp_path = wip_bundle
+
             try:
                 manifest_bytes = json.dumps(manifest, indent=2).encode("utf-8")
-                g = stub.RequestStorageGrant(
-                    agent_pb2.RequestStorageGrantRequest(
-                        agent_id=agent_id,
-                        job_id=job_id,
-                        intent=agent_pb2.STORAGE_INTENT_WRITE,
-                        bundle_content_length=size_bytes,
-                    ),
-                    metadata=md,
+                grant_req = agent_pb2.RequestStorageGrantRequest(
+                    agent_id=agent_id,
+                    job_id=job_id,
+                    intent=agent_pb2.STORAGE_INTENT_WRITE,
+                    bundle_content_length=size_bytes,
                 )
+                if resume_upload_id and wip_bundle.is_file():
+                    grant_req.resume_bundle_multipart_upload_id = resume_upload_id
+                g = stub.RequestStorageGrant(grant_req, metadata=md)
+                if g.bundle_multipart_upload_id and not resume_upload_id:
+                    write_multipart_checkpoint(
+                        ck_path,
+                        upload_id=g.bundle_multipart_upload_id,
+                        bundle_key=g.bundle_key,
+                        manifest_key=g.manifest_key,
+                        content_length=size_bytes,
+                        part_size=int(g.bundle_multipart_part_size_bytes or 0),
+                        checksum_sha256=checksum,
+                        manifest=manifest,
+                        parts=[],
+                    )
+                ck_fields = {
+                    "manifest": manifest,
+                    "content_length": size_bytes,
+                    "checksum_sha256": checksum,
+                }
                 parts_json = upload_backup_via_storage_grant(
                     tmp_path,
                     manifest_bytes,
                     g,
                     timeout=7200.0,
+                    multipart_checkpoint_path=ck_path if g.bundle_multipart_upload_id else None,
+                    multipart_checkpoint_fields=ck_fields if g.bundle_multipart_upload_id else None,
                 )
                 outcome = BackupOutcome(
                     bundle_key=g.bundle_key,
@@ -160,9 +212,12 @@ def _run_one_job(
                     ),
                     metadata=md,
                 )
+                if g.bundle_multipart_upload_id:
+                    clear_job_multipart_state(s, job_id)
             finally:
                 try:
-                    tmp_path.unlink(missing_ok=True)
+                    if tmp_path != wip_bundle:
+                        tmp_path.unlink(missing_ok=True)
                 except OSError:
                     pass
         elif lease.kind == JobKind.RESTORE.value:

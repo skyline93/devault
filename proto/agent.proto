@@ -64,6 +64,9 @@ message RequestStorageGrantRequest {
   // Backup WRITE: bundle byte size after local tarball is built. If >= control plane
   // multipart threshold, reply uses bundle_multipart_* instead of bundle_http_url.
   int64 bundle_content_length = 4;
+  // When continuing an in-flight multipart upload after Agent restart, set to the same
+  // bundle_multipart_upload_id returned by a prior grant for this job (control plane validates).
+  string resume_bundle_multipart_upload_id = 5;
 }
 
 message BundlePartPresign {
@@ -85,6 +88,9 @@ message RequestStorageGrantReply {
   repeated BundlePartPresign bundle_multipart_parts = 8;
   // Byte size of parts 1..N-1 (last part may be smaller); matches control plane calculation.
   int64 bundle_multipart_part_size_bytes = 9;
+  // When all parts are already on S3 (resume grant), server fills this JSON array of
+  // {"PartNumber":n,"ETag":"..."} for CompleteJob; bundle_multipart_parts may be empty.
+  string bundle_multipart_completed_parts_json = 10;
 }
 
 message ReportProgressRequest {

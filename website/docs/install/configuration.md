@@ -38,6 +38,7 @@ description: 常用环境变量分组说明
 | `DEVAULT_GRPC_TARGET` | 控制面 gRPC 地址（如 `api:50051`） |
 | `DEVAULT_ALLOWED_PATH_PREFIXES` | 逗号分隔路径前缀，如 `/data,/restore` |
 | `DEVAULT_API_TOKEN` | 与注册/鉴权相关的令牌（与实现版本一致） |
+| `DEVAULT_AGENT_MULTIPART_STATE_DIR` | （可选）Multipart 续传状态与 WIP `bundle.tar.gz` 的根目录；默认 `~/.cache/devault-agent` |
 
 ## 与 Compose 对齐
 

@@ -9,8 +9,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **文档站**：仓库根目录 `website/` 新增 Docusaurus 3 站点（中文文档，与 `docs-old/docusaurus-information-architecture.md` 信息架构一致）；CI 工作流 `.github/workflows/docs.yml` 对 `website/**` 执行 `npm ci` 与 `npm run build`。
-
 ### Changed
 
 ### Deprecated
@@ -23,10 +21,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.4.0] - 2026-05-08
+
+### Added
+
+- **Multipart 跨进程/跨重启续传**：控制面在 `jobs` 表记录进行中的 `UploadId` 与对象尺寸；`RequestStorageGrant` 支持 `resume_bundle_multipart_upload_id`，通过 **ListParts** 仅为缺失分片签发预签名；全部已上传时返回 `bundle_multipart_completed_parts_json` 供 `CompleteJob`。
+- **Agent**：大备份 bundle 移至 `~/.cache/devault-agent/multipart/<job_id>/bundle.tar.gz`，`checkpoint.json` 记录分片 ETag；进程重启后对同一租约作业自动续传。环境变量 **`DEVAULT_AGENT_MULTIPART_STATE_DIR`** 可覆盖状态根目录。
+- **指标**：`devault_multipart_resume_grants_total`（续传类授权次数）。
+- **Alembic**：`0004_job_bundle_multipart_wip` 为 `jobs` 增加 `bundle_wip_*` 列。
+
+### Changed
+
+- **文档**：`docs-old/s3-data-plane.md`、`docs-old/enterprise-backlog.md`、`website/docs/install/configuration.md`、`website/docs/storage/tuning.md` 与 Multipart 续传行为对齐。
+
+### Security
+
+- 续传授权仍校验 **租约 Agent** 与 **job 维度** 的 WIP `UploadId`；新 Multipart 开始前会 **Abort** 控制面记录的孤儿 MPU（同 job、bundle key）。
+
+---
+
 ## [0.3.0] - 2026-05-08
 
 ### Added
 
+- **文档站**：仓库根目录 `website/` 新增 Docusaurus 3 站点（中文文档，与 `docs-old/docusaurus-information-architecture.md` 信息架构一致）；CI 工作流 `.github/workflows/docs.yml` 对 `website/**` 执行 `npm ci` 与 `npm run build`。
 - **S3 Multipart 备份路径**：`RequestStorageGrant` 携带 `bundle_content_length`；超过阈值时返回分片预签名；`CompleteJob` 触发控制面 `complete_multipart_upload`（[`docs/s3-data-plane.md`](docs/s3-data-plane.md)）。
 - **配置**：`DEVAULT_S3_MULTIPART_THRESHOLD_BYTES`、`DEVAULT_S3_MULTIPART_PART_SIZE_BYTES`。
 - **分片上传重试**：Agent 侧每片 PUT 指数退避。
