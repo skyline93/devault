@@ -26,6 +26,7 @@ from devault.plugins.file.plugin import (
     BackupOutcome,
     _build_backup_tarball,
     artifact_object_keys,
+    finalize_bundle_with_optional_encryption,
     upload_backup_via_storage_grant,
     write_multipart_checkpoint,
 )
@@ -187,6 +188,12 @@ def _run_one_job(
                     bundle_key=bundle_key,
                     manifest_key=manifest_key,
                 )
+                tmp_path, manifest, size_bytes, checksum = finalize_bundle_with_optional_encryption(
+                    cfg,
+                    s,
+                    tmp_path,
+                    manifest,
+                )
                 if size_bytes >= int(s.s3_multipart_threshold_bytes):
                     wip_bundle.parent.mkdir(parents=True, exist_ok=True)
                     shutil.move(str(tmp_path), str(wip_bundle))
@@ -287,6 +294,7 @@ def _run_one_job(
                 settings=s,
                 bundle_get_url=g.bundle_http_url,
                 expected_checksum_sha256=expected,
+                manifest_get_url=(g.manifest_http_url or "").strip() or None,
             )
             stub.CompleteJob(
                 agent_pb2.CompleteJobRequest(agent_id=agent_id, job_id=job_id, success=True),

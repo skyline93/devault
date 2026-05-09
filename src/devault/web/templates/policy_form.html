@@ -18,6 +18,20 @@
     <textarea id="excludes_multiline" name="excludes_multiline">{% if policy %}{{ policy.config.get('excludes', []) | join('\n') }}{% endif %}</textarea>
   </p>
   <p>
+    <label>
+      <input type="checkbox" name="encrypt_artifacts" value="yes"
+        {% if policy and policy.config.get('encrypt_artifacts') %}checked{% endif %}/>
+      Encrypt bundle at rest (AES-256-GCM; Agent must set <code>DEVAULT_ARTIFACT_ENCRYPTION_KEY</code>)
+    </label>
+  </p>
+  <p>
+    <label for="retention_days">Retention (days, optional)</label><br/>
+    <input type="number" id="retention_days" name="retention_days" min="1" step="1" style="max-width:120px"
+      placeholder="—"
+      value="{% if policy and policy.config.get('retention_days') is not none %}{{ policy.config.retention_days }}{% endif %}"/>
+    <span class="muted">Empty = keep forever; scheduler deletes metadata + objects after <code>retain_until</code>.</span>
+  </p>
+  <p>
     <span>Enabled</span><br/>
     <label><input type="radio" name="enabled" value="yes" {% if not policy or policy.enabled %}checked{% endif %}/> Yes</label>
     <label><input type="radio" name="enabled" value="no" {% if policy and not policy.enabled %}checked{% endif %}/> No</label>

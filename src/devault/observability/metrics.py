@@ -37,3 +37,14 @@ BILLING_COMMITTED_BYTES_TOTAL = Counter(
     "Declared backup artifact bytes on successful CompleteJob (usage / chargeback signal)",
     ["tenant_id"],
 )
+
+RETENTION_PURGED_TOTAL = Counter(
+    "devault_retention_artifacts_purged_total",
+    "Artifacts removed by retention cleanup",
+    ["tenant_id"],
+)
+
+RETENTION_PURGE_ERRORS_TOTAL = Counter(
+    "devault_retention_purge_errors_total",
+    "Failures during retention purge (storage delete or DB)",
+)

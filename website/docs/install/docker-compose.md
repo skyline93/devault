@@ -39,6 +39,10 @@ docker compose -f docker-compose.yml -f docker-compose.prometheus.yml up -d
 
 **Prometheus** 已拆到独立文件 **`docker-compose.prometheus.yml`**（见上一节），不再随默认 `up` 启动。
 
+### Artifact 加密（可选验证）
+
+Compose 里的 **agent** 默认注入 **`DEVAULT_ARTIFACT_ENCRYPTION_KEY`**（固定开发用 Base64，**非机密**，仅便于本地打开 **`encrypt_artifacts`** 策略时不报错）。生产或共享环境请用 **`openssl rand -base64 32`** 生成并通过环境变量覆盖；密钥只在 **Agent** 侧需要，含义与格式见 [Artifact 静态加密](../security/artifact-encryption.md)。
+
 ## 构建说明
 
 - 镜像在 `deploy/Dockerfile` 中通过 `pip install -e .` 安装本仓库

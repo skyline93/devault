@@ -32,6 +32,7 @@ from devault.observability.metrics import (
     JOB_TOTAL,
     MULTIPART_RESUME_GRANTS_TOTAL,
 )
+from devault.retention.policy import retain_until_from_backup_config
 from devault.plugins.file.plugin import artifact_object_keys
 from devault.settings import Settings, get_settings
 from devault.storage import get_storage
@@ -180,6 +181,7 @@ def _lease_config_json(db: Session, job: Job) -> str:
         art = db.get(Artifact, job.restore_artifact_id)
         if art:
             cfg["expected_checksum_sha256"] = art.checksum_sha256
+            cfg["artifact_encrypted"] = bool(art.encrypted)
     return json.dumps(cfg)
 
 
@@ -504,13 +506,16 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
                     art = db.get(Artifact, aid)
                     if art is None:
                         context.abort(grpc.StatusCode.NOT_FOUND, "artifact not found")
+                    manifest_get_url = presign_get_object(
+                        client, bucket=bucket, key=art.manifest_key, expires_in=ttl
+                    )
                     reply = agent_pb2.RequestStorageGrantReply(
                         bundle_key=art.bundle_key,
                         manifest_key=art.manifest_key,
                         bundle_http_url=presign_get_object(
                             client, bucket=bucket, key=art.bundle_key, expires_in=ttl
                         ),
-                        manifest_http_url="",
+                        manifest_http_url=manifest_get_url,
                         expires_in_seconds=ttl,
                         expected_checksum_sha256=art.checksum_sha256,
                     )
@@ -654,6 +659,29 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
                                 grpc.StatusCode.FAILED_PRECONDITION,
                                 "artifact objects missing",
                             )
+                        try:
+                            manifest_body = storage.get_bytes(manifest_key)
+                            mf = json.loads(manifest_body.decode("utf-8"))
+                        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as e:
+                            context.abort(
+                                grpc.StatusCode.FAILED_PRECONDITION,
+                                f"cannot read manifest: {e}",
+                            )
+                            raise RuntimeError("unreachable") from e
+                        mf_chk = str(mf.get("checksum_sha256") or "").lower()
+                        req_chk = str(request.checksum_sha256 or "").lower()
+                        if mf_chk and req_chk and mf_chk != req_chk:
+                            context.abort(
+                                grpc.StatusCode.INVALID_ARGUMENT,
+                                "bundle checksum does not match manifest",
+                            )
+                            raise RuntimeError("unreachable")
+                        encrypted_flag = bool(mf.get("encryption"))
+                        finished = datetime.now(timezone.utc)
+                        retain_until = retain_until_from_backup_config(
+                            job.config_snapshot or {},
+                            at=finished,
+                        )
                         art = Artifact(
                             tenant_id=job.tenant_id,
                             job_id=job.id,
@@ -663,14 +691,15 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
                             size_bytes=int(request.size_bytes),
                             checksum_sha256=request.checksum_sha256,
                             compression="tar.gz",
-                            encrypted=False,
+                            encrypted=encrypted_flag,
+                            retain_until=retain_until,
                         )
                         db.add(art)
                         job.bundle_wip_multipart_upload_id = None
                         job.bundle_wip_content_length = None
                         job.bundle_wip_part_size_bytes = None
                         job.status = JobStatus.SUCCESS.value
-                        job.finished_at = datetime.now(timezone.utc)
+                        job.finished_at = finished
                         JOB_TOTAL.labels(kind="backup", plugin=job.plugin, status="success").inc()
                         BILLING_COMMITTED_BYTES_TOTAL.labels(tenant_id=str(job.tenant_id)).inc(
                             max(0, int(request.size_bytes)),

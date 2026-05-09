@@ -1,5 +1,5 @@
 ---
-sidebar_position: 3
+sidebar_position: 4
 title: 简易 Web UI
 description: Jobs UI 能力范围与认证方式
 ---

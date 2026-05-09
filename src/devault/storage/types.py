@@ -24,3 +24,6 @@ class Storage(Protocol):
 
     def exists(self, key: str) -> bool:
         ...
+
+    def delete_object(self, key: str) -> None:
+        """Remove object at key (idempotent if already absent)."""

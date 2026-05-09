@@ -10,6 +10,8 @@ description: 策略、Cron 调度与并发语义
 
 策略描述**备份什么**与**如何备份**（插件、`config` 等）。HTTP 资源路径为 **`/api/v1/policies`**（详见 OpenAPI）。策略归属某一**租户**（`tenant_id`）；API 通过 **`X-DeVault-Tenant-Id`** 或默认 slug 限定作用域，见 [租户模型](../reference/tenants.md)。
 
+文件插件可选 **`retention_days`**：控制 artifact 的 **`retain_until`** 与调度器侧清理，见 [保留与生命周期](./retention-lifecycle.md)。
+
 ## 调度（Schedule）
 
 调度将 **Cron 表达式** 与策略绑定，由 **scheduler** 服务周期性地**创建待处理任务**。API 路径为 **`/api/v1/schedules`**。

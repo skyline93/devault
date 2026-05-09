@@ -14,7 +14,7 @@ description: 设计要点、跨角色与 gRPC 细节时序、API 操作与 CLI
 - **数据面**：Agent 使用预授权，经 **HTTPS** 与 **S3 兼容存储** 直传读写；**大对象不经过 gRPC**。
 - **Pull**：Agent **主动**调用 `LeaseJobs` 领取作业；控制面不向 Agent 内网入连。
 
-首启且未配置 `DEVAULT_API_TOKEN` 时，Agent 可先调用 **`Register`** 用一次性密钥换取 Bearer（见 `agent.proto` 注释）；日常循环中还会发送 **`Heartbeat`**。大对象分片、恢复侧流式与重试见 [大对象与恢复](../storage/large-objects.md) 与 [存储调优](../storage/tuning.md)。
+首启且未配置 `DEVAULT_API_TOKEN` 时，Agent 可先调用 **`Register`** 用一次性密钥换取 Bearer（见 `agent.proto` 注释）；日常循环中还会发送 **`Heartbeat`**。大对象分片、恢复侧流式与重试见 [大对象与恢复](../storage/large-objects.md) 与 [存储调优](../storage/tuning.md)。可选 **bundle 静态加密**（策略字段 **`encrypt_artifacts`**、`DEVAULT_ARTIFACT_ENCRYPTION_KEY`）见 [Artifact 静态加密](../security/artifact-encryption.md)。
 
 ---
 

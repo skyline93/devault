@@ -48,6 +48,15 @@ class FileBackupConfigV1(BaseModel):
     follow_symlinks: bool = Field(False, description="Follow symlinks when walking paths (reserved).")
     preserve_uid_gid: bool = Field(True, description="Preserve uid/gid in archive metadata (reserved).")
     one_filesystem: bool = Field(False, description="Stay on one filesystem (reserved).")
+    encrypt_artifacts: bool = Field(
+        False,
+        description="Encrypt backup bundle with AES-256-GCM before upload (requires Agent encryption key).",
+    )
+    retention_days: int | None = Field(
+        default=None,
+        ge=1,
+        description="Optional retention: artifact eligible for automatic deletion this many days after successful backup.",
+    )
 
 
 class CreateBackupJobBody(BaseModel):
@@ -134,6 +143,7 @@ class ArtifactOut(BaseModel):
     compression: str
     encrypted: bool
     created_at: datetime
+    retain_until: datetime | None = None
 
     model_config = {"from_attributes": True}
 

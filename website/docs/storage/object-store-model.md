@@ -25,3 +25,5 @@ Docker Compose 通过 **`minio-init`** 一次性服务在 MinIO 就绪后执行 
 ## 密钥与端点
 
 `DEVAULT_S3_*` 环境变量需与对象存储实际部署一致；生产环境推荐使用 **STS AssumeRole** 或节点/Pod 身份替代长期静态密钥，见 [STS 与 AssumeRole](./sts-assume-role.md)。跨区域复制、生命周期策略等在存储侧配置，不由 DeVault 替代。
+
+按 **artifact** 的删除与 **`retain_until`**（策略 **`retention_days`**）由控制面元数据与 **`devault-scheduler`** 清理任务执行，见 [保留与生命周期](../guides/retention-lifecycle.md)；可与桶生命周期规则并用。

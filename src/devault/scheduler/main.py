@@ -14,6 +14,8 @@ from sqlalchemy import select
 from devault.core.enums import JobKind, JobStatus, JobTrigger
 from devault.db.models import Job, Policy, Schedule
 from devault.db.session import SessionLocal
+from devault.services.retention import purge_expired_artifacts
+from devault.settings import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +90,13 @@ def sync_scheduler(scheduler: BlockingScheduler) -> None:
         db.close()
 
 
+def run_retention_purge() -> None:
+    settings = get_settings()
+    n, err = purge_expired_artifacts(settings)
+    if n or err:
+        logger.info("retention purge purged=%s errors=%s", n, err)
+
+
 def main() -> None:
     if len(sys.argv) > 1 and sys.argv[1] in ("--version", "-V"):
         from devault import __version__
@@ -101,6 +110,7 @@ def main() -> None:
     )
     scheduler = BlockingScheduler(timezone="UTC")
     sync_scheduler(scheduler)
+    s0 = get_settings()
     scheduler.add_job(
         lambda: sync_scheduler(scheduler),
         "interval",
@@ -108,7 +118,19 @@ def main() -> None:
         id="_reload_schedules",
         replace_existing=True,
     )
-    logger.info("Scheduler started; reloading schedules every 30s")
+    interval = max(60, int(s0.retention_cleanup_interval_seconds))
+    scheduler.add_job(
+        run_retention_purge,
+        "interval",
+        seconds=interval,
+        id="_retention_purge",
+        replace_existing=True,
+    )
+    logger.info(
+        "Scheduler started; reloading schedules every 30s; retention purge every %ss (enabled=%s)",
+        interval,
+        s0.retention_cleanup_enabled,
+    )
     try:
         scheduler.start()
     except (KeyboardInterrupt, SystemExit):

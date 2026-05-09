@@ -201,6 +201,23 @@ class Settings(BaseSettings):
         description="Agent only: optional short git SHA sent on Heartbeat/Register",
     )
 
+    # Artifact encryption (AES-256-GCM chunked format); Agent must match control plane policy.
+    artifact_encryption_key: str | None = Field(
+        default=None,
+        description="Base64-encoded 32-byte AES-256 key for bundle encryption at-rest",
+    )
+
+    retention_cleanup_enabled: bool = Field(
+        default=True,
+        description="When true, devault-scheduler periodically deletes expired artifacts",
+    )
+    retention_cleanup_interval_seconds: int = Field(
+        default=900,
+        ge=60,
+        le=86400,
+        description="Interval between retention purge runs in the scheduler process",
+    )
+
     @model_validator(mode="after")
     def _s3_key_pair_consistent(self) -> Self:
         ak, sk = self.s3_access_key, self.s3_secret_key

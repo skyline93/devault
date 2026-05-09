@@ -33,6 +33,7 @@ const sidebars: SidebarsConfig = {
         'security/agent-connectivity',
         'security/tls-and-gateway',
         'security/api-access',
+        'security/artifact-encryption',
       ],
     },
     {
@@ -53,6 +54,7 @@ const sidebars: SidebarsConfig = {
       items: [
         'guides/backup-and-restore',
         'guides/policies-and-schedules',
+        'guides/retention-lifecycle',
         'guides/web-console',
       ],
     },

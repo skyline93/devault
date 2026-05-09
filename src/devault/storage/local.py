@@ -39,3 +39,10 @@ class LocalStorage:
 
     def exists(self, key: str) -> bool:
         return self._full_path(key).is_file()
+
+    def delete_object(self, key: str) -> None:
+        p = self._full_path(key)
+        try:
+            p.unlink(missing_ok=True)
+        except OSError:
+            pass

@@ -12,6 +12,7 @@
       <th>Job</th>
       <th>Size</th>
       <th>SHA256</th>
+      <th>Retain until (UTC)</th>
       <th>Restore</th>
     </tr>
   </thead>
@@ -22,6 +23,7 @@
       <td><code>{{ a.job_id }}</code></td>
       <td>{{ a.size_bytes }}</td>
       <td><code>{{ a.checksum_sha256[:20] }}…</code></td>
+      <td>{% if a.retain_until %}{{ a.retain_until }}{% else %}<span class="muted">—</span>{% endif %}</td>
       <td>
         <form method="post" action="/ui/artifacts/restore" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;">
           <input type="hidden" name="artifact_id" value="{{ a.id }}"/>

@@ -16,6 +16,13 @@ import pathspec
 from sqlalchemy.orm import Session
 
 from devault import __version__
+from devault.crypto.chunked_aes_gcm import (
+    ArtifactCryptoError,
+    DEFAULT_CHUNK_SIZE,
+    decrypt_bundle_file,
+    encrypt_bundle_file,
+    parse_aes256_key_from_settings,
+)
 from devault.db.models import Artifact, Job
 from devault.grpc_gen import agent_pb2
 from devault.release_meta import GRPC_API_PACKAGE
@@ -107,6 +114,56 @@ def _sha256_file(path: Path, chunk: int = 1024 * 1024) -> str:
     return h.hexdigest()
 
 
+def finalize_bundle_with_optional_encryption(
+    cfg: dict,
+    settings: Settings,
+    tarball_path: Path,
+    manifest: dict,
+) -> tuple[Path, dict, int, str]:
+    """If ``encrypt_artifacts`` is set in policy config, encrypt tarball and refresh manifest."""
+    if not cfg.get("encrypt_artifacts"):
+        return tarball_path, manifest, int(manifest["size_bytes"]), str(manifest["checksum_sha256"])
+    key = parse_aes256_key_from_settings(settings)
+    if key is None:
+        raise FileBackupError(
+            "ENCRYPTION_KEY_MISSING",
+            "encrypt_artifacts requires DEVAULT_ARTIFACT_ENCRYPTION_KEY (Base64-encoded 32-byte key)",
+        )
+    inner_checksum = str(manifest["checksum_sha256"])
+    inner_size = int(manifest["size_bytes"])
+    fd, enc_path_str = tempfile.mkstemp(suffix=".dvenc", prefix="bundle-")
+    os.close(fd)
+    enc_path = Path(enc_path_str)
+    try:
+        size_b, outer_checksum = encrypt_bundle_file(
+            key,
+            tarball_path,
+            enc_path,
+            chunk_size=DEFAULT_CHUNK_SIZE,
+        )
+        manifest["plaintext_checksum_sha256"] = inner_checksum
+        manifest["plaintext_size_bytes"] = inner_size
+        manifest["checksum_sha256"] = outer_checksum
+        manifest["size_bytes"] = size_b
+        manifest["encryption"] = {
+            "algorithm": "aes-256-gcm",
+            "format": "devault-chunked-v1",
+            "chunk_size_bytes": DEFAULT_CHUNK_SIZE,
+            "aad": "chunk-index-u64be",
+        }
+        try:
+            tarball_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+        return enc_path, manifest, size_b, outer_checksum
+    except ArtifactCryptoError as e:
+        try:
+            enc_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise FileBackupError("ENCRYPTION_FAILED", str(e)) from e
+
+
 def artifact_object_keys(settings: Settings, job_id: uuid.UUID, tenant_id: uuid.UUID) -> tuple[str, str]:
     """Stable S3 keys for a job artifact (control plane and agent must agree)."""
     prefix = f"devault/{settings.env_name}/tenants/{tenant_id}/artifacts/{job_id}"
@@ -195,6 +252,12 @@ def run_file_backup(
         settings,
         bundle_key=bundle_key,
         manifest_key=manifest_key,
+    )
+    tmp_path, manifest, size_bytes, checksum = finalize_bundle_with_optional_encryption(
+        job.config_snapshot or {},
+        settings,
+        tmp_path,
+        manifest,
     )
     try:
         manifest_bytes = json.dumps(manifest, indent=2).encode("utf-8")
@@ -419,6 +482,12 @@ def run_file_backup_with_presigned_urls(
         bundle_key=bundle_key,
         manifest_key=manifest_key,
     )
+    tmp_path, manifest, size_bytes, checksum = finalize_bundle_with_optional_encryption(
+        job.config_snapshot or {},
+        settings,
+        tmp_path,
+        manifest,
+    )
     try:
         manifest_bytes = json.dumps(manifest, indent=2).encode("utf-8")
         http_put_presigned_file(bundle_put_url, tmp_path)
@@ -484,11 +553,43 @@ def run_file_restore(
     if art is None:
         raise FileBackupError("ARTIFACT_NOT_FOUND", f"No artifact {aid}")
 
+    manifest_raw = storage.get_bytes(art.manifest_key)
+    manifest = json.loads(manifest_raw.decode("utf-8"))
+
     with tempfile.NamedTemporaryFile(suffix=".tar.gz", delete=False) as tmp:
         bundle_local = Path(tmp.name)
     try:
         storage.get_file(art.bundle_key, bundle_local)
-        _extract_bundle(bundle_local, target, art.checksum_sha256)
+        digest = _sha256_file(bundle_local)
+        if digest.lower() != art.checksum_sha256.lower():
+            raise FileBackupError("CHECKSUM_MISMATCH", "stored bundle checksum mismatch")
+
+        if manifest.get("encryption"):
+            key = parse_aes256_key_from_settings(settings)
+            if key is None:
+                raise FileBackupError(
+                    "ENCRYPTION_KEY_MISSING",
+                    "restore encrypted artifact requires DEVAULT_ARTIFACT_ENCRYPTION_KEY",
+                )
+            inner_expect = str(manifest.get("plaintext_checksum_sha256") or "")
+            if not inner_expect:
+                raise FileBackupError("INVALID_MANIFEST", "manifest missing plaintext_checksum_sha256")
+            plain_fd, plain_name = tempfile.mkstemp(suffix=".tar.gz", prefix="dv-plain-")
+            os.close(plain_fd)
+            plain_tmp = Path(plain_name)
+            try:
+                decrypt_bundle_file(key, bundle_local, plain_tmp)
+                inner_digest = _sha256_file(plain_tmp)
+                if inner_digest.lower() != inner_expect.lower():
+                    raise FileBackupError("CHECKSUM_MISMATCH", "decrypted bundle checksum mismatch")
+                _extract_bundle(plain_tmp, target, inner_expect)
+            finally:
+                try:
+                    plain_tmp.unlink(missing_ok=True)
+                except OSError:
+                    pass
+        else:
+            _extract_bundle(bundle_local, target, art.checksum_sha256)
     finally:
         try:
             bundle_local.unlink(missing_ok=True)
@@ -515,8 +616,19 @@ def run_file_restore_with_presigned_bundle(
     settings: Settings,
     bundle_get_url: str,
     expected_checksum_sha256: str,
+    manifest_get_url: str | None = None,
 ) -> None:
     _, target, _confirm = _restore_paths_and_target(job, settings)
+
+    manifest: dict | None = None
+    if manifest_get_url:
+        with httpx.Client(timeout=600.0, follow_redirects=True) as client:
+            r = client.get(manifest_get_url)
+            r.raise_for_status()
+            raw = r.json()
+            if not isinstance(raw, dict):
+                raise FileBackupError("INVALID_MANIFEST", "manifest JSON must be an object")
+            manifest = raw
 
     with tempfile.NamedTemporaryFile(suffix=".tar.gz", delete=False) as tmp:
         bundle_local = Path(tmp.name)
@@ -524,7 +636,33 @@ def run_file_restore_with_presigned_bundle(
         digest = http_download_file_streaming_sha256(bundle_get_url, bundle_local)
         if digest.lower() != expected_checksum_sha256.lower():
             raise FileBackupError("CHECKSUM_MISMATCH", "Downloaded bundle checksum mismatch")
-        _extract_bundle(bundle_local, target, digest)
+
+        if manifest and manifest.get("encryption"):
+            key = parse_aes256_key_from_settings(settings)
+            if key is None:
+                raise FileBackupError(
+                    "ENCRYPTION_KEY_MISSING",
+                    "restore encrypted artifact requires DEVAULT_ARTIFACT_ENCRYPTION_KEY",
+                )
+            inner_expect = str(manifest.get("plaintext_checksum_sha256") or "")
+            if not inner_expect:
+                raise FileBackupError("INVALID_MANIFEST", "manifest missing plaintext_checksum_sha256")
+            plain_fd, plain_name = tempfile.mkstemp(suffix=".tar.gz", prefix="dv-plain-")
+            os.close(plain_fd)
+            plain_tmp = Path(plain_name)
+            try:
+                decrypt_bundle_file(key, bundle_local, plain_tmp)
+                inner_digest = _sha256_file(plain_tmp)
+                if inner_digest.lower() != inner_expect.lower():
+                    raise FileBackupError("CHECKSUM_MISMATCH", "decrypted bundle checksum mismatch")
+                _extract_bundle(plain_tmp, target, inner_expect)
+            finally:
+                try:
+                    plain_tmp.unlink(missing_ok=True)
+                except OSError:
+                    pass
+        else:
+            _extract_bundle(bundle_local, target, digest)
     finally:
         try:
             bundle_local.unlink(missing_ok=True)

@@ -13,6 +13,7 @@
 | **优先级** | P0：安全与架构底线；P1：可靠性/规模；P2：功能扩展；P3：合规与运营增强。 |
 | **依赖** | 实施前建议满足的前置项（见各节末）。 |
 | **原阶段字母** | 历史编号（A～I），见文末「重组对照表」，便于与旧讨论、Epic 对齐。 |
+| **可增强** | 已交付主线之上的**后续增强**；表中 **`（可增强）`** 或文末 **[十三、可增强项汇总](#十三可增强项汇总)** 所列条目**不阻塞**当前里程碑，可单独排期。 |
 
 完成某项后，可将 `[ ]` 改为 `[x]`，并在 PR 或修订记录中注明。
 
@@ -62,6 +63,8 @@
 | [x] | P1 | **Register / 令牌模型（相对共享 API Token）** | **`Register` RPC**：`DEVAULT_GRPC_REGISTRATION_SECRET` 换取当前 `DEVAULT_API_TOKEN`（引导式）；**每 Agent 短期令牌 / 吊销列表 / Redis 会话**仍为后续增强。 |
 | [x] | P1 | **mTLS（可选但建议产品化）** | 控制面 **`DEVAULT_GRPC_SERVER_TLS_CLIENT_CA_PATH`** 要求客户端证书；Agent **`DEVAULT_GRPC_TLS_CLIENT_*`**；Envoy 侧校验见 `docs/grpc-tls.md` 演进说明。 |
 | [x] | P2 | **gRPC 健康检查与就绪探针** | 注册 **`grpc.health.v1.Health`**（`""` 与 `devault.agent.v1.AgentControl` 均为 SERVING）；文档给出 `grpc_health_probe` 示例。 |
+| [ ] | P3 | **Envoy 网关 local_rate_limit（可增强）** | 在现有 Envoy 示例上增加 **`local_rate_limit`** filter（或等价），与控制面每 peer 令牌桶形成**双层**限流；矩阵与默认值文档化。 |
+| [ ] | P3 | **Register 后续：每 Agent 令牌 / 吊销 / Redis 会话（可增强）** | 当前 Register 仍换取**共享** `DEVAULT_API_TOKEN` 语义；后续可演进为**短期 Agent 令牌**、控制面**吊销列表**、Redis **会话绑定**，与审计字段对齐。 |
 
 **依赖**：无（可与数据面并行设计 `.proto` 扩展以承载 Register 响应字段）。
 
@@ -80,6 +83,7 @@
 | [x] | P1 | **恢复侧大文件流式下载** | 预签名恢复改为 **httpx stream + 分块 SHA-256**，不再整包 `read_bytes()`。 |
 | [x] | P1 | **预签名权限最小化** | 仍按 **job 维度** 的 object key；manifest 与 bundle 分离；TTL 与 `DEVAULT_PRESIGN_TTL_SECONDS` 对齐；云差异见 [`docs/s3-data-plane.md`](./s3-data-plane.md)。 |
 | [x] | P2 | **STS / AssumeRole 临时凭证（控制面 → S3）** | 控制面通过 **STS `AssumeRole`** 获取 **短时**会话密钥，用于预签名、Multipart 控制 API 与 `head_object` 等；`DEVAULT_S3_ASSUME_ROLE_*` / `DEVAULT_S3_STS_*`；与静态 `DEVAULT_S3_ACCESS_KEY` / `SECRET` 或 boto3 **默认凭证链**（IRSA、实例配置、Vault 注入等）组合；AssumeRole 结果 **内存缓存** 至临近过期。文档：**`website/docs/storage/sts-assume-role.md`**；实现：`src/devault/storage/s3_client.py`。 |
+| [ ] | P3 | **Multipart 与 Artifact 加密的联调与边界（可增强）** | 大对象 **Multipart** 路径上 **encrypt_artifacts** 的续传检查点、失败 Abort 与指标；文档与夜间用例补充（与 **`s3-data-plane.md`** / **`artifact-encryption.md`** 互链）。 |
 
 **依赖**：第一节中存储授权接口需能承载「多 part」或「会话 token」语义；**跨重启续传**依赖租约与预签名策略可扩展；**STS** 依赖云账号与信任策略落地。  
 **与 M2 关系**：大 dump 强依赖 Multipart 与续传；**建议在开启数据库备份 MVP 前完成或并行关闭**「跨重启续传」主线风险。
@@ -119,7 +123,7 @@
 | [ ] | P3 | **发版脚本与 compatibility.json 联动（可增强）** | **`scripts/bump_release.py`** 在 bump 后校验或交互式更新 **`docs/compatibility.json`** 的 **`current.control_plane_release`**；或发版文档中强制 checklist 项（与 **`verify_compatibility_matrix`** 失败信息对齐）。 |
 | [ ] | P3 | **Agent 基于 server_capabilities 的降级路径（可增强）** | 当前 Agent 仅 **DEBUG** 打印 capabilities；后续可按令牌关闭 **multipart 续传**、多段 RPC 等，避免盲调未上线能力。需与 **`compute_enabled_server_capabilities`** 语义一致并加集成测试。 |
 
-**说明**：上表三项 **[ ]** 为已交付能力的**后续增强**，不阻塞当前里程碑；落地后可将对应行改为 `[x]` 并更新修订记录。
+**说明**：上表三项 **[ ]** 为已交付能力的**后续增强**；同类条目亦见文末 **[十三、可增强项汇总](#十三可增强项汇总)**。不阻塞当前里程碑；落地后可将对应行改为 `[x]` 并更新修订记录。
 
 **依赖**：扩展 `.proto` 后执行 `scripts/gen_proto.sh` 并全量回归；与第一节的 TLS/网关文档一并说明「版本端点是否经网关暴露」。  
 **与 M2 关系**：建议在接入数据库插件、扩大 proto/行为面前完成 **P0** 项，便于灰度与混跑。
@@ -156,9 +160,11 @@
 
 | 状态 | 优先级 | 待办项 | 说明与验收要点 |
 |------|--------|--------|----------------|
-| [ ] | P1 | **Artifact 加密（可选到默认）** | 设计文档 §3.1 中的对称加密（如 AES-GCM）；密钥来源：KMS、信封加密或客户托管密钥（CMK）方案选型文档。 |
-| [ ] | P1 | **静态加密与 `encrypted` 字段真实性** | 当前完成路径写死 `encrypted=False`；与 manifest、DB 字段一致。 |
-| [ ] | P1 | **保留策略与生命周期** | 按策略自动标记删除/过渡存储类；控制面任务或异步作业清理过期 artifact 元数据与对象；与 README 中「生命周期管理」承诺对齐。 |
+| [x] | P1 | **Artifact 加密（可选到默认）** | 策略 **`encrypt_artifacts`** + Agent **`DEVAULT_ARTIFACT_ENCRYPTION_KEY`**；AES-256-GCM 分块格式 **`devault-chunked-v1`**；manifest **`encryption`**；KMS/信封后续可增强。见 **`website/docs/security/artifact-encryption.md`**。 |
+| [x] | P1 | **静态加密与 `encrypted` 字段真实性** | **`CompleteJob`** 读取 manifest，**`artifacts.encrypted`** 与 **`encryption`** 块一致；恢复 READ 签发 manifest 预签名供解密。 |
+| [ ] | P2 | **KMS / 信封加密 / 按租户 DEK（可增强）** | 当前为 Agent 环境变量 **CMK/DEK** 直配；后续可接 **KMS 解封**、**按租户数据密钥**、manifest 记录 **密钥 ARN/版本**（非密钥材料）；选型文档与迁移路径。 |
+| [ ] | P3 | **默认或租户级强制加密策略（可增强）** | 控制面或租户策略：**禁止**未加密 artifact 入库；与 **`encrypt_artifacts`**、合规问卷对齐。 |
+| [x] | P1 | **保留策略与生命周期** | 策略 **`retention_days`** → **`artifacts.retain_until`**（**`CompleteJob`**）；**`devault-scheduler`** 定时删除对象 + DB 行；指标 **`devault_retention_*`**；文档 **`website/docs/guides/retention-lifecycle.md`**。存储类过渡仍在桶侧配置。 |
 | [ ] | P2 | **WORM / 对象锁定（Object Lock）** | 法规保留期；需存储层与策略引擎联合设计（`development-design.md` 曾列为非目标，企业版 backlog）。 |
 | [ ] | P2 | **Legal Hold** | 暂停保留期删除；审计记录。 |
 | [ ] | P2 | **BYOB（客户自带 Bucket）** | `target-architecture.md` §8 后续扩展；跨账号角色与凭证签发仍保持数据面不经 gRPC 传文件。 |
@@ -280,3 +286,23 @@
 | 2026-05-09 | **M1·二 P2**：控制面 **STS / AssumeRole** 访问 S3（`s3_client.py`、配置项、单测）；文档站 **`storage/sts-assume-role.md`**；**`docs-old/s3-data-plane.md`** 与 **`enterprise-backlog.md`** 对应行勾选。 |
 | 2026-05-09 | **M1·四 P0**：**租户模型**落地（`tenants` 表、各资源 `tenant_id`、默认租户种子、幂等键按租户唯一、**`GET/POST /api/v1/tenants`**、对象键含租户段、Lease `config_json` 含 **`tenant_id`**）；文档 **`reference/tenants.md`** 及配置/API/对象存储说明更新。 |
 | 2026-05-09 | **M1·四**：**API/UI 作用域强化**、**RBAC**（`control_plane_api_keys` + 三角色）、**可选 OIDC JWT**、**计费向 Prometheus**（HTTP 计数 + 备份提交字节）；**`devault-admin`** CLI；文档 **`reference/access-control.md`** 与配置/安全页更新。 |
+| 2026-05-09 | **M1·五 P1**：**Artifact AES-GCM 静态加密**（策略 **`encrypt_artifacts`**、Agent 密钥、分块 **`devault-chunked-v1`**、manifest / **`artifacts.encrypted`**、恢复 manifest 预签名）；文档 **`website/docs/security/artifact-encryption.md`**；**`CHANGELOG`**。 |
+| 2026-05-09 | **可增强项显式化**：**§一** 增加 Envoy **`local_rate_limit`**、Register 令牌演进；**§二** 增加 Multipart×加密联调；**§五** 增加 KMS/信封、强制加密策略；**「如何使用」** 增加 **可增强** 列说明；文末新增 **§十三、可增强项汇总**（与 §三.2 三项互链）。 |
+| 2026-05-09 | **M1·五 P1**：**保留策略与生命周期**（**`retention_days`**、**`retain_until`**、scheduler 清理、存储 **`delete_object`**、Compose scheduler **S3** 环境、`ArtifactOut` / UI）；文档 **`guides/retention-lifecycle.md`**、**`CHANGELOG`**。 |
+
+---
+
+## 十三、可增强项汇总
+
+**非阻塞、可后续排期。** 以下与上文 **`（可增强）`** 或 **已勾选行内「后续」表述**对应，便于**单独 Epic / 季度排期**；实现后可在**归属章节**与下表同步勾选。
+
+| 状态 | 优先级 | 归属 | 待办项 | 说明与验收要点 |
+|------|--------|------|--------|----------------|
+| [ ] | P3 | §一 | **Envoy local_rate_limit** | 见 **§一** 表；网关侧补充限流 filter 与文档。 |
+| [ ] | P3 | §一 | **Register → 每 Agent 令牌 / 吊销 / Redis** | 见 **§一** 表；与 gRPC 审计、`reason_code` 一致。 |
+| [ ] | P3 | §二 | **Multipart × 加密联调** | 见 **§二** 表；大对象 + **`encrypt_artifacts`** 边界与文档。 |
+| [ ] | P2 | §三.2 | **CI 多版本镜像 E2E 矩阵** | nightly/手动 workflow；与 **`docs/compatibility.json`** `matrices` 互链。 |
+| [ ] | P3 | §三.2 | **bump_release ↔ compatibility.json** | 发版脚本校验或交互更新 **`current.control_plane_release`**。 |
+| [ ] | P3 | §三.2 | **Agent 按 server_capabilities 降级** | 关闭 multipart 续传等盲调路径；集成测试与 **`compute_enabled_server_capabilities`** 对齐。 |
+| [ ] | P2 | §五 | **KMS / 信封 / 租户 DEK** | 见 **§五** 表。 |
+| [ ] | P3 | §五 | **默认或租户级强制加密** | 见 **§五** 表。 |

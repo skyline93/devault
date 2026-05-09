@@ -37,6 +37,27 @@ def _lines(text: str | None) -> list[str]:
     return [ln.strip() for ln in (text or "").splitlines() if ln.strip()]
 
 
+def _file_backup_config_v1(
+    *,
+    paths_multiline: str,
+    excludes_multiline: str,
+    encrypt_artifacts: str,
+    retention_days_raw: str,
+) -> FileBackupConfigV1:
+    paths = _lines(paths_multiline)
+    excludes = _lines(excludes_multiline)
+    rd = (retention_days_raw or "").strip()
+    kwargs: dict = {
+        "version": 1,
+        "paths": paths,
+        "excludes": excludes,
+        "encrypt_artifacts": encrypt_artifacts == "yes",
+    }
+    if rd:
+        kwargs["retention_days"] = int(rd)
+    return FileBackupConfigV1(**kwargs)
+
+
 def _redirect(path: str, *, flash: str | None = None, error: str | None = None) -> RedirectResponse:
     qs: list[str] = []
     if flash:
@@ -203,15 +224,20 @@ def ui_policies_create(
     name: str = Form(...),
     paths_multiline: str = Form(...),
     excludes_multiline: str = Form(""),
+    encrypt_artifacts: str = Form("no"),
+    retention_days: str = Form(""),
     enabled: str = Form("yes"),
     db: Session = Depends(get_db),
     tenant: Tenant = Depends(get_effective_tenant_ui),
     _w: AuthContext = Depends(require_write_ui),
 ) -> RedirectResponse:
     try:
-        paths = _lines(paths_multiline)
-        excludes = _lines(excludes_multiline)
-        cfg = FileBackupConfigV1(version=1, paths=paths, excludes=excludes)
+        cfg = _file_backup_config_v1(
+            paths_multiline=paths_multiline,
+            excludes_multiline=excludes_multiline,
+            encrypt_artifacts=encrypt_artifacts,
+            retention_days_raw=retention_days,
+        )
         body = PolicyCreate(
             name=name.strip(),
             plugin="file",
@@ -222,7 +248,7 @@ def ui_policies_create(
         return _redirect("/ui/policies", flash="Policy created.")
     except HTTPException as e:
         return _redirect("/ui/policies", error=_http_err_detail(e))
-    except ValidationError as e:
+    except (ValidationError, ValueError) as e:
         return _redirect("/ui/policies", error=str(e)[:800])
 
 
@@ -255,21 +281,26 @@ def ui_policies_update(
     name: str = Form(...),
     paths_multiline: str = Form(...),
     excludes_multiline: str = Form(""),
+    encrypt_artifacts: str = Form("no"),
+    retention_days: str = Form(""),
     enabled: str = Form("yes"),
     db: Session = Depends(get_db),
     tenant: Tenant = Depends(get_effective_tenant_ui),
     _w: AuthContext = Depends(require_write_ui),
 ) -> RedirectResponse:
     try:
-        paths = _lines(paths_multiline)
-        excludes = _lines(excludes_multiline)
-        cfg = FileBackupConfigV1(version=1, paths=paths, excludes=excludes)
+        cfg = _file_backup_config_v1(
+            paths_multiline=paths_multiline,
+            excludes_multiline=excludes_multiline,
+            encrypt_artifacts=encrypt_artifacts,
+            retention_days_raw=retention_days,
+        )
         patch = PolicyPatch(name=name.strip(), config=cfg, enabled=enabled == "yes")
         control_svc.patch_policy(db, policy_id, patch, tenant_id=tenant.id)
         return _redirect("/ui/policies", flash="Policy updated.")
     except HTTPException as e:
         return _redirect("/ui/policies", error=_http_err_detail(e))
-    except ValidationError as e:
+    except (ValidationError, ValueError) as e:
         return _redirect("/ui/policies", error=str(e)[:800])
 
 

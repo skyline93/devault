@@ -71,6 +71,18 @@ STS、IRSA 与凭证链顺序见 [STS 与 AssumeRole](../storage/sts-assume-role
 | `DEVAULT_API_TOKEN` | 与注册/鉴权相关的令牌（与实现版本一致） |
 | `DEVAULT_AGENT_MULTIPART_STATE_DIR` | （可选）Multipart 续传状态与 WIP `bundle.tar.gz` 的根目录；默认 `~/.cache/devault-agent` |
 | `DEVAULT_AGENT_GIT_COMMIT` | （可选）随 Heartbeat / Register 上报的短 git SHA |
+| `DEVAULT_ARTIFACT_ENCRYPTION_KEY` | （可选）Base64 编码的 32 字节 AES-256 密钥；当策略启用 **`encrypt_artifacts`** 时用于加密备份包及解密恢复；须与运维密钥治理一致 |
+
+详见 [Artifact 静态加密](../security/artifact-encryption.md)。
+
+### Scheduler（`devault-scheduler`）
+
+除 Cron 触发备份外，scheduler 进程执行 **artifact 保留清理**（需能连 **PostgreSQL**、与 **`DEVAULT_STORAGE_BACKEND`** 一致的存储凭证以删除对象）。见 [保留与生命周期](../guides/retention-lifecycle.md)。
+
+| 变量 | 说明 |
+|------|------|
+| `DEVAULT_RETENTION_CLEANUP_ENABLED` | 默认 `true` |
+| `DEVAULT_RETENTION_CLEANUP_INTERVAL_SECONDS` | 默认 `900`（秒），范围 `60`–`86400` |
 
 ## 与 Compose 对齐
 
