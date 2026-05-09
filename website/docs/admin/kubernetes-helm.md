@@ -16,10 +16,10 @@ description: 使用官方 Helm Chart 部署控制面与演示依赖
 - Helm **3.12+**
 
 ```bash
-docker build -f deploy/Dockerfile -t devault:latest .
+docker build -f deploy/Dockerfile -t glf9832/devault:latest .
 ```
 
-将镜像推送到集群可拉取仓库后设置 `image.repository` / `image.tag`。
+将镜像推送到集群可拉取仓库后设置 `image.repository` / `image.tag`（Chart 默认 Docker Hub：`glf9832/devault`）。
 
 ## 安装
 
@@ -28,7 +28,7 @@ docker build -f deploy/Dockerfile -t devault:latest .
 ```bash
 helm upgrade --install dv deploy/helm/devault \
   --namespace devault --create-namespace \
-  --set image.repository=YOUR_REGISTRY/devault \
+  --set image.repository=glf9832/devault \
   --set image.tag=latest
 ```
 

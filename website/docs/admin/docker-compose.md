@@ -42,7 +42,7 @@ docker compose -f docker-compose.yml -f docker-compose.prometheus.yml up -d
 | **minio-init** | 一次性 `mc mb` 建桶；运行时**不** `CreateBucket` |
 | **api** | HTTP + gRPC；启动含 `alembic upgrade head`；默认 **`DEVAULT_GRPC_REGISTRATION_SECRET`** 支持 Agent **Register** |
 | **scheduler** | Cron 创建任务；**不**跑 `alembic` |
-| **agent** | `DEVAULT_GRPC_TARGET=api:50051`；示例挂载 `demo_data` → **`/data`**，卷 **`/restore`** |
+| **agent** | `DEVAULT_GRPC_TARGET=api:50051`；示例挂载 `deploy/demo_data` → **`/data`**，卷 **`/restore`** |
 
 ### Register 引导
 

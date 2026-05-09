@@ -1,3 +1,9 @@
+# Pre-built image: default Docker Hub glf9832/devault; override DEVAULT_IMAGE for other registries, e.g.
+#   registry.cn-shenzhen.aliyuncs.com/greene/devault:latest-amd64
+# Local build from checkout: `cd deploy && docker compose up --build -d` (default tag names the build).
+# When both `image` and `build` are set, `compose up --build` builds and tags as `image`; `up` without
+# `--build` uses a pulled or existing image (no source tree needed next to this file).
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -60,6 +66,7 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
+    image: ${DEVAULT_IMAGE:-glf9832/devault:latest}
     command: >
       sh -c "alembic upgrade head &&
              uvicorn devault.api.main:app --host 0.0.0.0 --port 8000"
@@ -104,6 +111,7 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
+    image: ${DEVAULT_IMAGE:-glf9832/devault:latest}
     # Do not run alembic here: api already runs `alembic upgrade head` on startup.
     # Concurrent migrations from multiple containers race on CREATE alembic_version.
     command: devault-scheduler
@@ -144,6 +152,7 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
+    image: ${DEVAULT_IMAGE:-glf9832/devault:latest}
     command: devault-agent
     environment:
       DEVAULT_GRPC_REGISTRATION_SECRET: ${DEVAULT_GRPC_REGISTRATION_SECRET:-devault-docker-register-secret}
@@ -153,7 +162,7 @@ services:
       DEVAULT_ARTIFACT_ENCRYPTION_KEY: ${DEVAULT_ARTIFACT_ENCRYPTION_KEY:-ZGV2YXVsdC1kb2NrZXItZGVtby1hZXMyNTYta2V5ISE=}
       PYTHONPATH: /app/src
     volumes:
-      - ../demo_data:/data:ro
+      - ./demo_data:/data:ro
       - agent_restore:/restore
     depends_on:
       api:

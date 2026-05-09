@@ -17,7 +17,7 @@ docker compose up --build -d
 
 Compose 会拉起 PostgreSQL、Redis、MinIO、一次性 **minio-init** 建桶、**api**（含 HTTP 与 gRPC）、**scheduler**、**agent** 等。`api` 启动时会执行 `alembic upgrade head`。
 
-默认将 `demo_data/` 挂载到 agent 容器的只读 **`/data`**，恢复卷挂载为 **`/restore`**。
+默认将 `deploy/demo_data/` 挂载到 agent 容器的只读 **`/data`**，恢复卷挂载为 **`/restore`**。
 
 ## 2. 发起一次备份
 
