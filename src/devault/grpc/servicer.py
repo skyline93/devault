@@ -27,10 +27,13 @@ from devault.server_capabilities import apply_server_capabilities
 from devault.grpc.rpc_governance import grpc_governance
 from devault.grpc_gen import agent_pb2, agent_pb2_grpc
 from devault.observability.metrics import (
+    BACKUP_INTEGRITY_CONTROL_REJECTS_TOTAL,
     BILLING_COMMITTED_BYTES_TOTAL,
     JOB_DURATION_SECONDS,
     JOB_TOTAL,
     MULTIPART_RESUME_GRANTS_TOTAL,
+    agent_error_class,
+    job_terminal_label_values,
 )
 from devault.retention.policy import retain_until_from_backup_config
 from devault.plugins.file.plugin import artifact_object_keys
@@ -636,6 +639,9 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
                         bundle_key = request.bundle_key or ""
                         manifest_key = request.manifest_key or ""
                         if not bundle_key or not manifest_key:
+                            BACKUP_INTEGRITY_CONTROL_REJECTS_TOTAL.labels(
+                                reason="bundle_manifest_keys_missing",
+                            ).inc()
                             context.abort(
                                 grpc.StatusCode.INVALID_ARGUMENT,
                                 "bundle/manifest keys required",
@@ -646,12 +652,18 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
                             try:
                                 parts_raw = json.loads(mpu_json)
                             except json.JSONDecodeError:
+                                BACKUP_INTEGRITY_CONTROL_REJECTS_TOTAL.labels(
+                                    reason="multipart_parts_json_invalid",
+                                ).inc()
                                 context.abort(
                                     grpc.StatusCode.INVALID_ARGUMENT,
                                     "invalid bundle_multipart_parts_json",
                                 )
                                 raise RuntimeError("unreachable")
                             if not isinstance(parts_raw, list) or not parts_raw:
+                                BACKUP_INTEGRITY_CONTROL_REJECTS_TOTAL.labels(
+                                    reason="multipart_parts_list_invalid",
+                                ).inc()
                                 context.abort(
                                     grpc.StatusCode.INVALID_ARGUMENT,
                                     "multipart parts list required",
@@ -677,24 +689,36 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
                                     MultipartUpload={"Parts": parts_boto},
                                 )
                             except ClientError as e:
+                                BACKUP_INTEGRITY_CONTROL_REJECTS_TOTAL.labels(
+                                    reason="s3_complete_multipart_failed",
+                                ).inc()
                                 context.abort(
                                     grpc.StatusCode.FAILED_PRECONDITION,
                                     f"S3 complete_multipart_upload failed: {e}",
                                 )
                                 raise RuntimeError("unreachable") from e
                             if not storage.exists(bundle_key) or not storage.exists(manifest_key):
+                                BACKUP_INTEGRITY_CONTROL_REJECTS_TOTAL.labels(
+                                    reason="artifact_missing_post_multipart_complete",
+                                ).inc()
                                 context.abort(
                                     grpc.StatusCode.FAILED_PRECONDITION,
                                     "artifact objects missing after multipart complete",
                                 )
                                 raise RuntimeError("unreachable")
                         elif mpu_id or mpu_json:
+                            BACKUP_INTEGRITY_CONTROL_REJECTS_TOTAL.labels(
+                                reason="multipart_args_partial",
+                            ).inc()
                             context.abort(
                                 grpc.StatusCode.INVALID_ARGUMENT,
                                 "bundle_multipart_upload_id and bundle_multipart_parts_json must both be set",
                             )
                             raise RuntimeError("unreachable")
                         elif not storage.exists(bundle_key) or not storage.exists(manifest_key):
+                            BACKUP_INTEGRITY_CONTROL_REJECTS_TOTAL.labels(
+                                reason="artifact_objects_missing",
+                            ).inc()
                             context.abort(
                                 grpc.StatusCode.FAILED_PRECONDITION,
                                 "artifact objects missing",
@@ -703,6 +727,9 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
                             manifest_body = storage.get_bytes(manifest_key)
                             mf = json.loads(manifest_body.decode("utf-8"))
                         except (OSError, UnicodeDecodeError, json.JSONDecodeError) as e:
+                            BACKUP_INTEGRITY_CONTROL_REJECTS_TOTAL.labels(
+                                reason="manifest_read_failed",
+                            ).inc()
                             context.abort(
                                 grpc.StatusCode.FAILED_PRECONDITION,
                                 f"cannot read manifest: {e}",
@@ -711,6 +738,9 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
                         mf_chk = str(mf.get("checksum_sha256") or "").lower()
                         req_chk = str(request.checksum_sha256 or "").lower()
                         if mf_chk and req_chk and mf_chk != req_chk:
+                            BACKUP_INTEGRITY_CONTROL_REJECTS_TOTAL.labels(
+                                reason="manifest_bundle_checksum_mismatch",
+                            ).inc()
                             context.abort(
                                 grpc.StatusCode.INVALID_ARGUMENT,
                                 "bundle checksum does not match manifest",
@@ -740,7 +770,9 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
                         job.bundle_wip_part_size_bytes = None
                         job.status = JobStatus.SUCCESS.value
                         job.finished_at = finished
-                        JOB_TOTAL.labels(kind="backup", plugin=job.plugin, status="success").inc()
+                        JOB_TOTAL.labels(
+                            *job_terminal_label_values(job, status="success", error_class="none"),
+                        ).inc()
                         BILLING_COMMITTED_BYTES_TOTAL.labels(tenant_id=str(job.tenant_id)).inc(
                             max(0, int(request.size_bytes)),
                         )
@@ -754,11 +786,15 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
                                 job.result_meta = parsed if isinstance(parsed, dict) else {"value": parsed}
                             except json.JSONDecodeError:
                                 job.result_meta = {"parse_error": "invalid result_summary_json"}
-                        JOB_TOTAL.labels(kind="restore_drill", plugin=job.plugin, status="success").inc()
+                        JOB_TOTAL.labels(
+                            *job_terminal_label_values(job, status="success", error_class="none"),
+                        ).inc()
                     else:
                         job.status = JobStatus.SUCCESS.value
                         job.finished_at = datetime.now(timezone.utc)
-                        JOB_TOTAL.labels(kind="restore", plugin=job.plugin, status="success").inc()
+                        JOB_TOTAL.labels(
+                            *job_terminal_label_values(job, status="success", error_class="none"),
+                        ).inc()
                 else:
                     if job.kind == JobKind.BACKUP.value and settings.storage_backend == "s3":
                         uid = job.bundle_wip_multipart_upload_id
@@ -778,10 +814,9 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
                     job.error_code = (request.error_code or "FAILED")[:64]
                     job.error_message = (request.error_message or "")[:8000]
                     job.finished_at = datetime.now(timezone.utc)
+                    ecls = agent_error_class(request.error_code)
                     JOB_TOTAL.labels(
-                        kind=job.kind,
-                        plugin=job.plugin,
-                        status="failed",
+                        *job_terminal_label_values(job, status="failed", error_class=ecls),
                     ).inc()
 
                 job.lease_agent_id = None

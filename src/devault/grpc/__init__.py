@@ -1,1 +1,1 @@
-"""Agent gRPC control plane (see docs/target-architecture.md)."""
+"""Agent gRPC control plane (see website/docs/intro/target-architecture.md)."""

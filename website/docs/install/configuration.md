@@ -18,6 +18,7 @@ description: 常用环境变量分组说明
 | `DEVAULT_GRPC_LISTEN` | 绑定 gRPC 的 `host:port`（如 `0.0.0.0:50051`） |
 | `DEVAULT_ENV_NAME` | 环境名标签（指标等） |
 | `DEVAULT_DEFAULT_TENANT_SLUG` | 未带 `X-DeVault-Tenant-Id` 时按此 slug 解析租户（默认 `default`）；须与迁移种子一致 |
+| `DEVAULT_JOB_STUCK_THRESHOLD_SECONDS` | 非终态作业视为「超窗」的秒数（默认 `86400`，范围 `300`–`864000`），驱动 **`devault_jobs_overdue_nonterminal`**；与 [可观测性](./observability.md) 中 Prometheus 告警示例一致 |
 
 ### OIDC（可选，Bearer JWT）
 

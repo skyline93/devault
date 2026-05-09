@@ -60,6 +60,6 @@ description: 周期性自动恢复演练（restore_drill）、Cron 调度与 Age
 - **入队执行前**：若 **`devault-drill-<job_id>/`** 已存在且非空（例如上次同一 Job 重试、租约回收后再次领取），Agent 会在**开始下载前**拒绝并返回 **`TARGET_NOT_EMPTY`**；需清空该目录或换新 Job。解压完成后的写报告阶段**不再**做此项检查（与实现 `_resolve_restore_drill_paths` / `_require_restore_drill_workspace_clean` 一致）。
 - 每次新 Job 使用新的 **`job_id`** 子目录；重复运行同一 Job 若目录非空会失败（避免静默覆盖）。
 - 磁盘占用随 artifact 体积线性增长；定期清理 **`drill_base_path`** 下旧的 **`devault-drill-*`** 目录。
-- Prometheus：**`devault_jobs_total{kind="restore_drill",status="success"}`**。
+- Prometheus：**`devault_jobs_total{kind="restore_drill",status="success"}`**（亦可按 **`tenant_id`** / **`policy_id`** 分组）；失败演练见 **`status="failed"`** 与 [可观测性](../install/observability.md#backup-integrity-and-sla-alerts) 告警示例。
 
 更多备份/恢复主路径见 [备份与恢复流程](./backup-and-restore.md)。

@@ -187,6 +187,15 @@ class Settings(BaseSettings):
 
     job_lease_ttl_seconds: int = Field(default=1800, ge=60)
     presign_ttl_seconds: int = Field(default=3600, ge=60)
+    job_stuck_threshold_seconds: int = Field(
+        default=86400,
+        ge=300,
+        le=864000,
+        description=(
+            "Jobs in running/uploading/verifying (or pending) longer than this are counted in "
+            "devault_jobs_overdue_nonterminal for alerting"
+        ),
+    )
 
     # S3 bundle upload (Agent path): multipart when bundle >= threshold (bytes)
     s3_multipart_threshold_bytes: int = Field(

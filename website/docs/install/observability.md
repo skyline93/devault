@@ -18,6 +18,18 @@ description: Prometheus、健康检查与日志
 
 与租户/访问控制相关的增量指标包括 **`devault_http_requests_total`**（`method`、`path_template`）与 **`devault_billing_committed_backup_bytes_total`**（`tenant_id`，备份成功提交时）；详见 [访问控制与 RBAC](../reference/access-control.md)。
 
+## Backup integrity and SLA alerts
+
+下列指标用于 **连续失败、校验/清单失败、控制面完整性拒绝、超窗未结束作业** 等场景，可与 Alertmanager 联动。
+
+| 指标 | 含义 |
+|------|------|
+| **`devault_jobs_total`** | 终态作业计数；标签含 **`kind`**、**`plugin`**、**`status`**（`success` \| `failed`）、**`tenant_id`**、**`policy_id`**（无策略时为 `none`）、**`error_class`**（失败时 `integrity` 表示 Agent 上报的校验/manifest 类 **`CHECKSUM_MISMATCH` / `INVALID_MANIFEST`** 等；成功与其它失败为 `none` / `operational`）。 |
+| **`devault_backup_integrity_control_rejects_total`** | 控制面在 **`CompleteJob`** 成功路径上因清单读失败、**bundle 与 manifest 校验不一致**、对象缺失、Multipart 完成失败等 **拒绝提交** 的次数；**`reason`** 标签区分具体原因。 |
+| **`devault_jobs_overdue_nonterminal`** | Gauge：**`stale_bucket`** = `active_work`（`running` / `uploading` / `verifying` 且超过 **`DEVAULT_JOB_STUCK_THRESHOLD_SECONDS`**）或 `pending_unleased`（长期 `pending`）。阈值见 [配置参考](./configuration.md)。 |
+
+示例告警规则（可按环境调阈值）位于仓库 **`deploy/prometheus/alerts.yml`**，由 **`deploy/prometheus.yml`** 的 **`rule_files`** 加载；叠加 Compose 文件 **`deploy/docker-compose.prometheus.yml`** 已挂载该文件。与 [企业部署参考架构](./enterprise-reference-architecture.md)、[安全白皮书摘要](../security/security-whitepaper.md) 交叉阅读。
+
 ## 健康检查
 
 HTTP 层提供用于编排的就绪类端点（如 Compose 中使用的 **`/healthz`**）。部署时应将负载均衡/滚动更新与此类端点绑定。

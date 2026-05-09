@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **文档站「目标架构」**：新增 **`website/docs/intro/target-architecture.md`**（原则、控制/数据面、Pull 序列、网关与统一存储、安全摘要、与实现对齐）；侧栏与入门/企业参考架构/白皮书互链。**`docs-old/target-architecture.md`** 改为迁移占位，权威内容以文档站为准。
+- **备份完整性可观测与告警**：**`devault_jobs_total`** 增加 **`tenant_id`**、**`policy_id`**、**`error_class`** 标签；新增 **`devault_backup_integrity_control_rejects_total`**（控制面 **`CompleteJob`** 备份路径前置校验拒绝）；**`devault_jobs_overdue_nonterminal`** Gauge（采集器 **`stuck_jobs_collector`**，阈值 **`DEVAULT_JOB_STUCK_THRESHOLD_SECONDS`**）。示例 Prometheus 规则 **`deploy/prometheus/alerts.yml`**（由 **`deploy/prometheus.yml`** **`rule_files`** 引用；Compose 叠加 **`docker-compose.prometheus.yml`** 已挂载）。文档：**`website/docs/install/observability.md`**、**`install/configuration.md`**、**`install/enterprise-reference-architecture.md`**、**`security/security-whitepaper.md`**、仓库 **`docs/README.md`**（愿景差距表）。
 - **自动恢复演练（restore drill）**：**`POST /api/v1/jobs/restore-drill`**、**`/api/v1/restore-drill-schedules`**；**`devault-scheduler`** 注册 **`rd_<uuid>`** Cron；Agent **`restore_drill`** 与恢复相同预签名读路径，解压至 **`drill_base_path`/devault-drill-`<job_id>`/**，写入 **`.devault-drill-report.json`** 并经 **`CompleteJob.result_summary_json`** 回传至 **`jobs.result_meta`**。迁移 **`0008`**；**`proto/agent.proto`** 扩展 **`CompleteJobRequest`**。文档 **`website/docs/guides/restore-drill.md`**。**Web UI**：**`/ui/restore-drill-schedules`**、Jobs 列表演练路径摘要。
 - **Agent 舰队 Web UI**：**`/ui/agents`**（HTTP Basic，只读表格；与 **`GET /api/v1/agents`** 同源）；导航入口；**`devault.api.presenters.edge_agent_to_out`** 供 REST/UI 共用。
 - **Agent 舰队登记与批量版本策略**：表 **`edge_agents`**（Heartbeat/Register 上报）；**`LeaseJobs`** 默认根据登记记录再次执行 **`evaluate_agent_version_gate`**（**`DEVAULT_GRPC_ENFORCE_VERSION_ON_LEASE`**，可关闭）；**`GET /api/v1/agents`** / **`GET /api/v1/agents/{id}`**；CLI **`devault agent list`**。文档 **`website/docs/reference/agent-fleet.md`**。
@@ -28,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **破坏性（指标）**：**`devault_jobs_total`** 的 Prometheus 标签集合已变更；既有仪表盘/告警需同步更新标签匹配。
 - **Artifacts Web UI**（`/ui/artifacts`）：English-only; **Restore** column is a single button per row; clicking opens a **`<dialog>`** modal with the restore form. Restore-drill actions stay off this page (use **Restore drills** or **`POST /api/v1/jobs/restore-drill`**).
 - **`deploy/docker-compose.yml`**：默认在 **api** 上开启 **`DEVAULT_GRPC_REGISTRATION_SECRET`**，**agent** 不再注入 **`DEVAULT_API_TOKEN`**，启动时经 **Register** 换取与 **`DEVAULT_API_TOKEN`** 相同的共享令牌（便于在开发环境验证 Register 与 **`/ui/agents`** 的 Registered 列）。若需恢复旧行为，为 **agent** 显式设置 **`DEVAULT_API_TOKEN`**。
 

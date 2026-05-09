@@ -10,6 +10,7 @@ const sidebars: SidebarsConfig = {
         'intro/index',
         'intro/quickstart',
         'intro/architecture-overview',
+        'intro/target-architecture',
         'intro/roadmap',
       ],
     },
@@ -24,6 +25,7 @@ const sidebars: SidebarsConfig = {
         'install/control-plane-database-dr',
         'install/grpc-multi-instance',
         'install/configuration',
+        'install/enterprise-reference-architecture',
         'install/observability',
       ],
     },
@@ -36,6 +38,7 @@ const sidebars: SidebarsConfig = {
         'security/tls-and-gateway',
         'security/api-access',
         'security/artifact-encryption',
+        'security/security-whitepaper',
       ],
     },
     {

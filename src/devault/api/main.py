@@ -11,6 +11,7 @@ from devault.api.routes import agents, artifacts, jobs, policies, restore_drill_
 from devault.grpc.server import start_grpc_server, stop_grpc_server
 from devault.release_meta import GRPC_API_PACKAGE
 from devault.observability.metrics import HTTP_REQUESTS_TOTAL
+from devault.observability.stuck_jobs_collector import register_stuck_jobs_collector
 from devault.settings import get_settings
 
 _OPENAPI_DESCRIPTION = """
@@ -57,6 +58,7 @@ _OPENAPI_TAGS = [
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    register_stuck_jobs_collector()
     start_grpc_server()
     yield
     stop_grpc_server()

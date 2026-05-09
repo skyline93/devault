@@ -143,6 +143,8 @@ flowchart LR
 
 ## 延伸阅读
 
+- [目标架构（原则、序列与存储约定）](./target-architecture.md)
+- [企业部署参考架构](../install/enterprise-reference-architecture.md)（DMZ、VPC、出站策略单页图）
 - [备份与恢复流程](../guides/backup-and-restore.md)（时序、控制面与数据面协作、API 操作步骤）
 - [Agent 连接与安全](../security/agent-connectivity.md)
 - [TLS 与网关](../security/tls-and-gateway.md)

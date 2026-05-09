@@ -1,0 +1,59 @@
+# DeVault: backup integrity & trust signals (load via deploy/prometheus.yml rule_files).
+# Tune thresholds for your SLO; values below suit small/medium self-hosted stacks.
+
+groups:
+  - name: devault-backup-integrity
+    rules:
+      - alert: DeVaultBackupFailureBurst
+        expr: sum(increase(devault_jobs_total{kind="backup",status="failed"}[6h])) >= 3
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "DeVault：6 小时内备份失败次数达到或超过 3 次"
+          description: "检查 Agent 连通性、对象存储、策略路径与租约；见文档站「备份与恢复」「可观测性」。"
+
+      - alert: DeVaultBackupIntegrityAgentFailures
+        expr: sum(increase(devault_jobs_total{kind="backup",status="failed",error_class="integrity"}[2h])) > 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "DeVault：备份任务出现完整性类失败（Agent 上报校验 / manifest 等）"
+          description: "Prometheus 标签 error_class=integrity；对照 jobs 表 error_code / error_message。"
+
+      - alert: DeVaultBackupControlPlaneIntegrityRejects
+        expr: sum(increase(devault_backup_integrity_control_rejects_total[15m])) > 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "DeVault：控制面在 CompleteJob 阶段拒绝备份（清单 / 对象 / 分片完成等前置条件）"
+          description: "查看指标 reason 标签与 devault.grpc.audit 中 CompleteJob 记录。"
+
+      - alert: DeVaultRestoreDrillFailures
+        expr: sum(increase(devault_jobs_total{kind="restore_drill",status="failed"}[24h])) > 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "DeVault：24 小时内有恢复演练失败"
+          description: "核对 drill_base_path、Artifact 与 Agent 版本；见 guides/restore-drill。"
+
+      - alert: DeVaultJobsStuckActiveWork
+        expr: sum(devault_jobs_overdue_nonterminal{stale_bucket="active_work"}) > 0
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "DeVault：存在运行/上传/校验态且超过 DEVAULT_JOB_STUCK_THRESHOLD_SECONDS 的作业"
+          description: "可能 Agent 掉线、租约过期未回收或超大对象上传卡住；调阈值见配置参考。"
+
+      - alert: DeVaultJobsStalePending
+        expr: sum(devault_jobs_overdue_nonterminal{stale_bucket="pending_unleased"}) > 0
+        for: 2h
+        labels:
+          severity: warning
+        annotations:
+          summary: "DeVault：存在长期 pending、未被 Agent 租约拉起的作业"
+          description: "检查是否有可用 Agent、策略锁、或 gRPC 注册/版本门闸。"

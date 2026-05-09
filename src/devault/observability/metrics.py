@@ -4,8 +4,40 @@ from prometheus_client import Counter, Histogram
 
 JOB_TOTAL = Counter(
     "devault_jobs_total",
-    "Jobs finished by terminal status",
-    ["kind", "plugin", "status"],
+    "Jobs finished by terminal status (success or failed)",
+    ["kind", "plugin", "status", "tenant_id", "policy_id", "error_class"],
+)
+
+
+def _policy_metric_label(policy_id) -> str:
+    return str(policy_id) if policy_id is not None else "none"
+
+
+def agent_error_class(error_code: str | None) -> str:
+    """Classify Agent-reported error_code for failed CompleteJob (bounded values for Prometheus)."""
+    if not error_code:
+        return "operational"
+    u = error_code.strip().upper()
+    if u in ("CHECKSUM_MISMATCH", "INVALID_MANIFEST"):
+        return "integrity"
+    return "operational"
+
+
+def job_terminal_label_values(job, *, status: str, error_class: str = "none") -> tuple[str, ...]:
+    return (
+        job.kind,
+        job.plugin,
+        status,
+        str(job.tenant_id),
+        _policy_metric_label(job.policy_id),
+        error_class,
+    )
+
+
+BACKUP_INTEGRITY_CONTROL_REJECTS_TOTAL = Counter(
+    "devault_backup_integrity_control_rejects_total",
+    "Backup CompleteJob rejected by control plane (pre-commit): manifest, checksum, or object checks",
+    ["reason"],
 )
 
 JOB_DURATION_SECONDS = Histogram(

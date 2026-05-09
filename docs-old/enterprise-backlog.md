@@ -1,6 +1,6 @@
 # DeVault 企业级落地待办清单
 
-> **文档目的**：在 [`development-design.md`](./development-design.md) 与 [`target-architecture.md`](./target-architecture.md) 之上，结合当前代码实现，列出使项目**可长期作为企业级备份方案**交付所需的完整待办项，便于排期、分工与验收。  
+> **文档目的**：在 [`development-design.md`](./development-design.md) 与 [**目标架构（文档站）**](../website/docs/intro/target-architecture.md) 之上，结合当前代码实现，列出使项目**可长期作为企业级备份方案**交付所需的完整待办项，便于排期、分工与验收。  
 > **基线说明（截至文档编写时的实现）**：S1/S2 文件备份主路径已落地；执行单元为**边缘 Agent（Pull + gRPC 租约）**，Celery Worker 已移除；控制面为 FastAPI + 内嵌 gRPC + APScheduler + PostgreSQL + Redis；对象存储以 **S3 兼容 + 预签名 URL** 为主路径；`development-design.md` 第 20 节中 **S3 数据库 MVP 仍为未完成**。
 
 ---
@@ -72,7 +72,7 @@
 
 ## 二、数据面可靠性（原阶段 B）
 
-**里程碑**：M1 · **目标**：与 `target-architecture.md` 中「分块上传、断点续传、校验」及序列图中的 `CompleteMultipart` 对齐。  
+**里程碑**：M1 · **目标**：与 [目标架构](../website/docs/intro/target-architecture.md) 中控制面/数据面及 Pull 序列所述「分块上传、断点续传、校验」及 `CompleteMultipart` 路径对齐。  
 **原阶段**：B
 
 | 状态 | 优先级 | 待办项 | 说明与验收要点 |
@@ -138,7 +138,7 @@
 
 ## 四、租户、隔离与访问控制（原阶段 D）
 
-**里程碑**：M1 · **目标**：`target-architecture.md` 中的 **`env/tenant/job_id` 前缀** 与多客户运营；`development-design.md` 曾列为阶段一非目标，企业化需单独立项。  
+**里程碑**：M1 · **目标**：[目标架构](../website/docs/intro/target-architecture.md) 与对象存储模型中的 **`env/tenant/job_id` 前缀** 与多客户运营；`development-design.md` 曾列为阶段一非目标，企业化需单独立项。  
 **原阶段**：D
 
 | 状态 | 优先级 | 待办项 | 说明与验收要点 |
@@ -155,7 +155,7 @@
 
 ## 五、数据治理、加密与合规（原阶段 E）
 
-**里程碑**：M1 · **目标**：满足常见企业安全问卷；对齐 `target-architecture.md` 统一存储侧的「生命周期与合规扫描」叙述。  
+**里程碑**：M1 · **目标**：满足常见企业安全问卷；对齐 [目标架构](../website/docs/intro/target-architecture.md) 统一存储侧的「生命周期与合规扫描」叙述。  
 **原阶段**：E
 
 | 状态 | 优先级 | 待办项 | 说明与验收要点 |
@@ -167,7 +167,7 @@
 | [x] | P1 | **保留策略与生命周期** | 策略 **`retention_days`** → **`artifacts.retain_until`**（**`CompleteJob`**）；**`devault-scheduler`** 定时删除对象 + DB 行；指标 **`devault_retention_*`**；文档 **`website/docs/guides/retention-lifecycle.md`**。存储类过渡仍在桶侧配置。 |
 | [ ] | P2 | **WORM / 对象锁定（Object Lock）** | 法规保留期；需存储层与策略引擎联合设计（`development-design.md` 曾列为非目标，企业版 backlog）。 |
 | [ ] | P2 | **Legal Hold** | 暂停保留期删除；审计记录。 |
-| [ ] | P2 | **BYOB（客户自带 Bucket）** | `target-architecture.md` §8 后续扩展；跨账号角色与凭证签发仍保持数据面不经 gRPC 传文件。 |
+| [ ] | P2 | **BYOB（客户自带 Bucket）** | [目标架构 · 统一存储与后续扩展](../website/docs/intro/target-architecture.md#unified-storage-extensions)；跨账号角色与凭证签发仍保持数据面不经 gRPC 传文件。 |
 
 ---
 
@@ -195,7 +195,7 @@
 | 状态 | 优先级 | 待办项 | 说明与验收要点 |
 |------|--------|--------|----------------|
 | [x] | P1 | **自动恢复演练 Job** | **`restore_drill`** Job + **`restore_drill_schedules`** Cron；Agent 解压至 **`drill_base_path`/devault-drill-`<job_id>`/**，`.devault-drill-report.json` + **`CompleteJob.result_summary_json`** → **`jobs.result_meta`**；API **`POST /jobs/restore-drill`**、**`/restore-drill-schedules`**；**Web UI**：**`/ui/restore-drill-schedules`**、Jobs 列表演练路径摘要（Artifacts 仅手动恢复）；文档 **`website/docs/guides/restore-drill.md`**、**`guides/web-console.md`**。 |
-| [ ] | P1 | **备份完整性告警** | 连续失败、校验失败、超窗未完成。 |
+| [x] | P1 | **备份完整性告警** | **`devault_jobs_total`** 扩展 **`tenant_id` / `policy_id` / `error_class`**；**`devault_backup_integrity_control_rejects_total`**（控制面 CompleteJob 拒绝）；**`devault_jobs_overdue_nonterminal`**（**`DEVAULT_JOB_STUCK_THRESHOLD_SECONDS`**）；示例规则 **`deploy/prometheus/alerts.yml`** + **`prometheus.yml` `rule_files`**；文档 **`website/docs/install/observability.md`**。 |
 | [ ] | P2 | **增量与时间线（长期）** | WAL/binlog、PITR（`development-design.md` §3.4 非目标）；单独 Epic，依赖数据库插件成熟。 |
 
 ---
@@ -207,9 +207,9 @@
 
 | 状态 | 优先级 | 待办项 | 说明与验收要点 |
 |------|--------|--------|----------------|
-| [ ] | P1 | **企业部署参考架构** | 单页图：DMZ、网关、控制面 VPC、对象存储、出站策略；与 `target-architecture.md` 互链。 |
-| [ ] | P1 | **安全白皮书摘要** | 信任边界、密钥流、审计面、合规路线图（含明确不支持的项）。 |
-| [ ] | P2 | **`docs/README.md` 与实现差距表** | 愿景章节中尚未实现的条目（Docker 自动发现、Volume 快照等）标注「规划中 / 未实现」，避免销售与交付预期错位。 |
+| [x] | P1 | **企业部署参考架构** | 文档站 **`website/docs/install/enterprise-reference-architecture.md`**（Mermaid：DMZ、网关、VPC、对象存储、出站）；与 **`intro/target-architecture.md`**、**`intro/architecture-overview.md`** 互链。 |
+| [x] | P1 | **安全白皮书摘要** | **`website/docs/security/security-whitepaper.md`**：信任边界、密钥流、审计、gRPC 指标告警引用、明确未实现项（KMS/BYOB/WORM 等）。 |
+| [x] | P2 | **`docs/README.md` 与实现差距表** | 仓库 **`docs/README.md`**：对照 **`docs-old/README.md`** 愿景条目的实现状态表与站内链接。 |
 
 ---
 
@@ -273,7 +273,7 @@
 
 | 日期 | 变更 |
 |------|------|
-| 2026-05-08 | 初稿：基于 `development-design.md`、`target-architecture.md` 与当前代码实现整理企业级待办清单。 |
+| 2026-05-08 | 初稿：基于 `development-design.md`、目标架构文档与当前代码实现整理企业级待办清单。 |
 | 2026-05-08 | 新增阶段 I：版本管理、控制面/Agent 双端校验、CHANGELOG 约定；Epic `E-VER-001`；基线补充版本号现状。 |
 | 2026-05-08 | **阶段 A 落地**：TLS/mTLS、Envoy 示例、限流与审计、`Register`、Health、`GET /version`、[`grpc-tls.md`](./grpc-tls.md)；发布 **0.2.0**。 |
 | 2026-05-08 | **阶段 B（P0/P1）落地**：S3 Multipart、分片上传重试、流式恢复、单 PUT 流式上传；[`s3-data-plane.md`](./s3-data-plane.md)；发布 **0.3.0**（STS 仍为待办）。 |
@@ -296,6 +296,8 @@
 | 2026-05-09 | **M1·六 P2**：**Agent 舰队 Web UI**：**`/ui/agents`**、**`agents.html`**、**`api/presenters.py`**（**`edge_agent_to_out`** 与 REST 共用）；待办清单与 **`guides/web-console.md`** 更新。 |
 | 2026-05-09 | **M1·七 P1**：**自动恢复演练**：**`JobKind.restore_drill`**、迁移 **`0008`**、**`CompleteJobRequest.result_summary_json`**；调度器 **`rd_*`** Cron；文档 **`guides/restore-drill.md`**。 |
 | 2026-05-09 | **M1·七**：恢复演练 **Web UI**（**`/ui/restore-drill-schedules`**、Jobs 演练摘要列；Artifacts 仅手动恢复）。 |
+| 2026-05-09 | **M1·七 P1**：**备份完整性告警**：指标扩展与 **`deploy/prometheus/alerts.yml`**；**`stuck_jobs_collector`**；配置 **`DEVAULT_JOB_STUCK_THRESHOLD_SECONDS`**。**M1·八**：**企业部署参考架构**、**安全白皮书摘要**、**`docs/README.md`** 差距表；侧栏与可观测性文档更新。 |
+| 2026-05-09 | **文档**：**`website/docs/intro/target-architecture.md`** 承接原 **`docs-old/target-architecture.md`** 正文；旧文件改为迁移占位；全站引用改为文档站内链；**`observability.md`** 使用 HTML 标题锚点以兼容 MDX。 |
 
 ---
 
