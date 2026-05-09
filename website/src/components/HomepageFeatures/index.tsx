@@ -25,7 +25,7 @@ const FeatureList: FeatureItem[] = [
     Svg: require('@site/static/img/undraw_docusaurus_tree.svg').default,
     description: (
       <>
-        策略与 Cron 调度、任务取消与重试、Prometheus 指标与简易 Web UI，覆盖从开发到小规模自托管的常见需求。
+        策略与 Cron 调度、任务取消与重试、Prometheus 指标与 Web 控制台，面向多租户部署与集成自动化。
       </>
     ),
   },

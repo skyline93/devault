@@ -1,51 +1,98 @@
 import type {SidebarsConfig} from '@docusaurus/plugin-content-docs';
 
+/** 各角色侧栏：首组默认展开，其余分组默认折叠，便于抓住阅读重点。 */
 const sidebars: SidebarsConfig = {
-  docsSidebar: [
+  productSidebar: [
     {
       type: 'category',
-      label: '入门',
+      label: '开始',
       collapsed: false,
       items: [
-        'intro/index',
-        'intro/quickstart',
-        'intro/architecture-overview',
-        'intro/target-architecture',
-        'intro/roadmap',
+        {type: 'link', label: '文档首页', href: '/docs/'},
+        'product/overview',
+        'product/deployment-models',
       ],
     },
     {
       type: 'category',
-      label: '安装与运行',
+      label: '架构与路线',
+      collapsed: true,
+      items: ['product/architecture', 'product/roadmap'],
+    },
+  ],
+  userSidebar: [
+    {
+      type: 'category',
+      label: '导读与入门',
       collapsed: false,
       items: [
-        'install/requirements',
-        'install/docker-compose',
-        'install/kubernetes-helm',
-        'install/database-migrations',
-        'install/control-plane-database-dr',
-        'install/grpc-multi-instance',
-        'install/configuration',
-        'install/enterprise-reference-architecture',
-        'install/observability',
+        {type: 'link', label: '文档首页', href: '/docs/'},
+        'user/index',
+        'user/concepts',
+        'user/quickstart',
       ],
     },
     {
       type: 'category',
-      label: '网络与安全',
+      label: '备份、策略与保留',
+      collapsed: true,
+      items: [
+        'user/backup-and-restore',
+        'user/policies-and-schedules',
+        'user/retention-lifecycle',
+        'user/restore-drill',
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Web 控制台',
+      collapsed: true,
+      items: ['user/web-console'],
+    },
+  ],
+  adminSidebar: [
+    {
+      type: 'category',
+      label: '导读与治理',
       collapsed: false,
       items: [
-        'security/agent-connectivity',
-        'security/tls-and-gateway',
-        'security/api-access',
-        'security/artifact-encryption',
-        'security/security-whitepaper',
+        {type: 'link', label: '文档首页', href: '/docs/'},
+        'admin/index',
+        'admin/tenants-and-rbac',
+        'admin/agent-fleet',
       ],
+    },
+    {
+      type: 'category',
+      label: '安装与环境',
+      collapsed: true,
+      items: [
+        'admin/requirements',
+        'admin/docker-compose',
+        'admin/kubernetes-helm',
+        'admin/database-migrations',
+        'admin/configuration',
+      ],
+    },
+    {
+      type: 'category',
+      label: '规模与网络拓扑',
+      collapsed: true,
+      items: [
+        'admin/grpc-multi-instance',
+        'admin/enterprise-reference-architecture',
+      ],
+    },
+    {
+      type: 'category',
+      label: '可靠性与观测',
+      collapsed: true,
+      items: ['admin/control-plane-database-dr', 'admin/observability'],
     },
     {
       type: 'category',
       label: '存储与数据面',
-      collapsed: false,
+      collapsed: true,
       items: [
         'storage/object-store-model',
         'storage/sts-assume-role',
@@ -53,42 +100,72 @@ const sidebars: SidebarsConfig = {
         'storage/tuning',
       ],
     },
+  ],
+  trustSidebar: [
     {
       type: 'category',
-      label: '使用指南',
+      label: '导读与概览',
       collapsed: false,
       items: [
-        'guides/backup-and-restore',
-        'guides/restore-drill',
-        'guides/policies-and-schedules',
-        'guides/retention-lifecycle',
-        'guides/web-console',
+        {type: 'link', label: '文档首页', href: '/docs/'},
+        'trust/index',
+        'trust/whitepaper',
       ],
     },
     {
       type: 'category',
-      label: '参考',
+      label: '网络与入口',
+      collapsed: true,
+      items: ['trust/agent-connectivity', 'trust/tls-and-gateway'],
+    },
+    {
+      type: 'category',
+      label: '访问与数据保护',
+      collapsed: true,
+      items: ['trust/api-access', 'trust/artifact-encryption'],
+    },
+  ],
+  referenceSidebar: [
+    {
+      type: 'category',
+      label: 'API',
       collapsed: false,
       items: [
+        {type: 'link', label: '文档首页', href: '/docs/'},
         'reference/http-api',
         'reference/grpc-services',
-        'reference/ports-and-paths',
-        'reference/tenants',
-        'reference/agent-fleet',
-        'reference/access-control',
       ],
     },
     {
       type: 'category',
-      label: '开发与贡献',
+      label: '部署速查',
+      collapsed: true,
+      items: ['reference/ports-and-paths'],
+    },
+  ],
+  engineeringSidebar: [
+    {
+      type: 'category',
+      label: '导读与环境',
       collapsed: false,
       items: [
-        'development/local-setup',
-        'development/project-structure',
-        'development/testing',
-        'development/releasing',
-        'development/compatibility',
+        {type: 'link', label: '文档首页', href: '/docs/'},
+        'engineering/index',
+        'engineering/local-setup',
+        'engineering/project-structure',
       ],
+    },
+    {
+      type: 'category',
+      label: '架构与契约',
+      collapsed: true,
+      items: ['engineering/platform-architecture', 'engineering/compatibility'],
+    },
+    {
+      type: 'category',
+      label: '测试与发布',
+      collapsed: true,
+      items: ['engineering/testing', 'engineering/releasing'],
     },
   ],
 };

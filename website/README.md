@@ -1,6 +1,6 @@
 # DeVault 文档站（Docusaurus）
 
-本目录为 DeVault 的 **Docusaurus 3** 站点，与信息架构说明对照实现，正文位于 `docs/`。
+本目录为 DeVault 的 **Docusaurus 3** 站点：正文位于 **`docs/`**，顶栏六条侧栏对应 **产品 / 用户 / 运维 / 信任 / API 参考 / 工程**；每条侧栏内再以 **折叠分组**区分导读、安装、规模、观测等，便于抓重点。首页 **`docs/index.md`**；各章 **`*/index.md`** 含按任务选读路径。
 
 ## 前置条件
 

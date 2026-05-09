@@ -1,6 +1,6 @@
 # DeVault
 
-开发者向备份平台：当前实现 **控制面（HTTP API + gRPC + Postgres/Redis）** 与 **边缘 Agent（仅 gRPC + 对象存储数据面）** 分离，采用 **Pull 模型**、可经网关扩展的 **gRPC**，以及统一的 **S3 兼容存储** 数据面。能力包括 **文件全量备份/恢复**、**策略与 Cron 定时**、**任务取消/重试**、**同策略并发锁**、**Prometheus 指标**、**简易 Web UI**。
+面向企业交付的备份与恢复平台（SaaS 产品路线）：**控制面（HTTP API + gRPC + Postgres/Redis）** 与 **边缘 Agent（仅 gRPC + 对象存储数据面）** 分离，采用 **Pull 模型**、可经网关扩展的 **gRPC**，以及统一的 **S3 兼容存储** 数据面。能力包括 **文件全量备份/恢复**、**策略与 Cron 定时**、**任务取消/重试**、**同策略并发锁**、**Prometheus 指标**、**简易 Web UI**。
 
 ## 文档
 
@@ -29,14 +29,14 @@ Docker Compose 中 **仅 api** 在启动时执行 `alembic upgrade head`（**sch
 | `http://127.0.0.1:8000/metrics` | Prometheus 指标 |
 | `http://127.0.0.1:8000/ui/jobs` | 简易 UI：策略/备份调度 CRUD、**恢复演练调度**（`/ui/restore-drill-schedules`）、「立即备份」、Artifacts **手动恢复**、任务取消/重试；一次性恢复演练用 **`POST /api/v1/jobs/restore-drill`**（Basic 密码为 `DEVAULT_API_TOKEN`） |
 | `/api/v1/policies`、`/api/v1/schedules`、`/api/v1/restore-drill-schedules` | 策略、备份 Cron、**恢复演练 Cron** CRUD |
-| `/api/v1/tenants`、请求头 `X-DeVault-Tenant-Id` | 多租户：其余 `/api/v1/*` 资源按租户隔离（省略头时用 `DEVAULT_DEFAULT_TENANT_SLUG`，默认 `default`）；见文档站 [租户](website/docs/reference/tenants.md) |
-| `devault-admin create-api-key` | 控制面元数据库 **API 密钥**（RBAC 角色 + 可选租户范围）；见 [访问控制](website/docs/reference/access-control.md) |
+| `/api/v1/tenants`、请求头 `X-DeVault-Tenant-Id` | 多租户：其余 `/api/v1/*` 资源按租户隔离（省略头时用 `DEVAULT_DEFAULT_TENANT_SLUG`，默认 `default`）；见文档站 [租户与访问控制](website/docs/admin/tenants-and-rbac.md) |
+| `devault-admin create-api-key` | 控制面元数据库 **API 密钥**（RBAC 角色 + 可选租户范围）；见同上 [租户与访问控制](website/docs/admin/tenants-and-rbac.md) |
 
 定时任务由 **`scheduler` 服务**（`devault-scheduler`）只负责**创建待处理任务**（备份 Cron 与 **恢复演练 Cron**）；**`agent` 服务**通过 gRPC **拉取租约**并执行备份/恢复/**演练**，经预签名 URL 与 **MinIO（S3）** 直传。控制面 `DEVAULT_STORAGE_BACKEND` 需为 **`s3`** 才能生成预签名。
 
 ### gRPC TLS、Envoy 网关与审计（阶段 A）
 
-- 说明与操作步骤见文档站：[TLS 与网关](website/docs/security/tls-and-gateway.md)（构建后路径为 `/docs/security/tls-and-gateway`）。  
+- 说明与操作步骤见文档站：[TLS 与网关](website/docs/trust/tls-and-gateway.md)（构建后路径为 `/docs/trust/tls-and-gateway`）。  
 - **Envoy TLS 终结示例**（Agent → `50052` TLS → 内网 `api:50051` 明文）：先执行 `bash scripts/gen_grpc_dev_tls.sh`，再  
   `docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.grpc-tls.yml up --build`。
 
@@ -58,10 +58,10 @@ cd deploy
 docker compose up --build -d
 ```
 
-可选：在同一目录叠加 **Prometheus + Alertmanager**（抓取 `api:8000/metrics`，告警路由到演示 Webhook；见文档站 [可观测性](website/docs/install/observability.md)）时执行  
+可选：在同一目录叠加 **Prometheus + Alertmanager**（抓取 `api:8000/metrics`，告警路由到演示 Webhook；见文档站 [可观测性](website/docs/admin/observability.md)）时执行  
 `docker compose -f docker-compose.yml -f docker-compose.prometheus.yml up -d`（或自仓库根目录为两个 `-f deploy/...` 路径）。
 
-**Kubernetes**：见文档站 [Kubernetes（Helm）](website/docs/install/kubernetes-helm.md)（Chart 位于 `deploy/helm/devault`）。
+**Kubernetes**：见文档站 [Kubernetes（Helm）](website/docs/admin/kubernetes-helm.md)（Chart 位于 `deploy/helm/devault`）。
 
 ### Docker 构建（依赖只看 pyproject.toml）
 

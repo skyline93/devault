@@ -9,7 +9,7 @@ const GITEE_REPO_URL = `https://gitee.com/${GITEE_ORG}/${GITEE_REPO}`;
 
 const config: Config = {
   title: 'DeVault',
-  tagline: '开发者向备份与恢复平台',
+  tagline: '企业级备份与恢复 SaaS 平台',
   favicon: 'img/favicon.ico',
 
   markdown: {
@@ -72,9 +72,39 @@ const config: Config = {
       items: [
         {
           type: 'docSidebar',
-          sidebarId: 'docsSidebar',
+          sidebarId: 'productSidebar',
           position: 'left',
-          label: '文档',
+          label: '产品',
+        },
+        {
+          type: 'docSidebar',
+          sidebarId: 'userSidebar',
+          position: 'left',
+          label: '用户',
+        },
+        {
+          type: 'docSidebar',
+          sidebarId: 'adminSidebar',
+          position: 'left',
+          label: '运维',
+        },
+        {
+          type: 'docSidebar',
+          sidebarId: 'trustSidebar',
+          position: 'left',
+          label: '信任',
+        },
+        {
+          type: 'docSidebar',
+          sidebarId: 'referenceSidebar',
+          position: 'left',
+          label: '参考',
+        },
+        {
+          type: 'docSidebar',
+          sidebarId: 'engineeringSidebar',
+          position: 'left',
+          label: '工程',
         },
         {
           href: GITEE_REPO_URL,
@@ -90,12 +120,16 @@ const config: Config = {
           title: '文档',
           items: [
             {
-              label: '从这里开始',
-              to: '/docs/intro/',
+              label: '文档首页',
+              to: '/docs/',
             },
             {
               label: '快速开始',
-              to: '/docs/intro/quickstart',
+              to: '/docs/user/quickstart',
+            },
+            {
+              label: '产品概览',
+              to: '/docs/product/overview',
             },
           ],
         },
