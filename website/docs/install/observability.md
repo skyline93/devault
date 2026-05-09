@@ -1,5 +1,5 @@
 ---
-sidebar_position: 5
+sidebar_position: 6
 title: 可观测性
 description: Prometheus、健康检查与日志
 ---

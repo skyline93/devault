@@ -178,7 +178,7 @@
 
 | 状态 | 优先级 | 待办项 | 说明与验收要点 |
 |------|--------|--------|----------------|
-| [ ] | P1 | **元数据库备份与恢复 Runbook** | PG 逻辑备份、PITR（控制面自身）；RTO/RPO 目标文档化。 |
+| [x] | P1 | **元数据库备份与恢复 Runbook** | PG 逻辑备份、PITR（控制面自身）；RTO/RPO 目标文档化。见 **`website/docs/install/control-plane-database-dr.md`**；脚本 **`deploy/scripts/control-plane-pg-backup.sh`** / **`control-plane-pg-restore.sh`**。 |
 | [ ] | P1 | **gRPC 服务多实例部署指南** | 无状态租约 + Redis 锁已部分具备；补充会话亲和性说明、水平扩缩步骤。 |
 | [ ] | P1 | **Agent 批量管理** | 版本查询、强制升级策略、与控制面协议版本协商（`.proto` 版本号）。 |
 | [ ] | P2 | **Helm Chart / K8s 清单** | `development-design.md` §19 已列 `helm/` 为后期；Operator 可作为更后阶段。 |
@@ -289,6 +289,7 @@
 | 2026-05-09 | **M1·五 P1**：**Artifact AES-GCM 静态加密**（策略 **`encrypt_artifacts`**、Agent 密钥、分块 **`devault-chunked-v1`**、manifest / **`artifacts.encrypted`**、恢复 manifest 预签名）；文档 **`website/docs/security/artifact-encryption.md`**；**`CHANGELOG`**。 |
 | 2026-05-09 | **可增强项显式化**：**§一** 增加 Envoy **`local_rate_limit`**、Register 令牌演进；**§二** 增加 Multipart×加密联调；**§五** 增加 KMS/信封、强制加密策略；**「如何使用」** 增加 **可增强** 列说明；文末新增 **§十三、可增强项汇总**（与 §三.2 三项互链）。 |
 | 2026-05-09 | **M1·五 P1**：**保留策略与生命周期**（**`retention_days`**、**`retain_until`**、scheduler 清理、存储 **`delete_object`**、Compose scheduler **S3** 环境、`ArtifactOut` / UI）；文档 **`guides/retention-lifecycle.md`**、**`CHANGELOG`**。 |
+| 2026-05-09 | **M1·六 P1**：**控制面元数据库备份与灾难恢复 Runbook**（逻辑备份/PITR 概要/RTO·RPO 表、`deploy/scripts/control-plane-pg-*.sh`）；文档 **`website/docs/install/control-plane-database-dr.md`**；侧栏与 **`backup-and-restore.md`** 互链。 |
 
 ---
 

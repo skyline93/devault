@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **控制面元数据库 DR Runbook**：PostgreSQL **`pg_dump` / `pg_restore`** 流程、可选 **PITR** 说明、**RTO/RPO** 规划表；脚本 **`deploy/scripts/control-plane-pg-backup.sh`**、**`deploy/scripts/control-plane-pg-restore.sh`**。文档 **`website/docs/install/control-plane-database-dr.md`**（与 artifact 数据面说明 **`website/docs/guides/backup-and-restore.md`** 区分）。
 - **保留与生命周期**：文件策略 **`retention_days`**（可选）；备份完成时写入 **`artifacts.retain_until`**；**`devault-scheduler`** 按 **`DEVAULT_RETENTION_CLEANUP_*`** 定时删除过期 **bundle/manifest** 与元数据；Prometheus **`devault_retention_artifacts_purged_total`**、**`devault_retention_purge_errors_total`**；存储抽象 **`delete_object`**。文档 **`website/docs/guides/retention-lifecycle.md`**；Compose **scheduler** 注入与 **api** 一致的 MinIO 变量。
 - **Artifact 静态加密（AES-256-GCM）**：策略 **`encrypt_artifacts`**；Agent **`DEVAULT_ARTIFACT_ENCRYPTION_KEY`**（Base64-32 字节）；分块格式 **`devault-chunked-v1`**；manifest 记录 **`encryption`** 与 **`plaintext_checksum_sha256`**；**`CompleteJob`** 读 manifest 写入 **`artifacts.encrypted`**；恢复侧 **`RequestStorageGrant` READ** 增加 manifest 预签名 GET。文档 **`website/docs/security/artifact-encryption.md`**。
 - **访问控制（M1·四）**：**`control_plane_api_keys`** 表与 **`devault-admin create-api-key`**；**`admin` / `operator` / `auditor`** 与租户允许列表；REST/UI 写操作门禁、**`POST /tenants`** 仅 admin；可选 **OIDC JWT**（`DEVAULT_OIDC_*`）；Agent **gRPC 拒绝 auditor**；指标 **`devault_http_requests_total`**、**`devault_billing_committed_backup_bytes_total`**。文档 **`website/docs/reference/access-control.md`**。

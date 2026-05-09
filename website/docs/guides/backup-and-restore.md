@@ -8,6 +8,8 @@ description: 设计要点、跨角色与 gRPC 细节时序、API 操作与 CLI
 
 本章说明 **备份/恢复在控制面与数据面如何协作**（含多层时序图），并给出 **HTTP API** 与可选 **CLI** 的操作步骤。体系结构总览见 [架构概览](../intro/architecture-overview.md)。
 
+若你要备份的是 **控制面自身的 PostgreSQL 元数据库**（租户、任务、artifact 记录等），请参阅 [控制面元数据库备份与灾难恢复](../install/control-plane-database-dr.md)，勿与下文「Agent → S3 artifact」混淆。
+
 ## 设计要点（控制面 vs 数据面）
 
 - **控制面**：经 **HTTP** 创建/查询任务与 artifact；经 **`AgentControl` gRPC**（`proto/agent.proto`）发放租约、存储授权、接收进度与完成回调；在 `s3` 后端下 **签发预签名** 并记录对象 key、artifact 元数据。

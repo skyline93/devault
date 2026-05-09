@@ -29,7 +29,7 @@ docker compose -f docker-compose.yml -f docker-compose.prometheus.yml up -d
 
 | 服务 | 说明 |
 |------|------|
-| **postgres** | 数据库；健康检查通过后再启动依赖方 |
+| **postgres** | 控制面元数据库；健康检查通过后再启动依赖方；备份与 PITR 规划见 [控制面元数据库备份与灾难恢复](./control-plane-database-dr.md) |
 | **redis** | Redis |
 | **minio** | S3 兼容对象存储 |
 | **minio-init** | **一次性**任务：使用 `mc mb` 创建桶；应用运行时**不**调用 `CreateBucket`，便于 IAM 最小化 |

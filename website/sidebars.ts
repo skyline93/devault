@@ -21,6 +21,7 @@ const sidebars: SidebarsConfig = {
         'install/requirements',
         'install/docker-compose',
         'install/database-migrations',
+        'install/control-plane-database-dr',
         'install/configuration',
         'install/observability',
       ],
