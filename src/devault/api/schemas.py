@@ -121,6 +121,7 @@ class JobOut(BaseModel):
 
     id: uuid.UUID
     tenant_id: uuid.UUID
+    created_at: datetime
     kind: str
     plugin: str
     status: str

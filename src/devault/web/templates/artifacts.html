@@ -4,13 +4,14 @@
 <h1>Artifacts</h1>
 {% if flash %}<p class="flash ok">{{ flash }}</p>{% endif %}
 {% if error %}<p class="flash err">{{ error }}</p>{% endif %}
-<p class="muted">Restores extract into an <strong>absolute</strong> directory on the Agent (for example <code>/restore/out</code>). The path must match the Agent&rsquo;s allowed path prefixes. Automated restore drills are under <strong>Restore drills</strong> in the nav.</p>
+<p class="muted">Latest 100 artifacts, newest backup first by <strong>Created</strong>. Restores extract into an <strong>absolute</strong> directory on the Agent (for example <code>/restore/out</code>). The path must match the Agent&rsquo;s allowed path prefixes. Automated restore drills are under <strong>Restore drills</strong> in the nav.</p>
 
 <table>
   <thead>
     <tr>
       <th>ID</th>
       <th>Job</th>
+      <th>Created (UTC)</th>
       <th>Size</th>
       <th>SHA256</th>
       <th>Retain until (UTC)</th>
@@ -22,6 +23,7 @@
     <tr>
       <td><code>{{ a.id }}</code></td>
       <td><code>{{ a.job_id }}</code></td>
+      <td>{{ a.created_at }}</td>
       <td>{{ a.size_bytes }}</td>
       <td><code>{{ a.checksum_sha256[:20] }}…</code></td>
       <td>{% if a.retain_until %}{{ a.retain_until }}{% else %}<span class="muted">—</span>{% endif %}</td>
@@ -30,7 +32,7 @@
       </td>
     </tr>
     {% else %}
-    <tr><td colspan="6" class="muted">No artifacts yet. <a href="/ui/policies">Create a policy</a> and run a backup.</td></tr>
+    <tr><td colspan="7" class="muted">No artifacts yet. <a href="/ui/policies">Create a policy</a> and run a backup.</td></tr>
     {% endfor %}
   </tbody>
 </table>

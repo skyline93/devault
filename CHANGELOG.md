@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **HTTP `GET /version`**：增加 `api`、`grpc_proto_package`、可选 **`git_sha`**（`DEVAULT_SERVER_GIT_SHA`）。**`devault` / `devault-agent` / `devault-scheduler`** 支持 **`--version` / `-V`**。
 - **兼容性与发版**：**`docs/compatibility.json`**（矩阵、`current`、能力表）、**`docs/RELEASE.md`** 模板、**`scripts/verify_compatibility_matrix.py`**（与 **`pyproject.toml`** / **`ALL_KNOWN_SERVER_CAPABILITIES`** 对齐）。CI **`matrix.suite`：`full` | `compatibility`**。gRPC **`server_capabilities`**；文件备份 **`manifest.json`** 增加 **`devault_release`**、**`grpc_proto_package`**；**`devault.release_meta`** 集中 gRPC 包名字符串。
 - **`deploy/docker-compose.prometheus.yml`**：可选叠加文件，用于本地 Prometheus 抓取 `api` 的 `/metrics`（默认 `docker compose up` 不再启动 Prometheus）。
+- **`jobs.created_at`**（迁移 **`0009`**）：任务入队/创建时间；REST **`JobOut`** 与 **`/ui/jobs`** 列；**`GET /api/v1/jobs`** 与 UI 按 **`created_at` 倒序**；**`LeaseJobs`** 待领取候选按 **`created_at` 正序**（FIFO）。
 
 ### Changed
 

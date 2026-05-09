@@ -97,7 +97,7 @@ def list_jobs(
     stmt = (
         select(Job)
         .where(Job.tenant_id == tenant.id)
-        .order_by(Job.id.desc())
+        .order_by(Job.created_at.desc())
         .limit(limit)
         .offset(offset)
     )

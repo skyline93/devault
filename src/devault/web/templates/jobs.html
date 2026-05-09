@@ -4,11 +4,12 @@
 <h1>Jobs</h1>
 {% if flash %}<p class="flash ok">{{ flash }}</p>{% endif %}
 {% if error %}<p class="flash err">{{ error }}</p>{% endif %}
-<p class="muted">Latest 100 jobs. Running jobs can be cancelled; only <strong>failed backups</strong> can be retried.</p>
+<p class="muted">Latest 100 jobs, newest first by <strong>Created</strong>. Running jobs can be cancelled; only <strong>failed backups</strong> can be retried.</p>
 <table>
   <thead>
     <tr>
       <th>ID</th>
+      <th>Created (UTC)</th>
       <th>Kind</th>
       <th>Status</th>
       <th>Trigger</th>
@@ -21,6 +22,7 @@
     {% for j in jobs %}
     <tr>
       <td><code>{{ j.id }}</code></td>
+      <td>{{ j.created_at }}</td>
       <td>{{ j.kind }}</td>
       <td>{{ j.status }}</td>
       <td>{{ j.trigger }}</td>

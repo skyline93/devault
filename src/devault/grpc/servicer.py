@@ -128,7 +128,7 @@ def _pending_candidate_ids(db: Session) -> list[uuid.UUID]:
                 ),
             ),
         )
-        .order_by(Job.id.asc())
+        .order_by(Job.created_at.asc())
         .limit(50)
     )
     return list(db.scalars(stmt).all())
