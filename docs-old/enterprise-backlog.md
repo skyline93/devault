@@ -120,7 +120,7 @@
 | 四-05 | §四 | [x] | P2 | — | **计费与用量埋点** |
 | 五-01 | §五 | [x] | P1 | — | **Artifact 加密（可选到默认）** |
 | 五-02 | §五 | [x] | P1 | — | **静态加密与 `encrypted` 字段真实性** |
-| 五-03 | §五 | [x] | P2 | 4 | **KMS / 信封加密 / 按租户 DEK（可增强）** |
+| 五-03 | §五 | [x] | P2 | 4 | **KMS / 信封加密 / 按租户 CMK（可增强）** |
 | 五-04 | §五 | [x] | P3 | 4 | **默认或租户级强制加密策略（可增强）** |
 | 五-05 | §五 | [x] | P1 | — | **保留策略与生命周期** |
 | 五-06 | §五 | [x] | P2 | 4 | **WORM / 对象锁定（Object Lock）** |
@@ -265,14 +265,14 @@
 
 | 状态 | 优先级 | 待办项 | 说明与验收要点 |
 |------|--------|--------|----------------|
-| [x] | P1 | **Artifact 加密（可选到默认）** | 策略 **`encrypt_artifacts`** + Agent **`DEVAULT_ARTIFACT_ENCRYPTION_KEY`**；AES-256-GCM 分块格式 **`devault-chunked-v1`**；manifest **`encryption`**；KMS/信封后续可增强。见 **`website/docs/security/artifact-encryption.md`**。 |
-| [x] | P1 | **静态加密与 `encrypted` 字段真实性** | **`CompleteJob`** 读取 manifest，**`artifacts.encrypted`** 与 **`encryption`** 块一致；恢复 READ 签发 manifest 预签名供解密。 |
-| [ ] | P2 | **KMS / 信封加密 / 按租户 DEK（可增强）** | 当前为 Agent 环境变量 **CMK/DEK** 直配；后续可接 **KMS 解封**、**按租户数据密钥**、manifest 记录 **密钥 ARN/版本**（非密钥材料）；选型文档与迁移路径。 |
-| [ ] | P3 | **默认或租户级强制加密策略（可增强）** | 控制面或租户策略：**禁止**未加密 artifact 入库；与 **`encrypt_artifacts`**、合规问卷对齐。 |
+| [x] | P1 | **Artifact 加密（可选到默认）** | 策略 **`encrypt_artifacts`** + Agent **静态 DEK**（**`DEVAULT_ARTIFACT_ENCRYPTION_KEY`**）或 **KMS 信封**（manifest **`key_wrap=kms`**）；AES-256-GCM **`devault-chunked-v1`**；manifest **`encryption`**。见 **`website/docs/security/artifact-encryption.md`**。**可增强**：密钥轮换策略独立 Epic。 |
+| [x] | P1 | **静态加密与 `encrypted` 字段真实性** | **`CompleteJob`** 读取 manifest，**`artifacts.encrypted`** 仅在为 **chunked 密文格式**（`algorithm` / `format`）时为 **true**；恢复 READ 签发 manifest 预签名供 Agent 解密。 |
+| [x] | P2 | **KMS / 信封加密 / 按租户 CMK（可增强）** | **`devault.crypto.kms_envelope`**（**`GenerateDataKey`** / **`Decrypt`**）；manifest **`kms_ciphertext_blob_base64`** 等；CMK：**策略 `kms_envelope_key_id`** → **`tenants.kms_envelope_key_id`**（**`PATCH /api/v1/tenants/{id}`**）→ **`DEVAULT_KMS_ENVELOPE_KEY_ID`**；**Agent** 进程调 KMS。迁移 **`0010`**。**可增强**：DEK 目录服务、更细审计、与 HSM 集成。 |
+| [x] | P3 | **默认或租户级强制加密策略** | **`DEVAULT_REQUIRE_ENCRYPTED_ARTIFACTS`**；**`tenants.require_encrypted_artifacts`**；创建/更新策略与内联备份 **`config`** 校验 **`encrypt_artifacts`**；**`CompleteJob`** 拒绝「要求加密但 manifest 非 chunked 密文」。**可增强**：审计专用例外流。 |
 | [x] | P1 | **保留策略与生命周期** | 策略 **`retention_days`** → **`artifacts.retain_until`**（**`CompleteJob`**）；**`devault-scheduler`** 定时删除对象 + DB 行；指标 **`devault_retention_*`**；文档 **`website/docs/guides/retention-lifecycle.md`**。存储类过渡仍在桶侧配置。 |
-| [ ] | P2 | **WORM / 对象锁定（Object Lock）** | 法规保留期；需存储层与策略引擎联合设计（`development-design.md` 曾列为非目标，企业版 backlog）。 |
-| [ ] | P2 | **Legal Hold** | 暂停保留期删除；审计记录。 |
-| [ ] | P2 | **BYOB（客户自带 Bucket）** | [目标架构 · 统一存储与后续扩展](../website/docs/intro/target-architecture.md#unified-storage-extensions)；跨账号角色与凭证签发仍保持数据面不经 gRPC 传文件。 |
+| [x] | P2 | **WORM / 对象锁定（Object Lock）** | 策略 **`object_lock_mode`**（**`GOVERNANCE`** \| **`COMPLIANCE`**）与 **`object_lock_retain_days`**；**`presign_put_object`** / **`start_multipart_upload`** 携带保留截止时间（**`grpc/object_lock_params.py`**）。桶须启用 Object Lock。**可增强**：与存储侧策略引擎统一建模。 |
+| [x] | P2 | **Legal Hold** | **`artifacts.legal_hold`**（迁移 **`0010`**）；**`PATCH /api/v1/artifacts/{id}/legal-hold`**（admin）；**`purge_expired_artifacts`** 跳过 **`legal_hold=true`**。**可增强**：与 S3 Bucket 级 Legal Hold 自动同步、审计导出。 |
+| [x] | P2 | **BYOB（客户自带 Bucket）** | **`tenants.s3_bucket`**、**`s3_assume_role_arn`** / **`s3_assume_role_external_id`**；**`build_s3_client_for_tenant`**、**`effective_s3_bucket`**、**`get_storage_for_tenant`**；预签名、Multipart 收尾、保留清理按租户解析桶与 STS（租户角色优先）。文档 **`website/docs/reference/tenants.md`**、**`storage/sts-assume-role.md`**、**`storage/object-store-model.md`**；与 [目标架构 · 统一存储](../website/docs/intro/target-architecture.md#unified-storage-extensions) 一致。 |
 
 ---
 
@@ -313,7 +313,7 @@
 | 状态 | 优先级 | 待办项 | 说明与验收要点 |
 |------|--------|--------|----------------|
 | [x] | P1 | **企业部署参考架构** | 文档站 **`website/docs/install/enterprise-reference-architecture.md`**（Mermaid：DMZ、网关、VPC、对象存储、出站）；与 **`intro/target-architecture.md`**、**`intro/architecture-overview.md`** 互链。 |
-| [x] | P1 | **安全白皮书摘要** | **`website/docs/security/security-whitepaper.md`**：信任边界、密钥流、审计、gRPC 指标告警引用、明确未实现项（KMS/BYOB/WORM 等）。 |
+| [x] | P1 | **安全白皮书摘要** | **`website/docs/security/security-whitepaper.md`**：信任边界、密钥流、审计、gRPC 指标告警引用；**§五** KMS/信封、强制加密、Object Lock、Legal Hold、BYOB 已实现（见 **`artifact-encryption.md`** 等），白皮书中若有「未实现」列表宜与 backlog **§五** / **§九** / **§七** 同步校对。 |
 | [x] | P2 | **`docs/README.md` 与实现差距表** | 仓库 **`docs/README.md`**：对照 **`docs-old/README.md`** 愿景条目的实现状态表与站内链接。 |
 
 ---
@@ -356,7 +356,7 @@
 | E-DOC-001 | 企业文档 | M1 | H |
 | E-DB-001 | 数据库备份 MVP | M2 | C |
 
-**Epic → 排期波次**（与 **[排期波次与全量待办索引](#排期波次与全量待办索引)** 一致）：**E-OPS-001** 中 **Helm / K8s** 与 **告警路由（Prometheus + Alertmanager）** 已交付；**`E-DATA-001` / `E-DATA-002`** 之 **§二 Multipart×加密** 已交付；**E-VER-001** 之 **§三** 可增强（**三-11～三-13**）已交付 → **波次 2** 版本与韧性主线已收敛；**E-ARCH-001** 之 **§一** 可增强（**一-08 Envoy `local_rate_limit`**、**一-09 Agent Redis 会话 / 吊销**）已交付 → **波次 3** 网关与身份演进主线已收敛；**E-GOV-001** 之 **KMS、强制加密、WORM、Legal Hold、BYOB** → **波次 4**；**E-DB-001** → **波次 5**；**E-TRUST-001** 之 **§七 增量与时间线** → **波次 6**。其余 Epic 主线条目在当前仓库已为 `[x]`。
+**Epic → 排期波次**（与 **[排期波次与全量待办索引](#排期波次与全量待办索引)** 一致）：**E-OPS-001** 中 **Helm / K8s** 与 **告警路由（Prometheus + Alertmanager）** 已交付；**`E-DATA-001` / `E-DATA-002`** 之 **§二 Multipart×加密** 已交付；**E-VER-001** 之 **§三** 可增强（**三-11～三-13**）已交付 → **波次 2** 版本与韧性主线已收敛；**E-ARCH-001** 之 **§一** 可增强（**一-08 Envoy `local_rate_limit`**、**一-09 Agent Redis 会话 / 吊销**）已交付 → **波次 3** 网关与身份演进主线已收敛；**E-GOV-001** 之 **KMS、强制加密、WORM、Legal Hold、BYOB**（迁移 **`0010`**）→ **波次 4** **已交付**；**E-DB-001** → **波次 5**；**E-TRUST-001** 之 **§七 增量与时间线** → **波次 6**。其余 Epic 主线条目在当前仓库已为 `[x]`。
 
 ---
 
@@ -412,14 +412,15 @@
 | 2026-05-09 | **M1·三 P2**：**CI 多版本镜像 E2E 矩阵**（**`e2e-version-matrix.yml`**、**`ci_e2e`** / **`matrix_definitions`**、Compose override、gRPC 冒烟脚本、**`verify_compatibility_matrix`** 扩展、**`compatibility.md`**；全量索引 **三-11**、**§三.2**、**§十三**、**波次 2** 表更新）。 |
 | 2026-05-09 | **M1·三 P3**：**`bump_release` ↔ `compatibility.json`**（**`sync_compatibility_current_release`**、文档与单测）；**Agent `server_capabilities` 降级**（**`gate_multipart_*`**、**`AgentCapabilityState`**、全量索引 **三-12 / 三-13**、**§十三**、**波次 2** 收敛）。 |
 | 2026-05-09 | **M1·一 P3**：**Envoy `local_rate_limit`**（**`deploy/envoy/envoy-grpc-tls.yaml`**）；**Register → Redis 每 Agent 会话**（**`agent_grpc_session`**、**`revoke-grpc-sessions`**、**`_require_agent_bearer_matches`**）；全量索引 **一-08 / 一-09**、**§十三**、**波次 3** 收敛。 |
+| 2026-05-11 | **M1·五 P2/P3**：**KMS 信封**（manifest **`key_wrap=kms`**、Agent KMS API）、**强制加密**（**`DEVAULT_REQUIRE_ENCRYPTED_ARTIFACTS`** / **`require_encrypted_artifacts`**、`CompleteJob` 校验）、**Object Lock**、**Legal Hold**、**BYOB**（租户桶 + STS）；迁移 **`0010`**。**§五** 分节表、**全量索引** **五-03～五-08**、**§十三** 与本文件 **§十 Epic→波次 4** 与实现 **`[x]`** 对齐；文档站 **配置 / artifact-encryption / tenants / retention / object-store / sts-assume-role** 等同步。 |
 
 ---
 
 ## 十三、可增强项汇总
 
-**非阻塞、可后续排期。** 以下与上文 **`（可增强）`** 或 **已勾选行内「后续」表述**对应，便于**单独 Epic / 季度排期**；实现后可在**归属章节**、**[全量待办索引](#全量待办索引)** 与下表同步勾选。
+**非阻塞、可后续排期。** 以下与上文 **`（可增强）`** 或 **已勾选行内「可增强」表述**对应，便于**单独 Epic / 季度排期**；实现后可在**归属章节**、**[全量待办索引](#全量待办索引)** 与下表同步勾选。
 
-**说明**：**§六** Helm/告警、**§五** WORM/Legal Hold/BYOB、**§七** 增量时间线、**§九** 数据库 MVP 等未勾选项**未列入**下表（多为非「可增强」标签之主线扩展）；其 **排期波次** 仍以 **[排期波次与全量待办索引](#排期波次与全量待办索引)** 为准。
+**说明**：**§五** 主线（KMS/强制加密/WORM/Legal Hold/BYOB）已在 **§五分节表** 与 **全量索引** **`[x]`**；本表 **`[x]`** 行对应「主线已交付 + 可增强子项仍见 §五分节该行说明」。**§七** 增量时间线、**§九** 数据库 MVP 等待办不在本汇总表逐项展开；排期仍以 **[全量索引](#排期波次与全量待办索引)** 为准。
 
 | 状态 | 优先级 | 归属 | 待办项 | 说明与验收要点 |
 |------|--------|------|--------|----------------|
@@ -429,5 +430,8 @@
 | [x] | P2 | §三.2 | **CI 多版本镜像 E2E 矩阵** | **`.github/workflows/e2e-version-matrix.yml`**、`ci_e2e`、`e2e_grpc_register_heartbeat.py`；与 **`matrices`** 互链见 **`matrix_definitions`**。 |
 | [x] | P3 | §三.2 | **bump_release ↔ compatibility.json** | **`sync_compatibility_current_release`**；见 §三.2 表与 **`releasing.md`**。 |
 | [x] | P3 | §三.2 | **Agent 按 server_capabilities 降级** | **`multipart_resume`** / **`multipart_upload`** 门控；见 **`grpc-services.md`**。 |
-| [ ] | P2 | §五 | **KMS / 信封 / 租户 DEK** | 见 **§五** 表。 |
-| [ ] | P3 | §五 | **默认或租户级强制加密** | 见 **§五** 表。 |
+| [x] | P2 | §五 | **KMS / 信封 / 租户 CMK** | 主线已交付，见 **§五** 表；**可增强**见该行正文。 |
+| [x] | P3 | §五 | **默认或租户级强制加密** | 主线已交付，见 **§五** 表；**可增强**见该行正文。 |
+| [x] | P2 | §五 | **WORM / Object Lock** | 主线已交付，见 **§五** 表。 |
+| [x] | P2 | §五 | **Legal Hold** | 主线已交付，见 **§五** 表。 |
+| [x] | P2 | §五 | **BYOB** | 主线已交付，见 **§五** 表。 |
