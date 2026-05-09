@@ -74,6 +74,7 @@ const sidebars: SidebarsConfig = {
         'development/project-structure',
         'development/testing',
         'development/releasing',
+        'development/compatibility',
       ],
     },
   ],

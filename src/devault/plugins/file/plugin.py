@@ -15,8 +15,10 @@ import httpx
 import pathspec
 from sqlalchemy.orm import Session
 
+from devault import __version__
 from devault.db.models import Artifact, Job
 from devault.grpc_gen import agent_pb2
+from devault.release_meta import GRPC_API_PACKAGE
 from devault.settings import Settings
 from devault.storage.multipart import part_count
 from devault.storage.types import Storage
@@ -161,6 +163,8 @@ def _build_backup_tarball(
         manifest = {
             "schema_version": 1,
             "created_at": datetime.now(timezone.utc).isoformat(),
+            "devault_release": __version__,
+            "grpc_proto_package": GRPC_API_PACKAGE,
             "plugin": "file",
             "paths": paths,
             "excludes": excludes,

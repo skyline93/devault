@@ -32,6 +32,34 @@ from devault.settings import Settings, get_settings
 
 logger = logging.getLogger(__name__)
 
+_FATAL_VERSION_REASONS = frozenset(
+    {
+        "AGENT_VERSION_TOO_OLD",
+        "AGENT_PROTO_PACKAGE_MISMATCH",
+        "AGENT_VERSION_REQUIRED",
+        "AGENT_VERSION_UNPARSEABLE",
+    }
+)
+
+
+def _trailing_reason_code(exc: grpc.RpcError) -> str | None:
+    try:
+        md = exc.trailing_metadata()
+    except Exception:
+        return None
+    if not md:
+        return None
+    for k, v in md:
+        if k == "devault-reason-code":
+            if isinstance(v, bytes):
+                return v.decode("ascii", errors="replace")
+            return str(v)
+    return None
+
+
+def _agent_identity_fields(settings: Settings) -> tuple[str, str, str]:
+    return __version__, agent_pb2.DESCRIPTOR.package, (settings.agent_git_commit or "").strip()
+
 
 def _build_channel(target: str, *, settings: Settings) -> grpc.Channel:
     opts: list[tuple[str, str]] = []
@@ -85,10 +113,14 @@ def _bootstrap_token_if_needed(stub: agent_pb2_grpc.AgentControlStub, agent_id: 
             "No DEVAULT_API_TOKEN and no DEVAULT_GRPC_REGISTRATION_SECRET; cannot authenticate",
         )
         raise SystemExit(2)
+    rel, pkg, gc = _agent_identity_fields(s)
     reply = stub.Register(
         agent_pb2.RegisterRequest(
             agent_id=agent_id,
             registration_secret=s.grpc_registration_secret,
+            agent_release=rel,
+            proto_package=pkg,
+            git_commit=gc,
         ),
         metadata=[],
     )
@@ -96,7 +128,15 @@ def _bootstrap_token_if_needed(stub: agent_pb2_grpc.AgentControlStub, agent_id: 
         logger.error("Register failed: %s", reply.message or "unknown")
         raise SystemExit(2)
     token["value"] = reply.bearer_token
-    logger.info("obtained API token via Register (bootstrap)")
+    if reply.server_release:
+        logger.info(
+            "obtained API token via Register (bootstrap); control plane %s",
+            reply.server_release,
+        )
+    else:
+        logger.info("obtained API token via Register (bootstrap)")
+    if reply.deprecation_message:
+        logger.warning("Register: %s", reply.deprecation_message)
 
 
 def _run_one_job(
@@ -284,6 +324,13 @@ def run_forever() -> None:
     try:
         _bootstrap_token_if_needed(stub, agent_id, token)
     except grpc.RpcError as e:
+        reason = _trailing_reason_code(e)
+        if e.code() in (
+            grpc.StatusCode.FAILED_PRECONDITION,
+            grpc.StatusCode.INVALID_ARGUMENT,
+        ) and reason in _FATAL_VERSION_REASONS:
+            logger.error("Register version policy (%s): %s", reason, e.details())
+            raise SystemExit(2) from e
         logger.exception("Register RPC failed: %s", e.details())
         raise SystemExit(2) from e
 
@@ -295,12 +342,22 @@ def run_forever() -> None:
     while True:
         try:
             md = _metadata(bearer)
+            rel, pkg, gc = _agent_identity_fields(s)
             hb = stub.Heartbeat(
-                agent_pb2.HeartbeatRequest(agent_id=agent_id),
+                agent_pb2.HeartbeatRequest(
+                    agent_id=agent_id,
+                    agent_release=rel,
+                    proto_package=pkg,
+                    git_commit=gc,
+                ),
                 metadata=md,
             )
             if not hb.ok:
                 logger.warning("heartbeat not ok")
+            if hb.deprecation_message:
+                logger.warning("control plane: %s", hb.deprecation_message)
+            if hb.server_capabilities:
+                logger.debug("server_capabilities: %s", sorted(hb.server_capabilities))
             leased = stub.LeaseJobs(
                 agent_pb2.LeaseJobsRequest(agent_id=agent_id, max_jobs=1),
                 metadata=md,
@@ -311,11 +368,21 @@ def run_forever() -> None:
             for job in leased.jobs:
                 _run_one_job(stub, agent_id, job, bearer)
         except grpc.RpcError as e:
+            reason = _trailing_reason_code(e)
+            if e.code() in (
+                grpc.StatusCode.FAILED_PRECONDITION,
+                grpc.StatusCode.INVALID_ARGUMENT,
+            ) and reason in _FATAL_VERSION_REASONS:
+                logger.error("gRPC version policy (%s): %s", reason, e.details())
+                raise SystemExit(2) from e
             logger.exception("rpc error: %s", e.details())
             time.sleep(5.0)
 
 
 def main() -> None:
+    if len(sys.argv) > 1 and sys.argv[1] in ("--version", "-V"):
+        print(__version__)
+        return
     run_forever()
 
 

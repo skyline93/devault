@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [full, compatibility]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install
+        run: pip install -e ".[dev]"
+
+      - name: Verify release docs (version ↔ CHANGELOG)
+        run: python scripts/verify_release_docs.py
+
+      - name: Verify compatibility matrix JSON
+        run: python scripts/verify_compatibility_matrix.py
+
+      - name: Pytest (full)
+        if: matrix.suite == 'full'
+        run: pytest -q
+
+      - name: Pytest (compatibility slice)
+        if: matrix.suite == 'compatibility'
+        run: >
+          pytest -q
+          tests/test_proto_contracts.py
+          tests/test_agent_version_gate.py
+          tests/test_verify_compatibility_matrix.py

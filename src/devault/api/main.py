@@ -9,6 +9,8 @@ from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from devault import __version__
 from devault.api.routes import artifacts, jobs, policies, schedules, ui
 from devault.grpc.server import start_grpc_server, stop_grpc_server
+from devault.release_meta import GRPC_API_PACKAGE
+from devault.settings import get_settings
 
 _OPENAPI_DESCRIPTION = """
 REST API for the DeVault control plane: backup/restore **job** enqueue, **policy** and **schedule** management,
@@ -74,5 +76,14 @@ def healthz() -> dict[str, str]:
 
 @app.get("/version")
 def version() -> dict[str, str]:
-    """Control plane release version (HTTP); pair with Agent build and gRPC health checks."""
-    return {"service": "devault-api", "version": __version__}
+    """Control plane release (HTTP); pair with Agent ``Heartbeat`` / ``Register`` version fields."""
+    s = get_settings()
+    body: dict[str, str] = {
+        "service": "devault-api",
+        "version": __version__,
+        "api": "v1",
+        "grpc_proto_package": GRPC_API_PACKAGE,
+    }
+    if s.server_git_sha:
+        body["git_sha"] = s.server_git_sha
+    return body

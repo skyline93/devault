@@ -88,6 +88,11 @@ def sync_scheduler(scheduler: BlockingScheduler) -> None:
 
 
 def main() -> None:
+    if len(sys.argv) > 1 and sys.argv[1] in ("--version", "-V"):
+        from devault import __version__
+
+        print(__version__)
+        return
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s %(message)s",

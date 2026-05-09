@@ -4,7 +4,7 @@
 
 ## 文档
 
-完整说明见 **Docusaurus 文档站**（源码在 `website/`，与 `docs-old/` 归档设计稿分离）：
+完整说明见 **Docusaurus 文档站**（源码在 `website/`，与 `docs-old/` 归档设计稿分离）。**控制面 ↔ Agent 兼容矩阵**（机器可读）见仓库根 **`docs/compatibility.json`**，发版清单见 **`docs/RELEASE.md`**。
 
 - **本地预览**：`cd website && npm ci && npm start`，浏览器打开 <http://localhost:3000>  
 - **在线站点**：部署后将生产 URL 写入 `website/docusaurus.config.ts` 的 `url` / `baseUrl` 并发布静态资源（见 `website/README.md`）
@@ -25,7 +25,7 @@ Docker Compose 中 **仅 api** 在启动时执行 `alembic upgrade head`（**sch
 |------|------|
 | `http://127.0.0.1:8000/docs` | Swagger |
 | `http://127.0.0.1:50051` | **Agent gRPC**（与 HTTP 同进程，由 `DEVAULT_GRPC_LISTEN` 开启；生产可经网关反代） |
-| `http://127.0.0.1:8000/version` | 控制面版本（JSON） |
+| `http://127.0.0.1:8000/version` | 控制面版本（JSON：`version`、`api`、`grpc_proto_package`、可选 `git_sha`） |
 | `http://127.0.0.1:8000/metrics` | Prometheus 指标 |
 | `http://127.0.0.1:8000/ui/jobs` | 简易 UI：策略/调度 CRUD、列表内「立即备份」「恢复」、任务取消/重试（Basic 密码为 `DEVAULT_API_TOKEN`） |
 | `/api/v1/policies`、`/api/v1/schedules` | 策略与 Cron 定时 CRUD |

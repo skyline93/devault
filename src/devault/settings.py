@@ -84,6 +84,26 @@ class Settings(BaseSettings):
         default=None,
         description="If set, Register RPC accepts this secret and returns DEVAULT_API_TOKEN",
     )
+    grpc_min_supported_agent_version: str = Field(
+        default="0.1.0",
+        description="Minimum Agent SemVer on Heartbeat/Register; empty agent_release skips semver unless require flag",
+    )
+    grpc_max_tested_agent_version: str = Field(
+        default="",
+        description="Maximum Agent SemVer treated as tested; empty means same as control plane release",
+    )
+    grpc_upgrade_url: str | None = Field(
+        default=None,
+        description="Optional URL for operators; returned to agents on Heartbeat/Register",
+    )
+    grpc_require_agent_version: bool = Field(
+        default=False,
+        description="If true, reject Heartbeat/Register when agent_release is empty",
+    )
+    server_git_sha: str | None = Field(
+        default=None,
+        description="Optional vcs sha; exposed on GET /version when set",
+    )
 
     # --- gRPC client (Agent): TLS toward gateway or control plane ---
     grpc_tls_ca_path: str | None = Field(
@@ -120,6 +140,10 @@ class Settings(BaseSettings):
     agent_multipart_state_dir: str | None = Field(
         default=None,
         description="Agent only: base directory for multipart resume checkpoints and WIP bundle",
+    )
+    agent_git_commit: str | None = Field(
+        default=None,
+        description="Agent only: optional short git SHA sent on Heartbeat/Register",
     )
 
     @model_validator(mode="after")

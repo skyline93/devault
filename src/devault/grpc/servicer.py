@@ -11,10 +11,16 @@ from botocore.exceptions import ClientError
 from sqlalchemy import exists, or_, select, update
 from sqlalchemy.orm import Session, aliased
 
+from devault import __version__ as server_release_version
 from devault.core.enums import JobKind, JobStatus, PluginName
 from devault.core.locking import release_policy_job_lock, try_acquire_policy_job_lock
 from devault.db.models import Artifact, Job
 from devault.db.session import SessionLocal
+from devault.grpc.agent_version import (
+    attach_control_plane_version_meta,
+    evaluate_agent_version_gate,
+)
+from devault.server_capabilities import apply_server_capabilities
 from devault.grpc.rpc_governance import grpc_governance
 from devault.grpc_gen import agent_pb2, agent_pb2_grpc
 from devault.observability.metrics import (
@@ -165,7 +171,12 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
             "Register",
             context,
             settings,
-            audit_extra={"agent_id": request.agent_id},
+            audit_extra={
+                "agent_id": request.agent_id,
+                "agent_release": request.agent_release or None,
+                "proto_package": request.proto_package or None,
+                "agent_git_commit": request.git_commit or None,
+            },
         ):
             if not settings.grpc_registration_secret:
                 context.abort(grpc.StatusCode.FAILED_PRECONDITION, "registration disabled")
@@ -176,17 +187,33 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
             except ValueError:
                 context.abort(grpc.StatusCode.INVALID_ARGUMENT, "agent_id must be a UUID")
             if not settings.api_token:
-                return agent_pb2.RegisterReply(
+                reply = agent_pb2.RegisterReply(
                     ok=False,
+                    bearer_token="",
                     message="DEVAULT_API_TOKEN not configured on control plane",
                     expires_in_seconds=0,
+                    reason_code="CONTROL_PLANE_MISSING_API_TOKEN",
                 )
-            return agent_pb2.RegisterReply(
+                attach_control_plane_version_meta(reply, settings)
+                apply_server_capabilities(reply, settings)
+                return reply
+            dep = evaluate_agent_version_gate(
+                agent_release=request.agent_release,
+                proto_package=request.proto_package,
+                settings=settings,
+                context=context,
+                server_release=server_release_version,
+            )
+            reply = agent_pb2.RegisterReply(
                 ok=True,
                 bearer_token=settings.api_token,
                 expires_in_seconds=0,
                 message="ok",
+                deprecation_message=dep,
             )
+            attach_control_plane_version_meta(reply, settings)
+            apply_server_capabilities(reply, settings)
+            return reply
 
     def Heartbeat(self, request: agent_pb2.HeartbeatRequest, context: grpc.ServicerContext):
         settings = get_settings()
@@ -194,10 +221,25 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
             "Heartbeat",
             context,
             settings,
-            audit_extra={"agent_id": request.agent_id},
+            audit_extra={
+                "agent_id": request.agent_id,
+                "agent_release": request.agent_release or None,
+                "proto_package": request.proto_package or None,
+                "agent_git_commit": request.git_commit or None,
+            },
         ):
             _auth(context, settings)
-            return agent_pb2.HeartbeatReply(ok=True)
+            dep = evaluate_agent_version_gate(
+                agent_release=request.agent_release,
+                proto_package=request.proto_package,
+                settings=settings,
+                context=context,
+                server_release=server_release_version,
+            )
+            reply = agent_pb2.HeartbeatReply(ok=True, deprecation_message=dep)
+            attach_control_plane_version_meta(reply, settings)
+            apply_server_capabilities(reply, settings)
+            return reply
 
     def LeaseJobs(
         self,

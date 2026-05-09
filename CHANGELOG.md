@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **发版 SSOT 与脚本**：`pyproject.toml` 的 `[project].version` 为唯一维护处；`devault.__version__` 在安装包上读 `importlib.metadata`，源码/pytest 仅 `PYTHONPATH=src` 时回读仓库根 `pyproject.toml`。新增 **`scripts/bump_release.py`**（将 `[Unreleased]` 折叠进新版本并 bump 版本号）、**`scripts/verify_release_docs.py`**（校验 CHANGELOG 含当前版本节）。CI **`.github/workflows/ci.yml`** 跑 pytest 与校验脚本。
+- **gRPC 双端版本协商**：扩展 **`Heartbeat` / `Register`**（`agent_release`、`proto_package`、`git_commit` 与控制面 `server_release`、`min_*`、`max_*`、`upgrade_url`、`deprecation_message`）；不兼容时在 **trailing metadata** `devault-reason-code` 与明确 gRPC 状态。控制面环境变量 **`DEVAULT_GRPC_MIN_SUPPORTED_AGENT_VERSION`** 等；依赖 **`packaging`** 做 SemVer 比较。
+- **HTTP `GET /version`**：增加 `api`、`grpc_proto_package`、可选 **`git_sha`**（`DEVAULT_SERVER_GIT_SHA`）。**`devault` / `devault-agent` / `devault-scheduler`** 支持 **`--version` / `-V`**。
+- **兼容性与发版**：**`docs/compatibility.json`**（矩阵、`current`、能力表）、**`docs/RELEASE.md`** 模板、**`scripts/verify_compatibility_matrix.py`**（与 **`pyproject.toml`** / **`ALL_KNOWN_SERVER_CAPABILITIES`** 对齐）。CI **`matrix.suite`：`full` | `compatibility`**。gRPC **`server_capabilities`**；文件备份 **`manifest.json`** 增加 **`devault_release`**、**`grpc_proto_package`**；**`devault.release_meta`** 集中 gRPC 包名字符串。
 - **`deploy/docker-compose.prometheus.yml`**：可选叠加文件，用于本地 Prometheus 抓取 `api` 的 `/metrics`（默认 `docker compose up` 不再启动 Prometheus）。
 
 ### Changed

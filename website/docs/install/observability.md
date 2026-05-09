@@ -22,7 +22,7 @@ HTTP 层提供用于编排的就绪类端点（如 Compose 中使用的 **`/heal
 
 ## 版本信息
 
-**`GET /version`** 返回 JSON 版本信息，便于与镜像标签或 Git SHA 对齐。
+**`GET /version`** 返回 JSON，至少包含 **`service`**、**`version`**（与 `pyproject.toml` / `devault.__version__` 一致）、**`api`**（当前为 `v1`）、**`grpc_proto_package`**（如 `devault.agent.v1`）。若设置 **`DEVAULT_SERVER_GIT_SHA`**，则多一个 **`git_sha`** 字段。与 Agent 在 gRPC **Heartbeat** / **Register** 上交换的 `server_release` / `agent_release` 互补，便于发布校验与自动化探测。
 
 ## 日志
 

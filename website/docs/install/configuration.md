@@ -17,6 +17,18 @@ description: 常用环境变量分组说明
 | `DEVAULT_API_TOKEN` | HTTP Bearer 与简易 UI Basic 密码 |
 | `DEVAULT_GRPC_LISTEN` | 绑定 gRPC 的 `host:port`（如 `0.0.0.0:50051`） |
 | `DEVAULT_ENV_NAME` | 环境名标签（指标等） |
+| `DEVAULT_SERVER_GIT_SHA` | （可选）写入 **`GET /version`** 的 `git_sha` 字段，便于与镜像 digest 对齐 |
+
+### gRPC 版本策略（控制面）
+
+与 **`proto/agent.proto`** 中 Heartbeat / Register 的 `agent_release` 等字段配合；默认允许未上报版本的旧 Agent（仅返回 `deprecation_message` 提示）。
+
+| 变量 | 说明 |
+|------|------|
+| `DEVAULT_GRPC_MIN_SUPPORTED_AGENT_VERSION` | 最低可接受 Agent SemVer（默认 `0.1.0`） |
+| `DEVAULT_GRPC_MAX_TESTED_AGENT_VERSION` | 最高「已测试」Agent 版本；**空**表示与控制面当前 `version` 相同 |
+| `DEVAULT_GRPC_UPGRADE_URL` | （可选）随 gRPC 回复带给 Agent 的升级说明链接 |
+| `DEVAULT_GRPC_REQUIRE_AGENT_VERSION` | 设为 `true` 时，未带 `agent_release` 的 Agent 将被拒绝 |
 
 ## 存储后端（S3）
 
@@ -39,6 +51,7 @@ description: 常用环境变量分组说明
 | `DEVAULT_ALLOWED_PATH_PREFIXES` | 逗号分隔路径前缀，如 `/data,/restore` |
 | `DEVAULT_API_TOKEN` | 与注册/鉴权相关的令牌（与实现版本一致） |
 | `DEVAULT_AGENT_MULTIPART_STATE_DIR` | （可选）Multipart 续传状态与 WIP `bundle.tar.gz` 的根目录；默认 `~/.cache/devault-agent` |
+| `DEVAULT_AGENT_GIT_COMMIT` | （可选）随 Heartbeat / Register 上报的短 git SHA |
 
 ## 与 Compose 对齐
 

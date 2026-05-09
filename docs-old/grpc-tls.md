@@ -92,4 +92,4 @@ grpc_health_probe -addr=:50051 -service=devault.agent.v1.AgentControl
 
 ## 8. HTTP 版本端点
 
-控制面提供 `GET /version`，返回 `service` 与 `version`（与 `devault.__version__` 一致），用于发布校验与自动化探测。
+控制面提供 `GET /version`，返回 `service`、`version`（与 `devault.__version__` 一致）、`api`、`grpc_proto_package`，以及可选的 `git_sha`（`DEVAULT_SERVER_GIT_SHA`）；与 gRPC **Heartbeat** / **Register** 中的 `agent_release` / `server_release` 等字段互补，用于发布校验与自动化探测。

@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import time
 
 import httpx
 import typer
+
+from devault import __version__
 
 app = typer.Typer(no_args_is_help=True, help="DeVault CLI (calls HTTP API)")
 file_app = typer.Typer(no_args_is_help=True)
@@ -136,6 +139,9 @@ def schedule_list() -> None:
 
 
 def main() -> None:
+    if len(sys.argv) > 1 and sys.argv[1] in ("--version", "-V"):
+        typer.echo(__version__)
+        return
     try:
         app()
     except httpx.HTTPStatusError as e:

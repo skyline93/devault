@@ -1,0 +1,64 @@
+{
+  "schema_version": 1,
+  "title": "DeVault control plane ↔ Agent compatibility",
+  "policy": {
+    "semver_minor": "Within the same MAJOR release line, MINOR bumps are expected to be backward compatible for the gRPC package devault.agent.v1 unless noted in CHANGELOG.",
+    "semver_major": "A new MAJOR may introduce a new protobuf package (e.g. devault.agent.v2), change RPC semantics, or require coordinated upgrades. Migration steps are documented in CHANGELOG and docs/RELEASE.md checklists.",
+    "proto_package": "The gRPC package devault.agent.v1 is independent from application SemVer; both are negotiated on Heartbeat and Register."
+  },
+  "grpc": {
+    "package": "devault.agent.v1",
+    "known_capabilities": [
+      "agent_grpc_v1",
+      "backup_file_v1",
+      "restore_file_v1",
+      "s3_presign_bundle",
+      "multipart_upload",
+      "multipart_resume"
+    ],
+    "capability_notes": {
+      "s3_presign_bundle": "Control plane uses S3-compatible presigned PUT/GET for bundle and manifest.",
+      "multipart_upload": "Large bundle uploads use S3 multipart when over DEVAULT_S3_MULTIPART_THRESHOLD_BYTES.",
+      "multipart_resume": "Multipart state survives Agent restart when control plane and Agent are 0.4.0+."
+    }
+  },
+  "manifest": {
+    "file_plugin_schema_version": 1,
+    "producer_fields": [
+      "devault_release",
+      "grpc_proto_package"
+    ],
+    "notes": "Optional for restore: older manifests without producer_fields are still valid."
+  },
+  "matrices": [
+    {
+      "id": "cp-0.4-agent-0.4-s3",
+      "control_plane": ">=0.4.0 <0.5.0",
+      "agent_release": ">=0.4.0",
+      "storage": "s3",
+      "grpc_package": "devault.agent.v1",
+      "notes": "Multipart cross-restart resume requires this pairing (or newer)."
+    },
+    {
+      "id": "cp-0.3-agent-0.3-s3",
+      "control_plane": ">=0.3.0 <0.4.0",
+      "agent_release": ">=0.3.0",
+      "storage": "s3",
+      "grpc_package": "devault.agent.v1",
+      "notes": "Multipart upload without cross-process resume checkpointing."
+    },
+    {
+      "id": "cp-0.4-agent-0.1-legacy",
+      "control_plane": ">=0.4.0",
+      "agent_release": ">=0.1.0 <0.4.0",
+      "storage": "s3",
+      "grpc_package": "devault.agent.v1",
+      "notes": "Older agents may omit agent_release on Heartbeat; control plane allows by default unless DEVAULT_GRPC_REQUIRE_AGENT_VERSION=true."
+    }
+  ],
+  "current": {
+    "control_plane_release": "0.4.0",
+    "default_min_agent": "0.1.0",
+    "default_max_tested_agent": "same as control plane release when DEVAULT_GRPC_MAX_TESTED_AGENT_VERSION is unset"
+  }
+}

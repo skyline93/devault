@@ -10,9 +10,11 @@ description: pytest 与 gRPC 相关注意点
 
 ```bash
 pytest -q
+python scripts/verify_release_docs.py
+python scripts/verify_compatibility_matrix.py
 ```
 
-`pyproject.toml` 中配置了 `testpaths` 与 `pythonpath`，确保在仓库根执行。
+`pyproject.toml` 中配置了 `testpaths` 与 `pythonpath`，确保在仓库根执行。CI 中另有 **`compatibility`** 矩阵切片，仅跑契约与版本门控相关用例（见 [兼容性与版本矩阵](./compatibility.md)）。
 
 ## gRPC / 生成代码
 

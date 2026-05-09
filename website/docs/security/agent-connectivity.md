@@ -28,4 +28,4 @@ description: gRPC 拓扑与生产部署要点
 
 ## 注册与身份
 
-具体 RPC（如 Register、租约拉取）以仓库内 **`proto/agent.proto`** 为准；令牌类配置见 [API 访问控制](./api-access.md)。
+具体 RPC（如 Register、租约拉取）以仓库内 **`proto/agent.proto`** 为准；令牌类配置见 [API 访问控制](./api-access.md)。**Heartbeat** 与 **Register** 上的发行版 / proto 包协商与运维可调策略见 [gRPC 服务参考](../reference/grpc-services.md) 与 [配置参考](../install/configuration.md)。

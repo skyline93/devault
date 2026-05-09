@@ -40,7 +40,7 @@
 - [x] Compose 一键演示部署（含 MinIO、Agent 挂载示例数据）
 - [x] **应用版本号（单仓单版本）**：以 `pyproject.toml` / `devault.__version__` 为准；Agent 启动日志会打印版本。
 - [x] **数据面（Multipart 主线）**：S3 Multipart 大 bundle、分片上传重试、预签名恢复 **流式下载 + 分块校验**；单对象 PUT 从磁盘流式上传（见 [`s3-data-plane.md`](./s3-data-plane.md)）。
-- [ ] **协议级版本协商**：Heartbeat / Register 扩展 `min_supported_agent` 等（见 **M1 · 九、版本管理**）。
+- [x] **协议级版本协商**：Heartbeat / Register 已扩展 `agent_release` / `proto_package` / 控制面 `min_supported_agent_version` 等（见 **M1 · 三、版本管理** 与 `website/docs/reference/grpc-services.md`）。
 
 ---
 
@@ -106,17 +106,20 @@
 | 状态 | 优先级 | 待办项 | 说明与验收要点 |
 |------|--------|--------|----------------|
 | [x] | P0 | **仓库根 `CHANGELOG.md`** | 采用 [Keep a Changelog](https://keepachangelog.com/) 结构（`[Unreleased]` + 按版本）；与 SemVer 发布节奏绑定；**禁止**仅依赖 Git log 作为对外变更说明。 |
-| [ ] | P0 | **单一事实来源（SSOT）与发布脚本** | 版本号只在一处定义（推荐 `pyproject.toml`，`devault/__init__.py` 从 metadata 读取或构建时生成）；`scripts/` 或 `hatch`/`tbump` 等一键 bump + 校验 `CHANGELOG` 已更新。 |
-| [ ] | P0 | **双端版本在协议中可见** | 扩展 `HeartbeatRequest` / `HeartbeatReply`（或独立 `Handshake`/`Register` RPC）：Agent 上报 `agent_release`（SemVer）、`proto_package`（如 `devault.agent.v1`）、可选 `git_commit`；控制面返回 `server_release`、`min_supported_agent_version`、`max_tested_agent_version`、可选 `upgrade_url` / `deprecation_message`。不兼容时返回明确 gRPC 状态与可机读 `reason_code`。 |
-| [ ] | P0 | **兼容性矩阵与策略文档** | `docs/` 内固定表格或机器可读 `compatibility.json`：控制面 `X.Y` 支持的 Agent 范围、protobuf 包版本；** MINOR**：向后兼容；**MAJOR**：允许破坏性变更并文档化迁移路径。 |
-| [ ] | P1 | **控制面 HTTP 版本端点** | `GET /version` 返回 JSON：`version`、`git_sha`（可选）、`api`（OpenAPI 版本若有）；供负载均衡健康检查外的发布验证。 |
-| [ ] | P1 | **CLI / Agent `--version`** | 与 `__version__` 一致；便于工单与自动化采集。 |
-| [ ] | P1 | **CI 兼容性门禁** | 集成测试矩阵：「最新控制面 + 上一 MINOR Agent」与「上一 MINOR 控制面 + 最新 Agent」（按矩阵裁剪）；或契约测试仅针对 gRPC 消息。 |
-| [ ] | P1 | **发布说明模板** | `docs/` 或 `.github`：`RELEASE.md` 模板，含：升级顺序（先控制面后 Agent 或反之）、已知不兼容、数据库迁移（Alembic）、回滚步骤。 |
-| [ ] | P2 | **运行时特性协商（可选）** | Heartbeat 或 Lease 响应中带 `server_capabilities` bitset / 重复字段，避免 Agent 盲调尚未实现的 RPC（如 Multipart 未上线时优雅降级）。 |
-| [ ] | P2 | **Artifact / manifest 中的 producer 版本** | manifest 记录 `devault_release` 与 `proto_package`，便于旧 artifact 被新 Agent 恢复时的行为说明。 |
+| [x] | P0 | **单一事实来源（SSOT）与发布脚本** | 版本号只在一处定义（**`pyproject.toml`**）；`devault.__version__` 从 **`importlib.metadata`** 读取，无安装元数据时回读仓库根 `pyproject.toml`。`scripts/bump_release.py` 折叠 `[Unreleased]` 并 bump；`scripts/verify_release_docs.py` 校验 CHANGELOG 含当前版本节；CI 见 `.github/workflows/ci.yml`。发版流程见 `website/docs/development/releasing.md`。 |
+| [x] | P0 | **双端版本在协议中可见** | **`Heartbeat` / `Register`**：`agent_release`、`proto_package`、`git_commit`；回复 `server_release`、`min_supported_agent_version`、`max_tested_agent_version`、`upgrade_url`、`deprecation_message`、`reason_code`。硬失败时 **`FAILED_PRECONDITION` / `INVALID_ARGUMENT`** + trailing metadata **`devault-reason-code`**。实现见 `src/devault/grpc/agent_version.py`；文档见 `website/docs/reference/grpc-services.md`。 |
+| [x] | P0 | **兼容性矩阵与策略文档** | **`docs/compatibility.json`**（矩阵、`current`、能力说明）；策略与 CI 说明见 **`website/docs/development/compatibility.md`**；**`docs/RELEASE.md`** 发版检查清单。 |
+| [x] | P1 | **控制面 HTTP 版本端点** | `GET /version` 返回 `service`、`version`、`api`（`v1`）、`grpc_proto_package`、可选 **`git_sha`**（`DEVAULT_SERVER_GIT_SHA`）。 |
+| [x] | P1 | **CLI / Agent `--version`** | **`devault`**、**`devault-agent`**、**`devault-scheduler`** 支持 `--version` / `-V`，与 `devault.__version__` 一致。 |
+| [x] | P1 | **CI 兼容性门禁** | **`.github/workflows/ci.yml`**：`matrix.suite` 为 **`full`**（全量 pytest）与 **`compatibility`**（契约 + 版本门控切片 + **`verify_release_docs`** / **`verify_compatibility_matrix`**）。 |
+| [x] | P1 | **发布说明模板** | **`docs/RELEASE.md`**：升级顺序、兼容性与 proto、不兼容与迁移、观测与密钥、回滚、发布后验证。 |
+| [x] | P2 | **运行时特性协商（可选）** | **`HeartbeatReply`** / **`RegisterReply`** 增加 **`server_capabilities`**；实现见 **`devault.server_capabilities`**；与 **`docs/compatibility.json`** 对齐。 |
+| [x] | P2 | **Artifact / manifest 中的 producer 版本** | 文件插件 **`manifest.json`** 增加 **`devault_release`**、**`grpc_proto_package`**（与 `release_meta` / gRPC 包一致）。 |
+| [ ] | P2 | **CI：多版本镜像端到端矩阵（可增强）** | 在现有契约切片之上，增加 **nightly 或手动 workflow**：拉取「上一 MINOR」控制面镜像 + 当前 Agent（及反向组合），跑通最小路径（Register/Heartbeat、租约、可选 MinIO 备份片段）。验收：矩阵定义与失败告警文档化；与 **`docs/compatibility.json`** 的 `matrices` 互链。 |
+| [ ] | P3 | **发版脚本与 compatibility.json 联动（可增强）** | **`scripts/bump_release.py`** 在 bump 后校验或交互式更新 **`docs/compatibility.json`** 的 **`current.control_plane_release`**；或发版文档中强制 checklist 项（与 **`verify_compatibility_matrix`** 失败信息对齐）。 |
+| [ ] | P3 | **Agent 基于 server_capabilities 的降级路径（可增强）** | 当前 Agent 仅 **DEBUG** 打印 capabilities；后续可按令牌关闭 **multipart 续传**、多段 RPC 等，避免盲调未上线能力。需与 **`compute_enabled_server_capabilities`** 语义一致并加集成测试。 |
 
-**说明**：当前控制面已实现基础 `GET /version`（`service` + `version`）；本表「HTTP 版本端点」的待办指与上表验收要点对齐的**完整字段与文档**（含可选 `git_sha` 等）。
+**说明**：上表三项 **[ ]** 为已交付能力的**后续增强**，不阻塞当前里程碑；落地后可将对应行改为 `[x]` 并更新修订记录。
 
 **依赖**：扩展 `.proto` 后执行 `scripts/gen_proto.sh` 并全量回归；与第一节的 TLS/网关文档一并说明「版本端点是否经网关暴露」。  
 **与 M2 关系**：建议在接入数据库插件、扩大 proto/行为面前完成 **P0** 项，便于灰度与混跑。
@@ -270,3 +273,7 @@
 | 2026-05-08 | 阶段 B 表拆分为「同进程重试」[x] 与显式待办：**跨重启 Multipart 续传** [ ]、**STS/AssumeRole** [ ]；新增 Epic **E-DATA-002**。 |
 | 2026-05-08 | **重组**：引入里程碑 **M1（平台）/ M2（数据库备份）**；原阶段 C 移至 M2；原 A/B/D/E/F/G/H/I 归入 M1 并重新编号章节；新增实施路线说明、Epic「里程碑」列、重组对照表；基线表述与第三节 `GET /version` 说明对齐现状。 |
 | 2026-05-08 | **M1·二 P1**：Multipart **跨重启/跨进程续传** 落地（proto、`jobs.bundle_wip_*`、ListParts 补签、Agent checkpoint、Prometheus）；发布 **0.4.0**；`E-DATA-002` 中续传子项完成，STS 仍为待办。 |
+| 2026-05-09 | **M1·三 P0**：**SSOT 与发版脚本**（`pyproject.toml`、metadata 回退、`scripts/bump_release.py` / `verify_release_docs.py`、pytest、`ci.yml`）；文档站「发版与变更记录」更新。 |
+| 2026-05-09 | **M1·三 P0/P1**：**gRPC 双端版本协商**（`proto/agent.proto`、`agent_version`、审计 extra）；**HTTP `/version`** 扩展；**`--version`** 三入口；配置与 gRPC 参考文档更新。 |
+| 2026-05-09 | **M1·三**：**`docs/compatibility.json`**、**`docs/RELEASE.md`**、**`verify_compatibility_matrix.py`**、CI **`matrix.suite`**、**`server_capabilities`**（proto + `server_capabilities.py`）、manifest **`devault_release` / `grpc_proto_package`**；**`website/docs/development/compatibility.md`**。 |
+| 2026-05-09 | §3.2 增补 **可增强** 待办：多版本镜像 E2E CI、**`bump_release`** 与 **`compatibility.json`** 联动、Agent **`server_capabilities`** 降级路径（均为 `[ ]`）。 |

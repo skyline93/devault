@@ -18,6 +18,12 @@ service AgentControl {
 message RegisterRequest {
   string agent_id = 1;
   string registration_secret = 2;
+  // Application SemVer of the Agent build (e.g. same as devault.__version__ for co-released binaries).
+  string agent_release = 3;
+  // Protobuf API package the Agent was generated from (e.g. devault.agent.v1).
+  string proto_package = 4;
+  // Optional short git SHA of the Agent build.
+  string git_commit = 5;
 }
 
 message RegisterReply {
@@ -25,14 +31,34 @@ message RegisterReply {
   string bearer_token = 2;
   int64 expires_in_seconds = 3;
   string message = 4;
+  string server_release = 5;
+  string min_supported_agent_version = 6;
+  string max_tested_agent_version = 7;
+  optional string upgrade_url = 8;
+  string deprecation_message = 9;
+  // Populated on ok=false for machine-readable clients (mirrors gRPC trailing metadata when aborted).
+  string reason_code = 10;
+  // Enabled capability tokens for this control plane (see docs/compatibility.json).
+  repeated string server_capabilities = 11;
 }
 
 message HeartbeatRequest {
   string agent_id = 1;
+  string agent_release = 2;
+  string proto_package = 3;
+  string git_commit = 4;
 }
 
 message HeartbeatReply {
   bool ok = 1;
+  string server_release = 2;
+  string min_supported_agent_version = 3;
+  string max_tested_agent_version = 4;
+  optional string upgrade_url = 5;
+  string deprecation_message = 6;
+  // Empty when ok=true; when ok=false, same semantics as trailing metadata devault-reason-code.
+  string reason_code = 7;
+  repeated string server_capabilities = 8;
 }
 
 message LeaseJobsRequest {

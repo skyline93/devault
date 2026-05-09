@@ -37,4 +37,6 @@ def test_run_file_backup_tar_gz_to_local_storage(tmp_path: Path) -> None:
     assert storage.exists(outcome.manifest_key)
     manifest = storage.get_bytes(outcome.manifest_key).decode("utf-8")
     assert '"plugin": "file"' in manifest
+    assert '"devault_release":' in manifest
+    assert '"grpc_proto_package":' in manifest
     assert "sources/0/nested/f.txt" in manifest
