@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}{{ heading }} · DeVault{% endblock %}
+{% block body %}
+<h1>{{ heading }}</h1>
+{% if flash %}<p class="flash ok">{{ flash }}</p>{% endif %}
+{% if error %}<p class="flash err">{{ error }}</p>{% endif %}
+<p><a href="/ui/tenants">← Tenants</a></p>
+
+{% if row %}
+<form method="post" action="/ui/tenants/{{ row.id }}/edit">
+  <p>
+    <label for="slug_display">Slug</label><br/>
+    <input type="text" id="slug_display" readonly style="width:100%;max-width:480px;" value="{{ row.slug }}"/>
+    <span class="muted">Slug is immutable after creation (stable external reference).</span>
+  </p>
+  <p>
+    <label for="name">Name</label><br/>
+    <input type="text" id="name" name="name" required style="width:100%;max-width:480px;" value="{{ row.name }}"/>
+  </p>
+  <p>
+    <span>Require encrypted backups</span><br/>
+    <label><input type="radio" name="require_encrypted_artifacts" value="yes"
+      {% if row.require_encrypted_artifacts %}checked{% endif %}/> Yes</label>
+    <label><input type="radio" name="require_encrypted_artifacts" value="no"
+      {% if not row.require_encrypted_artifacts %}checked{% endif %}/> No</label>
+  </p>
+  <p>
+    <label for="kms_envelope_key_id">KMS key id / ARN (optional tenant default)</label><br/>
+    <input type="text" id="kms_envelope_key_id" name="kms_envelope_key_id" style="width:100%;max-width:640px;"
+      value="{{ row.kms_envelope_key_id or '' }}" placeholder="arn:aws:kms:…"/>
+  </p>
+  <p>
+    <label for="s3_bucket">Dedicated S3 bucket (optional)</label><br/>
+    <input type="text" id="s3_bucket" name="s3_bucket" style="width:100%;max-width:480px;"
+      value="{{ row.s3_bucket or '' }}"/>
+  </p>
+  <p>
+    <label for="s3_assume_role_arn">AssumeRole ARN (optional)</label><br/>
+    <input type="text" id="s3_assume_role_arn" name="s3_assume_role_arn" style="width:100%;max-width:640px;"
+      value="{{ row.s3_assume_role_arn or '' }}"/>
+  </p>
+  <p>
+    <label for="s3_assume_role_external_id">External id (optional)</label><br/>
+    <input type="text" id="s3_assume_role_external_id" name="s3_assume_role_external_id"
+      style="width:100%;max-width:480px;" value="{{ row.s3_assume_role_external_id or '' }}"/>
+  </p>
+  <p><button type="submit">Save</button></p>
+</form>
+{% else %}
+<form method="post" action="/ui/tenants/new">
+  <p>
+    <label for="name">Name</label><br/>
+    <input type="text" id="name" name="name" required style="width:100%;max-width:480px;"/>
+  </p>
+  <p>
+    <label for="slug">Slug (lowercase; letters, digits, and hyphens)</label><br/>
+    <input type="text" id="slug" name="slug" required style="width:100%;max-width:320px;" placeholder="acme-corp"/>
+  </p>
+  <p><button type="submit">Create tenant</button></p>
+</form>
+{% endif %}
+{% endblock %}

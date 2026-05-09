@@ -14,8 +14,13 @@
       <th>Created (UTC)</th>
       <th>Size</th>
       <th>SHA256</th>
+      <th>Encrypted</th>
+      <th>Legal hold</th>
       <th>Retain until (UTC)</th>
       <th class="col-restore">Restore</th>
+      {% if auth_ctx.is_admin %}
+      <th class="row-actions">Admin</th>
+      {% endif %}
     </tr>
   </thead>
   <tbody>
@@ -26,13 +31,27 @@
       <td>{{ a.created_at }}</td>
       <td>{{ a.size_bytes }}</td>
       <td><code>{{ a.checksum_sha256[:20] }}…</code></td>
+      <td>{% if a.encrypted %}yes{% else %}no{% endif %}</td>
+      <td>{% if a.legal_hold %}<strong>on</strong>{% else %}off{% endif %}</td>
       <td>{% if a.retain_until %}{{ a.retain_until }}{% else %}<span class="muted">—</span>{% endif %}</td>
       <td class="row-actions col-restore">
         <button type="button" class="open-restore-dialog" data-artifact-id="{{ a.id }}">Restore</button>
       </td>
+      {% if auth_ctx.is_admin %}
+      <td class="row-actions">
+        <form class="inline" method="post" action="/ui/artifacts/{{ a.id }}/legal-hold">
+          <input type="hidden" name="legal_hold" value="{% if a.legal_hold %}no{% else %}yes{% endif %}"/>
+          {% if a.legal_hold %}
+          <button type="submit" onclick="return confirm('Release legal hold on this artifact?');">Release hold</button>
+          {% else %}
+          <button type="submit" onclick="return confirm('Place legal hold on this artifact?');">Set hold</button>
+          {% endif %}
+        </form>
+      </td>
+      {% endif %}
     </tr>
     {% else %}
-    <tr><td colspan="7" class="muted">No artifacts yet. <a href="/ui/policies">Create a policy</a> and run a backup.</td></tr>
+    <tr><td colspan="{% if auth_ctx.is_admin %}10{% else %}9{% endif %}" class="muted">No artifacts yet. <a href="/ui/policies">Create a policy</a> and run a backup.</td></tr>
     {% endfor %}
   </tbody>
 </table>

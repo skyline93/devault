@@ -11,7 +11,15 @@ from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from devault.api.deps import get_db, get_effective_tenant_ui, require_write_ui, verify_ui_basic_auth
+from devault.api.deps import (
+    UI_TENANT_COOKIE,
+    get_db,
+    get_effective_tenant_ui,
+    require_admin_ui,
+    require_write_ui,
+    tenants_for_switcher_nav,
+    verify_ui_basic_auth,
+)
 from devault.api.schemas import (
     CreateBackupJobBody,
     CreateRestoreDrillJobBody,
@@ -23,10 +31,14 @@ from devault.api.schemas import (
     RestoreDrillSchedulePatch,
     ScheduleCreate,
     SchedulePatch,
+    TenantCreate,
+    TenantPatch,
 )
 from devault.api.presenters import edge_agent_to_out
 from devault.db.models import Artifact, EdgeAgent, Job, Policy, RestoreDrillSchedule, Schedule, Tenant
+from devault.security.agent_grpc_session import revoke_all_grpc_sessions_for_agent
 from devault.security.auth_context import AuthContext
+from devault.settings import get_settings
 from devault.services import control as control_svc
 
 _PKG = Path(__file__).resolve().parent.parent.parent
@@ -41,12 +53,22 @@ def _lines(text: str | None) -> list[str]:
     return [ln.strip() for ln in (text or "").splitlines() if ln.strip()]
 
 
+def _optional_int(raw: str) -> int | None:
+    s = (raw or "").strip()
+    if not s:
+        return None
+    return int(s)
+
+
 def _file_backup_config_v1(
     *,
     paths_multiline: str,
     excludes_multiline: str,
     encrypt_artifacts: str,
     retention_days_raw: str,
+    kms_envelope_key_id: str = "",
+    object_lock_mode: str = "",
+    object_lock_retain_days_raw: str = "",
 ) -> FileBackupConfigV1:
     paths = _lines(paths_multiline)
     excludes = _lines(excludes_multiline)
@@ -59,17 +81,69 @@ def _file_backup_config_v1(
     }
     if rd:
         kwargs["retention_days"] = int(rd)
+    kms = (kms_envelope_key_id or "").strip()
+    if kms:
+        kwargs["kms_envelope_key_id"] = kms
+    om = (object_lock_mode or "").strip()
+    if om:
+        kwargs["object_lock_mode"] = om
+    ol_days = _optional_int(object_lock_retain_days_raw)
+    if om and ol_days is not None:
+        kwargs["object_lock_retain_days"] = ol_days
     return FileBackupConfigV1(**kwargs)
 
 
-def _redirect(path: str, *, flash: str | None = None, error: str | None = None) -> RedirectResponse:
+def _base_nav_kwargs(*, tenant: Tenant | None, db: Session, auth: AuthContext) -> dict:
+    return {
+        "current_tenant": tenant,
+        "auth_ctx": auth,
+        "tenant_switch_options": tenants_for_switcher_nav(db, auth),
+    }
+
+
+def _tpl(
+    request: Request,
+    name: str,
+    *,
+    tenant: Tenant | None,
+    db: Session,
+    auth: AuthContext,
+    **page: object,
+) -> HTMLResponse:
+    ctx = dict(request=request, **page)
+    ctx.update(_base_nav_kwargs(tenant=tenant, db=db, auth=auth))
+    return templates.TemplateResponse(request, name, ctx)
+
+
+def _redirect(
+    path: str,
+    *,
+    flash: str | None = None,
+    error: str | None = None,
+    set_tenant_cookie: uuid.UUID | None = None,
+    clear_tenant_cookie: bool = False,
+) -> RedirectResponse:
     qs: list[str] = []
     if flash:
         qs.append(f"flash={quote(flash)}")
     if error:
         qs.append(f"error={quote(error)}")
     url = path + ("?" + "&".join(qs) if qs else "")
-    return RedirectResponse(url=url, status_code=303)
+    r = RedirectResponse(url=url, status_code=303)
+    half_year = int(86400 * 183)
+    if set_tenant_cookie:
+        r.set_cookie(
+            key=UI_TENANT_COOKIE,
+            value=str(set_tenant_cookie),
+            path="/ui",
+            httponly=True,
+            secure=False,
+            samesite="lax",
+            max_age=half_year,
+        )
+    if clear_tenant_cookie:
+        r.delete_cookie(key=UI_TENANT_COOKIE, path="/ui")
+    return r
 
 
 def _http_err_detail(exc: HTTPException) -> str:
@@ -80,22 +154,41 @@ def _http_err_detail(exc: HTTPException) -> str:
 
 
 @router.get("/agents", response_class=HTMLResponse, dependencies=_ui_dep)
-def ui_agents(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
+def ui_agents(
+    request: Request,
+    db: Session = Depends(get_db),
+    tenant: Tenant = Depends(get_effective_tenant_ui),
+    auth: AuthContext = Depends(verify_ui_basic_auth),
+) -> HTMLResponse:
     """Fleet inventory (platform-wide; not scoped by tenant)."""
     rows = list(
         db.scalars(select(EdgeAgent).order_by(EdgeAgent.last_seen_at.desc()).limit(200)).all()
     )
     agents_out = [edge_agent_to_out(r) for r in rows]
-    return templates.TemplateResponse(
+    return _tpl(
         request,
         "agents.html",
-        {
-            "request": request,
-            "agents": agents_out,
-            "flash": request.query_params.get("flash"),
-            "error": request.query_params.get("error"),
-        },
+        tenant=tenant,
+        db=db,
+        auth=auth,
+        agents=agents_out,
+        flash=request.query_params.get("flash"),
+        error=request.query_params.get("error"),
     )
+
+
+@router.post("/agents/{agent_id}/revoke-grpc-sessions", dependencies=_ui_dep)
+def ui_agent_revoke_grpc_sessions(
+    agent_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    _admin: AuthContext = Depends(require_admin_ui),
+) -> RedirectResponse:
+    del _admin
+    if db.get(EdgeAgent, agent_id) is None:
+        return _redirect("/ui/agents", error="agent not found")
+    settings = get_settings()
+    gen = revoke_all_grpc_sessions_for_agent(settings.redis_url, agent_id)
+    return _redirect("/ui/agents", flash=f"gRPC sessions revoked (generation={gen}).")
 
 
 @router.get("/jobs", response_class=HTMLResponse, dependencies=_ui_dep)
@@ -103,6 +196,7 @@ def ui_jobs(
     request: Request,
     db: Session = Depends(get_db),
     tenant: Tenant = Depends(get_effective_tenant_ui),
+    auth: AuthContext = Depends(verify_ui_basic_auth),
 ) -> HTMLResponse:
     rows = list(
         db.scalars(
@@ -112,15 +206,15 @@ def ui_jobs(
             .limit(100)
         ).all()
     )
-    return templates.TemplateResponse(
+    return _tpl(
         request,
         "jobs.html",
-        {
-            "request": request,
-            "jobs": rows,
-            "flash": request.query_params.get("flash"),
-            "error": request.query_params.get("error"),
-        },
+        tenant=tenant,
+        db=db,
+        auth=auth,
+        jobs=rows,
+        flash=request.query_params.get("flash"),
+        error=request.query_params.get("error"),
     )
 
 
@@ -157,6 +251,7 @@ def ui_artifacts(
     request: Request,
     db: Session = Depends(get_db),
     tenant: Tenant = Depends(get_effective_tenant_ui),
+    auth: AuthContext = Depends(verify_ui_basic_auth),
 ) -> HTMLResponse:
     rows = list(
         db.scalars(
@@ -166,16 +261,38 @@ def ui_artifacts(
             .limit(100)
         ).all()
     )
-    return templates.TemplateResponse(
+    return _tpl(
         request,
         "artifacts.html",
-        {
-            "request": request,
-            "artifacts": rows,
-            "flash": request.query_params.get("flash"),
-            "error": request.query_params.get("error"),
-        },
+        tenant=tenant,
+        db=db,
+        auth=auth,
+        artifacts=rows,
+        flash=request.query_params.get("flash"),
+        error=request.query_params.get("error"),
     )
+
+
+@router.post("/artifacts/{artifact_id}/legal-hold", dependencies=_ui_dep)
+def ui_artifact_legal_hold(
+    artifact_id: uuid.UUID,
+    legal_hold: str = Form(...),
+    db: Session = Depends(get_db),
+    tenant: Tenant = Depends(get_effective_tenant_ui),
+    _admin: AuthContext = Depends(require_admin_ui),
+) -> RedirectResponse:
+    del _admin
+    desired = legal_hold.strip().lower() in ("yes", "true", "1", "on")
+    try:
+        control_svc.patch_artifact_legal_hold(
+            db,
+            artifact_id,
+            tenant_id=tenant.id,
+            legal_hold=desired,
+        )
+        return _redirect("/ui/artifacts", flash=("Legal hold on." if desired else "Legal hold released."))
+    except HTTPException as e:
+        return _redirect("/ui/artifacts", error=_http_err_detail(e))
 
 
 @router.post("/artifacts/restore-drill", dependencies=_ui_dep)
@@ -227,6 +344,7 @@ def ui_policies(
     request: Request,
     db: Session = Depends(get_db),
     tenant: Tenant = Depends(get_effective_tenant_ui),
+    auth: AuthContext = Depends(verify_ui_basic_auth),
 ) -> HTMLResponse:
     rows = list(
         db.scalars(
@@ -235,31 +353,35 @@ def ui_policies(
             .order_by(Policy.created_at.desc())
         ).all()
     )
-    return templates.TemplateResponse(
+    return _tpl(
         request,
         "policies.html",
-        {
-            "request": request,
-            "policies": rows,
-            "flash": request.query_params.get("flash"),
-            "error": request.query_params.get("error"),
-        },
+        tenant=tenant,
+        db=db,
+        auth=auth,
+        policies=rows,
+        flash=request.query_params.get("flash"),
+        error=request.query_params.get("error"),
     )
 
 
 @router.get("/policies/new", response_class=HTMLResponse, dependencies=_ui_dep)
-def ui_policies_new(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
-    _ = db
-    return templates.TemplateResponse(
+def ui_policies_new(
+    request: Request,
+    db: Session = Depends(get_db),
+    tenant: Tenant = Depends(get_effective_tenant_ui),
+    auth: AuthContext = Depends(verify_ui_basic_auth),
+) -> HTMLResponse:
+    return _tpl(
         request,
         "policy_form.html",
-        {
-            "request": request,
-            "policy": None,
-            "flash": None,
-            "error": None,
-            "heading": "New policy",
-        },
+        tenant=tenant,
+        db=db,
+        auth=auth,
+        policy=None,
+        flash=None,
+        error=None,
+        heading="New policy",
     )
 
 
@@ -269,6 +391,9 @@ def ui_policies_create(
     paths_multiline: str = Form(...),
     excludes_multiline: str = Form(""),
     encrypt_artifacts: str = Form("no"),
+    kms_envelope_key_id: str = Form(""),
+    object_lock_mode: str = Form(""),
+    object_lock_retain_days: str = Form(""),
     retention_days: str = Form(""),
     enabled: str = Form("yes"),
     db: Session = Depends(get_db),
@@ -281,6 +406,9 @@ def ui_policies_create(
             excludes_multiline=excludes_multiline,
             encrypt_artifacts=encrypt_artifacts,
             retention_days_raw=retention_days,
+            kms_envelope_key_id=kms_envelope_key_id,
+            object_lock_mode=object_lock_mode,
+            object_lock_retain_days_raw=object_lock_retain_days,
         )
         body = PolicyCreate(
             name=name.strip(),
@@ -302,20 +430,21 @@ def ui_policies_edit(
     policy_id: uuid.UUID,
     db: Session = Depends(get_db),
     tenant: Tenant = Depends(get_effective_tenant_ui),
+    auth: AuthContext = Depends(verify_ui_basic_auth),
 ) -> HTMLResponse:
     p = db.get(Policy, policy_id)
     if p is None or p.tenant_id != tenant.id:
         raise HTTPException(404, detail="policy not found")
-    return templates.TemplateResponse(
+    return _tpl(
         request,
         "policy_form.html",
-        {
-            "request": request,
-            "policy": p,
-            "flash": None,
-            "error": None,
-            "heading": f"Edit policy — {p.name}",
-        },
+        tenant=tenant,
+        db=db,
+        auth=auth,
+        policy=p,
+        flash=None,
+        error=None,
+        heading=f"Edit policy — {p.name}",
     )
 
 
@@ -326,6 +455,9 @@ def ui_policies_update(
     paths_multiline: str = Form(...),
     excludes_multiline: str = Form(""),
     encrypt_artifacts: str = Form("no"),
+    kms_envelope_key_id: str = Form(""),
+    object_lock_mode: str = Form(""),
+    object_lock_retain_days: str = Form(""),
     retention_days: str = Form(""),
     enabled: str = Form("yes"),
     db: Session = Depends(get_db),
@@ -338,6 +470,9 @@ def ui_policies_update(
             excludes_multiline=excludes_multiline,
             encrypt_artifacts=encrypt_artifacts,
             retention_days_raw=retention_days,
+            kms_envelope_key_id=kms_envelope_key_id,
+            object_lock_mode=object_lock_mode,
+            object_lock_retain_days_raw=object_lock_retain_days,
         )
         patch = PolicyPatch(name=name.strip(), config=cfg, enabled=enabled == "yes")
         control_svc.patch_policy(db, policy_id, patch, tenant_id=tenant.id)
@@ -384,6 +519,7 @@ def ui_schedules(
     request: Request,
     db: Session = Depends(get_db),
     tenant: Tenant = Depends(get_effective_tenant_ui),
+    auth: AuthContext = Depends(verify_ui_basic_auth),
 ) -> HTMLResponse:
     rows = list(
         db.scalars(
@@ -392,15 +528,15 @@ def ui_schedules(
             .order_by(Schedule.created_at.desc())
         ).all()
     )
-    return templates.TemplateResponse(
+    return _tpl(
         request,
         "schedules.html",
-        {
-            "request": request,
-            "schedules": rows,
-            "flash": request.query_params.get("flash"),
-            "error": request.query_params.get("error"),
-        },
+        tenant=tenant,
+        db=db,
+        auth=auth,
+        schedules=rows,
+        flash=request.query_params.get("flash"),
+        error=request.query_params.get("error"),
     )
 
 
@@ -409,21 +545,24 @@ def ui_schedules_new(
     request: Request,
     db: Session = Depends(get_db),
     tenant: Tenant = Depends(get_effective_tenant_ui),
+    auth: AuthContext = Depends(verify_ui_basic_auth),
 ) -> HTMLResponse:
     policies = list(
         db.scalars(
             select(Policy).where(Policy.tenant_id == tenant.id).order_by(Policy.name.asc())
         ).all()
     )
-    return templates.TemplateResponse(
+    return _tpl(
         request,
         "schedule_form.html",
-        {
-            "request": request,
-            "schedule": None,
-            "policies": policies,
-            "heading": "New schedule",
-        },
+        tenant=tenant,
+        db=db,
+        auth=auth,
+        schedule=None,
+        policies=policies,
+        heading="New schedule",
+        flash=request.query_params.get("flash"),
+        error=request.query_params.get("error"),
     )
 
 
@@ -458,6 +597,7 @@ def ui_schedules_edit(
     schedule_id: uuid.UUID,
     db: Session = Depends(get_db),
     tenant: Tenant = Depends(get_effective_tenant_ui),
+    auth: AuthContext = Depends(verify_ui_basic_auth),
 ) -> HTMLResponse:
     s = db.get(Schedule, schedule_id)
     if s is None or s.tenant_id != tenant.id:
@@ -467,15 +607,17 @@ def ui_schedules_edit(
             select(Policy).where(Policy.tenant_id == tenant.id).order_by(Policy.name.asc())
         ).all()
     )
-    return templates.TemplateResponse(
+    return _tpl(
         request,
         "schedule_form.html",
-        {
-            "request": request,
-            "schedule": s,
-            "policies": policies,
-            "heading": f"Edit schedule — {schedule_id}",
-        },
+        tenant=tenant,
+        db=db,
+        auth=auth,
+        schedule=s,
+        policies=policies,
+        heading=f"Edit schedule — {schedule_id}",
+        flash=request.query_params.get("flash"),
+        error=request.query_params.get("error"),
     )
 
 
@@ -523,6 +665,7 @@ def ui_restore_drill_schedules(
     request: Request,
     db: Session = Depends(get_db),
     tenant: Tenant = Depends(get_effective_tenant_ui),
+    auth: AuthContext = Depends(verify_ui_basic_auth),
 ) -> HTMLResponse:
     rows = list(
         db.scalars(
@@ -531,15 +674,15 @@ def ui_restore_drill_schedules(
             .order_by(RestoreDrillSchedule.created_at.desc())
         ).all()
     )
-    return templates.TemplateResponse(
+    return _tpl(
         request,
         "restore_drill_schedules.html",
-        {
-            "request": request,
-            "schedules": rows,
-            "flash": request.query_params.get("flash"),
-            "error": request.query_params.get("error"),
-        },
+        tenant=tenant,
+        db=db,
+        auth=auth,
+        schedules=rows,
+        flash=request.query_params.get("flash"),
+        error=request.query_params.get("error"),
     )
 
 
@@ -548,21 +691,24 @@ def ui_restore_drill_schedules_new(
     request: Request,
     db: Session = Depends(get_db),
     tenant: Tenant = Depends(get_effective_tenant_ui),
+    auth: AuthContext = Depends(verify_ui_basic_auth),
 ) -> HTMLResponse:
     artifacts = list(
         db.scalars(
             select(Artifact).where(Artifact.tenant_id == tenant.id).order_by(Artifact.created_at.desc()).limit(200)
         ).all()
     )
-    return templates.TemplateResponse(
+    return _tpl(
         request,
         "restore_drill_schedule_form.html",
-        {
-            "request": request,
-            "schedule": None,
-            "artifacts": artifacts,
-            "heading": "New restore drill schedule",
-        },
+        tenant=tenant,
+        db=db,
+        auth=auth,
+        schedule=None,
+        artifacts=artifacts,
+        heading="New restore drill schedule",
+        flash=request.query_params.get("flash"),
+        error=request.query_params.get("error"),
     )
 
 
@@ -599,6 +745,7 @@ def ui_restore_drill_schedules_edit(
     schedule_id: uuid.UUID,
     db: Session = Depends(get_db),
     tenant: Tenant = Depends(get_effective_tenant_ui),
+    auth: AuthContext = Depends(verify_ui_basic_auth),
 ) -> HTMLResponse:
     s = db.get(RestoreDrillSchedule, schedule_id)
     if s is None or s.tenant_id != tenant.id:
@@ -608,15 +755,17 @@ def ui_restore_drill_schedules_edit(
             select(Artifact).where(Artifact.tenant_id == tenant.id).order_by(Artifact.created_at.desc()).limit(200)
         ).all()
     )
-    return templates.TemplateResponse(
+    return _tpl(
         request,
         "restore_drill_schedule_form.html",
-        {
-            "request": request,
-            "schedule": s,
-            "artifacts": artifacts,
-            "heading": f"Edit restore drill schedule — {schedule_id}",
-        },
+        tenant=tenant,
+        db=db,
+        auth=auth,
+        schedule=s,
+        artifacts=artifacts,
+        heading=f"Edit restore drill schedule — {schedule_id}",
+        flash=request.query_params.get("flash"),
+        error=request.query_params.get("error"),
     )
 
 
@@ -663,3 +812,158 @@ def ui_restore_drill_schedules_delete(
         return _redirect("/ui/restore-drill-schedules", flash="Restore drill schedule deleted.")
     except HTTPException as e:
         return _redirect("/ui/restore-drill-schedules", error=_http_err_detail(e))
+
+
+@router.post("/context/tenant", dependencies=_ui_dep)
+def ui_context_tenant(
+    tenant_id: str = Form(""),
+    db: Session = Depends(get_db),
+    auth: AuthContext = Depends(verify_ui_basic_auth),
+) -> RedirectResponse:
+    raw = (tenant_id or "").strip()
+    if not raw:
+        return _redirect("/ui/jobs", flash="Using default tenant (cookie cleared).", clear_tenant_cookie=True)
+    try:
+        tid = uuid.UUID(raw)
+    except ValueError:
+        return _redirect("/ui/jobs", error="invalid tenant id")
+    auth.ensure_tenant_access(tid)
+    row = db.get(Tenant, tid)
+    if row is None:
+        return _redirect("/ui/jobs", error="tenant not found")
+    return _redirect("/ui/jobs", flash=f"Switched tenant: {row.slug}", set_tenant_cookie=row.id)
+
+
+@router.get("/tenants", response_class=HTMLResponse, dependencies=_ui_dep)
+def ui_tenants_list(
+    request: Request,
+    db: Session = Depends(get_db),
+    tenant: Tenant = Depends(get_effective_tenant_ui),
+    auth: AuthContext = Depends(require_admin_ui),
+) -> HTMLResponse:
+    rows = list(db.scalars(select(Tenant).order_by(Tenant.slug.asc())).all())
+    return _tpl(
+        request,
+        "tenants.html",
+        tenant=tenant,
+        db=db,
+        auth=auth,
+        tenants=rows,
+        flash=request.query_params.get("flash"),
+        error=request.query_params.get("error"),
+    )
+
+
+@router.get("/tenants/new", response_class=HTMLResponse, dependencies=_ui_dep)
+def ui_tenants_new_form(
+    request: Request,
+    db: Session = Depends(get_db),
+    tenant: Tenant = Depends(get_effective_tenant_ui),
+    auth: AuthContext = Depends(require_admin_ui),
+) -> HTMLResponse:
+    return _tpl(
+        request,
+        "tenant_form.html",
+        tenant=tenant,
+        db=db,
+        auth=auth,
+        row=None,
+        heading="New tenant",
+        flash=request.query_params.get("flash"),
+        error=request.query_params.get("error"),
+    )
+
+
+@router.post("/tenants/new", dependencies=_ui_dep)
+def ui_tenants_create(
+    name: str = Form(...),
+    slug: str = Form(...),
+    db: Session = Depends(get_db),
+    _admin: AuthContext = Depends(require_admin_ui),
+) -> RedirectResponse:
+    del _admin
+    try:
+        body = TenantCreate(name=name.strip(), slug=slug.strip())
+        row = control_svc.create_tenant(db, body)
+        return _redirect("/ui/tenants", flash=f"Created tenant {row.slug}.", set_tenant_cookie=row.id)
+    except HTTPException as e:
+        return _redirect("/ui/tenants/new", error=_http_err_detail(e))
+    except ValidationError as e:
+        return _redirect("/ui/tenants/new", error=str(e)[:800])
+
+
+@router.get("/tenants/{edited_id}/edit", response_class=HTMLResponse, dependencies=_ui_dep)
+def ui_tenants_edit_form(
+    request: Request,
+    edited_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    tenant: Tenant = Depends(get_effective_tenant_ui),
+    auth: AuthContext = Depends(require_admin_ui),
+) -> HTMLResponse:
+    row = db.get(Tenant, edited_id)
+    if row is None:
+        raise HTTPException(404, detail="tenant not found")
+    return _tpl(
+        request,
+        "tenant_form.html",
+        tenant=tenant,
+        db=db,
+        auth=auth,
+        row=row,
+        heading=f"Edit tenant — {row.slug}",
+        flash=request.query_params.get("flash"),
+        error=request.query_params.get("error"),
+    )
+
+
+def _patch_tenant_from_form(
+    *,
+    name: str,
+    require_encrypted_artifacts: str,
+    kms_envelope_key_id: str,
+    s3_bucket: str,
+    s3_assume_role_arn: str,
+    s3_assume_role_external_id: str,
+) -> TenantPatch:
+    kms = (kms_envelope_key_id or "").strip()
+    bkt = (s3_bucket or "").strip()
+    arn = (s3_assume_role_arn or "").strip()
+    ext = (s3_assume_role_external_id or "").strip()
+    return TenantPatch(
+        name=name.strip(),
+        require_encrypted_artifacts=(require_encrypted_artifacts == "yes"),
+        kms_envelope_key_id=kms if kms else "",
+        s3_bucket=bkt if bkt else "",
+        s3_assume_role_arn=arn if arn else "",
+        s3_assume_role_external_id=ext if ext else "",
+    )
+
+
+@router.post("/tenants/{edited_id}/edit", dependencies=_ui_dep)
+def ui_tenants_update(
+    edited_id: uuid.UUID,
+    name: str = Form(...),
+    require_encrypted_artifacts: str = Form("no"),
+    kms_envelope_key_id: str = Form(""),
+    s3_bucket: str = Form(""),
+    s3_assume_role_arn: str = Form(""),
+    s3_assume_role_external_id: str = Form(""),
+    db: Session = Depends(get_db),
+    _admin: AuthContext = Depends(require_admin_ui),
+) -> RedirectResponse:
+    del _admin
+    try:
+        patch = _patch_tenant_from_form(
+            name=name,
+            require_encrypted_artifacts=require_encrypted_artifacts,
+            kms_envelope_key_id=kms_envelope_key_id,
+            s3_bucket=s3_bucket,
+            s3_assume_role_arn=s3_assume_role_arn,
+            s3_assume_role_external_id=s3_assume_role_external_id,
+        )
+        control_svc.patch_tenant(db, edited_id, patch)
+        return _redirect("/ui/tenants", flash="Tenant updated.")
+    except HTTPException as e:
+        return _redirect(f"/ui/tenants/{edited_id}/edit", error=_http_err_detail(e))
+    except ValidationError as e:
+        return _redirect(f"/ui/tenants/{edited_id}/edit", error=str(e)[:800])

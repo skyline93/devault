@@ -59,7 +59,7 @@
 | **1** | M1 基础设施与运维闭环 | **已收敛**：Helm（`deploy/helm/devault`）+ **告警路由**（`deploy/alertmanager.yml`、`deploy/docker-compose.prometheus.yml`、`monitoring.enabled`、文档 **`website/docs/install/observability.md`**） |
 | **2** | 发布工程与数据面韧性 | **已收敛**：§二 Multipart×加密；§三 CI 多版本镜像 E2E；§三 **`bump_release` ↔ `compatibility.json`**；§三 Agent **`server_capabilities`** 降级 |
 | **3** | 网关与身份演进 | **已收敛**：§一 Envoy **`local_rate_limit`**；§一 Register **每 Agent Redis 会话** + **`POST …/revoke-grpc-sessions`** |
-| **4** | 合规与统一存储扩展 | §五 KMS / 信封 / 租户 DEK；§五 默认或租户级强制加密；§五 WORM；§五 Legal Hold；§五 BYOB |
+| **4** | 合规与统一存储 \| **控制台与 API 对等** | **§五**：已从迁移 **`0010`** 等落地（详见 **§五**、**§十**）；**§八 Web UI**：**八-04～八-09** 已落地（`src/devault/api/routes/ui.py`、`deps.py`、`web/templates/`；与 **`website/docs/guides/web-console.md`** 同步维护）。 |
 | **5** | M2 数据库备份 MVP | §九 全部未完成项（建议在 **波次 1～2** 收敛后再启动） |
 | **6** | 长期（依赖 M2） | §七 增量与时间线 |
 | **—** | 已完成 | 全量索引中状态 `[x]` 的条目及 **§零** 基线 11 条 |
@@ -138,6 +138,12 @@
 | 八-01 | §八 | [x] | P1 | — | **企业部署参考架构** |
 | 八-02 | §八 | [x] | P1 | — | **安全白皮书摘要** |
 | 八-03 | §八 | [x] | P2 | — | **`docs/README.md` 与实现差距表** |
+| 八-04 | §八 | [x] | P1 | 4 | **Web UI：策略表单与备份配置对齐（KMS / Object Lock / 文案）** |
+| 八-05 | §八 | [x] | P1 | 4 | **Web UI：租户运维（列表 / PATCH BYOB·合规字段；Admin）** |
+| 八-06 | §八 | [x] | P1 | 4 | **Web UI：租户上下文与切换（多租户日常不设 curl）** |
+| 八-07 | §八 | [x] | P2 | 4 | **Web UI：Artifacts 列补齐（encrypted / legal_hold）** |
+| 八-08 | §八 | [x] | P2 | 4 | **Web UI：法务保留 Legal Hold（Admin 行操作 + 确认）** |
+| 八-09 | §八 | [x] | P3 | 4 | **Web UI：运维快捷键（吊销 Agent gRPC 会话、密钥/CLI 文档入口）** |
 | 九-01 | §九 | [ ] | P0 | 5 | **`postgres` 插件（Agent 可执行）** |
 | 九-02 | §九 | [ ] | P0 | 5 | **`mysql` 插件（Agent 可执行）** |
 | 九-03 | §九 | [ ] | P0 | 5 | **Policy `type` / 配置校验扩展** |
@@ -315,6 +321,12 @@
 | [x] | P1 | **企业部署参考架构** | 文档站 **`website/docs/install/enterprise-reference-architecture.md`**（Mermaid：DMZ、网关、VPC、对象存储、出站）；与 **`intro/target-architecture.md`**、**`intro/architecture-overview.md`** 互链。 |
 | [x] | P1 | **安全白皮书摘要** | **`website/docs/security/security-whitepaper.md`**：信任边界、密钥流、审计、gRPC 指标告警引用；**§五** KMS/信封、强制加密、Object Lock、Legal Hold、BYOB 已实现（见 **`artifact-encryption.md`** 等），白皮书中若有「未实现」列表宜与 backlog **§五** / **§九** / **§七** 同步校对。 |
 | [x] | P2 | **`docs/README.md` 与实现差距表** | 仓库 **`docs/README.md`**：对照 **`docs-old/README.md`** 愿景条目的实现状态表与站内链接。 |
+| [x] | P1 | **Web UI：策略表单与备份配置对齐（KMS / Object Lock / 文案）** | 已实现：**`policy_form.html`**、**`POST /ui/policies/*`** 经 **`_file_backup_config_v1`** 写入 **`kms_envelope_key_id`**、**`object_lock_mode` / `object_lock_retain_days`**（与 **`FileBackupConfigV1`**、REST 一致）；加密说明链 **`artifact-encryption.md`** 语境。 |
+| [x] | P1 | **Web UI：租户运维（列表 / PATCH BYOB·合规字段；Admin）** | 已实现：**`/ui/tenants`**、**`/ui/tenants/new`**、**`/ui/tenants/{id}/edit`**（**`require_admin_ui`**），对接 **`TenantCreate` / `TenantPatch`** 与 **`control_svc`**（BYOB、**`require_encrypted_artifacts`**、KMS 等）。 |
+| [x] | P1 | **Web UI：租户上下文与切换（多租户日常不设 curl）** | 已实现：**HttpOnly Cookie** **`devault_ui_tenant`**（**`UI_TENANT_COOKIE`**，path `/ui`），**`get_effective_tenant_ui`**（Cookie → **`X-DeVault-Tenant-Id`** → 默认 slug）；**`POST /ui/context/tenant`**；导航下拉与 **`tenants_for_switcher_nav`**。验收路径：**`/ui/jobs`**、**`/policies`**、**`/artifacts`** 等与 REST 租户一致。**可增强**：书签深链带 `tenant` query。 |
+| [x] | P2 | **Web UI：Artifacts 列补齐（encrypted / legal_hold）** | 已实现：**`artifacts.html`** 列 **`Encrypted`**、**`Legal hold`**；数据与 **`Artifact`** / **`ArtifactOut`** 对齐。 |
+| [x] | P2 | **Web UI：法务保留 Legal Hold（Admin 行操作 + 确认）** | 已实现：**`POST /ui/artifacts/{id}/legal-hold`**（**`require_admin_ui`**）→ **`control_svc.patch_artifact_legal_hold`**；行内表单 + 浏览器 **`confirm()`**；非 admin 无操作列。 |
+| [x] | P3 | **Web UI：运维快捷键（吊销会话、密钥/CLI 文档入口）** | 已实现：**`/ui/agents`** **Admin**：**`POST /ui/agents/{id}/revoke-grpc-sessions`** → **`revoke_all_grpc_sessions_for_agent`**；muted 文案链 **`website/docs/reference/access-control.md`**、**`website/docs/security/api-access.md`**。**可增强**：密钥列表脱敏预览（只读 REST）。 |
 
 ---
 
@@ -354,9 +366,12 @@
 | E-OPS-001 | HA、DR、K8s、告警 | M1 | F |
 | E-TRUST-001 | 验证与演练 | M1 | G |
 | E-DOC-001 | 企业文档 | M1 | H |
+| E-UX-001 | Web 控制台与 REST 对等 | M1 | H（扩充） |
 | E-DB-001 | 数据库备份 MVP | M2 | C |
 
-**Epic → 排期波次**（与 **[排期波次与全量待办索引](#排期波次与全量待办索引)** 一致）：**E-OPS-001** 中 **Helm / K8s** 与 **告警路由（Prometheus + Alertmanager）** 已交付；**`E-DATA-001` / `E-DATA-002`** 之 **§二 Multipart×加密** 已交付；**E-VER-001** 之 **§三** 可增强（**三-11～三-13**）已交付 → **波次 2** 版本与韧性主线已收敛；**E-ARCH-001** 之 **§一** 可增强（**一-08 Envoy `local_rate_limit`**、**一-09 Agent Redis 会话 / 吊销**）已交付 → **波次 3** 网关与身份演进主线已收敛；**E-GOV-001** 之 **KMS、强制加密、WORM、Legal Hold、BYOB**（迁移 **`0010`**）→ **波次 4** **已交付**；**E-DB-001** → **波次 5**；**E-TRUST-001** 之 **§七 增量与时间线** → **波次 6**。其余 Epic 主线条目在当前仓库已为 `[x]`。
+**Epic → 排期波次**（与 **[排期波次与全量待办索引](#排期波次与全量待办索引)** 一致）：**E-OPS-001** 中 **Helm / K8s** 与 **告警路由（Prometheus + Alertmanager）** 已交付；**`E-DATA-001` / `E-DATA-002`** 之 **§二 Multipart×加密** 已交付；**E-VER-001** 之 **§三** 可增强（**三-11～三-13**）已交付 → **波次 2** 版本与韧性主线已收敛；**E-ARCH-001** 之 **§一** 可增强（**一-08 Envoy `local_rate_limit`**、**一-09 Agent Redis 会话 / 吊销**）已交付 → **波次 3** 网关与身份演进主线已收敛；**E-GOV-001** 之 **KMS、强制加密、WORM、Legal Hold、BYOB**（迁移 **`0010`**）→ **波次 4** **已交付**。**`E-UX-001`**（**§八 · 八-04～八-09**）→ **波次 4** **已交付**：控制台与 **REST** 对等（策略 KMS/Object Lock、租户运维与 Cookie 切换、Artifacts 列与 Legal Hold、Agent gRPC 会话吊销等）；实现见 **`src/devault/api/routes/ui.py`**、**`deps.py`**、**`web/templates/`**；文档维护 **`website/docs/guides/web-console.md`** 与 **E-DOC-001**。
+
+**`E-DB-001`** → **波次 5**；**E-TRUST-001** 之 **§七 增量与时间线** → **波次 6**。其余 Epic 主线条目在当前仓库已为 `[x]`。
 
 ---
 
@@ -412,7 +427,9 @@
 | 2026-05-09 | **M1·三 P2**：**CI 多版本镜像 E2E 矩阵**（**`e2e-version-matrix.yml`**、**`ci_e2e`** / **`matrix_definitions`**、Compose override、gRPC 冒烟脚本、**`verify_compatibility_matrix`** 扩展、**`compatibility.md`**；全量索引 **三-11**、**§三.2**、**§十三**、**波次 2** 表更新）。 |
 | 2026-05-09 | **M1·三 P3**：**`bump_release` ↔ `compatibility.json`**（**`sync_compatibility_current_release`**、文档与单测）；**Agent `server_capabilities` 降级**（**`gate_multipart_*`**、**`AgentCapabilityState`**、全量索引 **三-12 / 三-13**、**§十三**、**波次 2** 收敛）。 |
 | 2026-05-09 | **M1·一 P3**：**Envoy `local_rate_limit`**（**`deploy/envoy/envoy-grpc-tls.yaml`**）；**Register → Redis 每 Agent 会话**（**`agent_grpc_session`**、**`revoke-grpc-sessions`**、**`_require_agent_bearer_matches`**）；全量索引 **一-08 / 一-09**、**§十三**、**波次 3** 收敛。 |
+| 2026-05-09 | **M1·八**：**Web UI 与 REST 对等落地** — 全量索引 **八-04～八-09**、**§八** 分节表勾选 **`[x]`**；**`deps.py`**：**`UI_TENANT_COOKIE`**、**`get_effective_tenant_ui`**、**`tenants_for_switcher_nav`**、**`require_admin_ui`**；**`routes/ui.py`**（策略 KMS·Object Lock、**`/ui/tenants`**、**`POST /ui/context/tenant`**、Artifacts 列与 Legal Hold **`confirm()`**、**`/ui/agents/.../revoke-grpc-sessions`**）；**§十 `E-UX-001`** / **波次 4** 标为 **已交付**。**`guides/web-console.md`** 宜同步复核。 |
 | 2026-05-11 | **M1·五 P2/P3**：**KMS 信封**（manifest **`key_wrap=kms`**、Agent KMS API）、**强制加密**（**`DEVAULT_REQUIRE_ENCRYPTED_ARTIFACTS`** / **`require_encrypted_artifacts`**、`CompleteJob` 校验）、**Object Lock**、**Legal Hold**、**BYOB**（租户桶 + STS）；迁移 **`0010`**。**§五** 分节表、**全量索引** **五-03～五-08**、**§十三** 与本文件 **§十 Epic→波次 4** 与实现 **`[x]`** 对齐；文档站 **配置 / artifact-encryption / tenants / retention / object-store / sts-assume-role** 等同步。 |
+| 2026-05-11 | **M1·八（规划立项）**：拟定全量索引 **八-04～八-09** 与 **§八** / **`E-UX-001`** 范围；**勾选与实现** 见上表 **2026-05-09 · M1·八 Web UI 落地** 行（及当时代码与模板）。 |
 
 ---
 

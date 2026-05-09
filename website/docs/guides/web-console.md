@@ -25,6 +25,10 @@ description: Jobs UI 能力范围与认证方式
 
 复杂运维场景请优先使用 API、CLI 或上层平台集成。
 
+## 企业级能力对齐（规划）
+
+以下能力在 **REST** 与 **§五** 合规主线已支持，**简易 UI 尚未完全覆盖**；优先排期见仓库 **`docs-old/enterprise-backlog.md`** 全量索引 **八-04～八-09** 与 Epic **`E-UX-001`**（策略 **KMS / Object Lock**、租户 **BYOB·合规**、租户切换、**Artifacts** 列、**Legal Hold**、运维快捷入口等）。
+
 ## 与租户作用域的关系
 
 浏览器表单请求**不会**自动携带 `X-DeVault-Tenant-Id`，因此 UI 与未带头部的 REST 调用一样，使用 **`DEVAULT_DEFAULT_TENANT_SLUG`**（默认 **`default`**）解析租户。多租户运维请用 API 带头或扩展 UI。详见 [租户模型](../reference/tenants.md)。

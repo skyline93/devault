@@ -21,8 +21,28 @@
     <label>
       <input type="checkbox" name="encrypt_artifacts" value="yes"
         {% if policy and policy.config.get('encrypt_artifacts') %}checked{% endif %}/>
-      Encrypt bundle at rest (AES-256-GCM; Agent must set <code>DEVAULT_ARTIFACT_ENCRYPTION_KEY</code>)
-    </label>
+      Encrypt bundle at rest (AES-256-GCM; use static <code>DEVAULT_ARTIFACT_ENCRYPTION_KEY</code> or policy/tenant-level <strong>KMS envelope</strong>; see Agent IAM and <code>kms_envelope_key_id</code>)</label>
+  </p>
+  <p>
+    <label for="kms_envelope_key_id">KMS key id / ARN (optional; overrides tenant default)</label><br/>
+    <input type="text" id="kms_envelope_key_id" name="kms_envelope_key_id" style="width:100%;max-width:640px;"
+      value="{% if policy and policy.config.get('kms_envelope_key_id') %}{{ policy.config.kms_envelope_key_id }}{% endif %}"
+      placeholder="Leave blank to use tenant default or unset"/>
+  </p>
+  <p>
+    <label for="object_lock_mode">S3 Object Lock mode (optional; bucket must have Object Lock enabled)</label><br/>
+    <select id="object_lock_mode" name="object_lock_mode">
+      <option value="" {% if not policy or not policy.config.get('object_lock_mode') %}selected{% endif %}>— Not set —</option>
+      <option value="GOVERNANCE" {% if policy and policy.config.get('object_lock_mode') == 'GOVERNANCE' %}selected{% endif %}>GOVERNANCE</option>
+      <option value="COMPLIANCE" {% if policy and policy.config.get('object_lock_mode') == 'COMPLIANCE' %}selected{% endif %}>COMPLIANCE</option>
+    </select>
+  </p>
+  <p>
+    <label for="object_lock_retain_days">Object Lock retention (days; set together with mode)</label><br/>
+    <input type="number" id="object_lock_retain_days" name="object_lock_retain_days" min="1" step="1" style="max-width:120px"
+      placeholder="—"
+      value="{% if policy and policy.config.get('object_lock_retain_days') is not none %}{{ policy.config.object_lock_retain_days }}{% endif %}"/>
+    <span class="muted">Aligns with WORM retention; leave blank with no mode to skip Object Lock metadata.</span>
   </p>
   <p>
     <label for="retention_days">Retention (days, optional)</label><br/>

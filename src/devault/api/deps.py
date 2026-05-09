@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Generator
 
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Cookie, Depends, Header, HTTPException, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -17,6 +17,8 @@ from devault.security.token_resolve import resolve_bearer_token
 from devault.settings import Settings, get_settings
 
 _ui_security = HTTPBasic(auto_error=False)
+
+UI_TENANT_COOKIE = "devault_ui_tenant"
 
 
 def get_db() -> Generator[Session, None, None]:
@@ -97,6 +99,42 @@ def require_write_ui(auth: AuthContext = Depends(verify_ui_basic_auth)) -> AuthC
     return auth
 
 
+def require_admin_ui(auth: AuthContext = Depends(verify_ui_basic_auth)) -> AuthContext:
+    auth.ensure_admin()
+    return auth
+
+
+def _resolve_tenant_by_uuid_pref(
+    db: Session,
+    raw: str,
+) -> Tenant:
+    """Resolve tenant UUID from header / UI cookie preference string."""
+    s = raw.strip()
+    if not s:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="empty tenant id")
+    try:
+        tid = uuid.UUID(s)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="invalid tenant id",
+        ) from e
+    t = db.get(Tenant, tid)
+    if t is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="tenant not found")
+    return t
+
+
+def tenants_for_switcher_nav(db: Session, auth: AuthContext) -> list[Tenant]:
+    """Tenants visible in Web UI tenant switch (ordered by slug)."""
+    stmt = select(Tenant).order_by(Tenant.slug.asc())
+    rows = list(db.scalars(stmt).all())
+    if auth.allowed_tenant_ids is None:
+        return rows
+    allow = auth.allowed_tenant_ids
+    return [x for x in rows if x.id in allow]
+
+
 def _resolve_tenant_row(
     db: Session,
     *,
@@ -140,10 +178,25 @@ def get_effective_tenant(
 
 def get_effective_tenant_ui(
     db: Session = Depends(get_db),
+    devault_ui_tenant: str | None = Cookie(None, alias=UI_TENANT_COOKIE),
     x_devault_tenant_id: str | None = Header(None, alias="X-DeVault-Tenant-Id"),
     auth: AuthContext = Depends(verify_ui_basic_auth),
 ) -> Tenant:
+    """Effective tenant for `/ui/*`: **Cookie preferred**, then **`X-DeVault-Tenant-Id`**, else default slug."""
     settings = get_settings()
-    t = _resolve_tenant_row(db, x_devault_tenant_id=x_devault_tenant_id, settings=settings)
+    cookie_hint = (devault_ui_tenant or "").strip()
+    header_hint = (x_devault_tenant_id or "").strip()
+
+    pref: str | None = None
+    if cookie_hint:
+        pref = devault_ui_tenant
+    elif x_devault_tenant_id is not None and header_hint != "":
+        pref = x_devault_tenant_id
+
+    if pref is not None and pref.strip():
+        t = _resolve_tenant_by_uuid_pref(db, pref)
+        auth.ensure_tenant_access(t.id)
+        return t
+    t = _resolve_tenant_row(db, x_devault_tenant_id=None, settings=settings)
     auth.ensure_tenant_access(t.id)
     return t

@@ -7,6 +7,8 @@
 <p class="muted">
   Last-known identity from gRPC <strong>Heartbeat</strong> / <strong>Register</strong> (platform-wide, not per-tenant).
   Version policy is enforced via control-plane env (see docs). Latest 200 by <code>last_seen_at</code>.
+  REST equivalent: <code>POST /api/v1/agents/&#123;agent_id&#125;/revoke-grpc-sessions</code> (requires <strong>admin</strong> Bearer token).
+  For authentication, API keys, and RBAC, see <code>website/docs/reference/access-control.md</code> and <code>website/docs/security/api-access.md</code>.
 </p>
 <table>
   <thead>
@@ -19,6 +21,9 @@
       <th>Proto OK</th>
       <th>Last seen</th>
       <th>Registered</th>
+      {% if auth_ctx.is_admin %}
+      <th class="row-actions">Sessions</th>
+      {% endif %}
     </tr>
   </thead>
   <tbody>
@@ -32,9 +37,16 @@
       <td>{% if a.proto_matches_control_plane %}yes{% else %}<strong>no</strong>{% endif %}</td>
       <td>{{ a.last_seen_at }}</td>
       <td>{% if a.last_register_at %}{{ a.last_register_at }}{% else %}—{% endif %}</td>
+      {% if auth_ctx.is_admin %}
+      <td class="row-actions">
+        <form class="inline" method="post" action="/ui/agents/{{ a.id }}/revoke-grpc-sessions" onsubmit="return confirm('Revoke all Register-minted gRPC bearer tokens for this agent?');">
+          <button type="submit">Revoke gRPC sessions</button>
+        </form>
+      </td>
+      {% endif %}
     </tr>
     {% else %}
-    <tr><td colspan="8" class="muted">No agents have checked in yet.</td></tr>
+    <tr><td colspan="{% if auth_ctx.is_admin %}9{% else %}8{% endif %}" class="muted">No agents have checked in yet.</td></tr>
     {% endfor %}
   </tbody>
 </table>
