@@ -30,6 +30,7 @@ dependencies = [
   "croniter>=2.0.0",
   "python-multipart>=0.0.9",
   "packaging>=24.0",
+  "PyJWT[crypto]>=2.9.0",
 ]
 
 [project.optional-dependencies]
@@ -41,6 +42,7 @@ dev = [
 
 [project.scripts]
 devault = "devault.cli.main:main"
+devault-admin = "devault.admin:main"
 devault-scheduler = "devault.scheduler.main:main"
 devault-agent = "devault.agent.main:main"
 

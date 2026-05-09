@@ -21,6 +21,7 @@ from devault.plugins.file.multipart_wip import (
     checkpoint_path,
     clear_job_multipart_state,
 )
+from devault.db.constants import DEFAULT_TENANT_UUID
 from devault.plugins.file.plugin import (
     BackupOutcome,
     _build_backup_tarball,
@@ -153,7 +154,12 @@ def _run_one_job(
         if lease.kind == JobKind.BACKUP.value:
             job_stub = _job_view(job_id, lease, cfg)
             bid = uuid.UUID(job_id)
-            bundle_key, manifest_key = artifact_object_keys(s, bid)
+            tid_raw = cfg.get("tenant_id")
+            try:
+                tenant_uuid = uuid.UUID(str(tid_raw)) if tid_raw else DEFAULT_TENANT_UUID
+            except (ValueError, TypeError):
+                tenant_uuid = DEFAULT_TENANT_UUID
+            bundle_key, manifest_key = artifact_object_keys(s, bid, tenant_uuid)
             ck_path = checkpoint_path(s, job_id)
             wip_bundle = bundle_wip_path(s, job_id)
 

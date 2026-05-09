@@ -16,6 +16,9 @@ from devault.core.enums import JobKind, JobStatus, PluginName
 from devault.core.locking import release_policy_job_lock, try_acquire_policy_job_lock
 from devault.db.models import Artifact, Job
 from devault.db.session import SessionLocal
+from devault.security.oidc import try_decode_oidc_bearer
+from devault.security.policy import authentication_enabled
+from devault.security.token_resolve import resolve_bearer_token
 from devault.grpc.agent_version import (
     attach_control_plane_version_meta,
     evaluate_agent_version_gate,
@@ -24,6 +27,7 @@ from devault.server_capabilities import apply_server_capabilities
 from devault.grpc.rpc_governance import grpc_governance
 from devault.grpc_gen import agent_pb2, agent_pb2_grpc
 from devault.observability.metrics import (
+    BILLING_COMMITTED_BYTES_TOTAL,
     JOB_DURATION_SECONDS,
     JOB_TOTAL,
     MULTIPART_RESUME_GRANTS_TOTAL,
@@ -56,17 +60,31 @@ _ACTIVE_JOB_STATUSES = (
 
 
 def _auth(context: grpc.ServicerContext, settings: Settings) -> None:
-    if not settings.api_token:
-        return
-    meta = dict(context.invocation_metadata())
-    auth = meta.get("authorization") or meta.get("Authorization")
-    if not auth or not auth.startswith("Bearer "):
-        context.abort(grpc.StatusCode.UNAUTHENTICATED, "Bearer token required")
-        raise RuntimeError("unreachable")
-    token = auth[7:].strip()
-    if token != settings.api_token:
-        context.abort(grpc.StatusCode.UNAUTHENTICATED, "invalid token")
-        raise RuntimeError("unreachable")
+    db = SessionLocal()
+    try:
+        if not authentication_enabled(settings, db):
+            return
+        meta = dict(context.invocation_metadata())
+        auth = meta.get("authorization") or meta.get("Authorization")
+        if not auth or not auth.startswith("Bearer "):
+            context.abort(grpc.StatusCode.UNAUTHENTICATED, "Bearer token required")
+            raise RuntimeError("unreachable")
+        raw = auth[7:].strip()
+        ctx = try_decode_oidc_bearer(raw, settings)
+        if ctx is None:
+            try:
+                ctx = resolve_bearer_token(db, raw, legacy_api_token=settings.api_token)
+            except PermissionError:
+                context.abort(grpc.StatusCode.UNAUTHENTICATED, "invalid token")
+                raise RuntimeError("unreachable") from None
+        if ctx.role == "auditor":
+            context.abort(
+                grpc.StatusCode.PERMISSION_DENIED,
+                "auditor role cannot access agent gRPC",
+            )
+            raise RuntimeError("unreachable")
+    finally:
+        db.close()
 
 
 def reclaim_expired_job_leases(db: Session, settings: Settings) -> None:
@@ -157,6 +175,7 @@ def try_lease_next_job(db: Session, agent_id: uuid.UUID, settings: Settings) -> 
 
 def _lease_config_json(db: Session, job: Job) -> str:
     cfg = dict(job.config_snapshot or {})
+    cfg["tenant_id"] = str(job.tenant_id)
     if job.kind == JobKind.RESTORE.value and job.restore_artifact_id:
         art = db.get(Artifact, job.restore_artifact_id)
         if art:
@@ -332,7 +351,7 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
                 if request.intent == agent_pb2.STORAGE_INTENT_WRITE:
                     if job.kind != JobKind.BACKUP.value:
                         context.abort(grpc.StatusCode.INVALID_ARGUMENT, "WRITE only for backup jobs")
-                    bundle_key, manifest_key = artifact_object_keys(settings, job.id)
+                    bundle_key, manifest_key = artifact_object_keys(settings, job.id, job.tenant_id)
                     manifest_url = presign_put_object(
                         client, bucket=bucket, key=manifest_key, expires_in=ttl
                     )
@@ -636,6 +655,7 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
                                 "artifact objects missing",
                             )
                         art = Artifact(
+                            tenant_id=job.tenant_id,
                             job_id=job.id,
                             storage_backend=storage.backend_name,
                             bundle_key=bundle_key,
@@ -652,6 +672,9 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
                         job.status = JobStatus.SUCCESS.value
                         job.finished_at = datetime.now(timezone.utc)
                         JOB_TOTAL.labels(kind="backup", plugin=job.plugin, status="success").inc()
+                        BILLING_COMMITTED_BYTES_TOTAL.labels(tenant_id=str(job.tenant_id)).inc(
+                            max(0, int(request.size_bytes)),
+                        )
                     else:
                         job.status = JobStatus.SUCCESS.value
                         job.finished_at = datetime.now(timezone.utc)
@@ -661,7 +684,7 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
                         uid = job.bundle_wip_multipart_upload_id
                         if uid:
                             s3c = s3_client_from_settings(settings)
-                            bk, _mk = artifact_object_keys(settings, job.id)
+                            bk, _mk = artifact_object_keys(settings, job.id, job.tenant_id)
                             abort_multipart_upload_best_effort(
                                 s3c,
                                 bucket=settings.s3_bucket,

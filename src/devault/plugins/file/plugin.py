@@ -107,9 +107,9 @@ def _sha256_file(path: Path, chunk: int = 1024 * 1024) -> str:
     return h.hexdigest()
 
 
-def artifact_object_keys(settings: Settings, job_id: uuid.UUID) -> tuple[str, str]:
+def artifact_object_keys(settings: Settings, job_id: uuid.UUID, tenant_id: uuid.UUID) -> tuple[str, str]:
     """Stable S3 keys for a job artifact (control plane and agent must agree)."""
-    prefix = f"devault/{settings.env_name}/artifacts/{job_id}"
+    prefix = f"devault/{settings.env_name}/tenants/{tenant_id}/artifacts/{job_id}"
     return f"{prefix}/bundle.tar.gz", f"{prefix}/manifest.json"
 
 
@@ -189,7 +189,7 @@ def run_file_backup(
     settings: Settings,
     storage: Storage,
 ) -> BackupOutcome:
-    bundle_key, manifest_key = artifact_object_keys(settings, job.id)
+    bundle_key, manifest_key = artifact_object_keys(settings, job.id, job.tenant_id)
     tmp_path, manifest, size_bytes, checksum = _build_backup_tarball(
         job,
         settings,
@@ -412,7 +412,7 @@ def run_file_backup_with_presigned_urls(
     bundle_put_url: str,
     manifest_put_url: str,
 ) -> BackupOutcome:
-    bundle_key, manifest_key = artifact_object_keys(settings, job.id)
+    bundle_key, manifest_key = artifact_object_keys(settings, job.id, job.tenant_id)
     tmp_path, manifest, size_bytes, checksum = _build_backup_tarball(
         job,
         settings,

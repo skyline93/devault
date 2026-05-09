@@ -33,6 +33,7 @@ def fire_scheduled_backup(schedule_id: str) -> None:
             return
 
         job = Job(
+            tenant_id=policy.tenant_id,
             kind=JobKind.BACKUP.value,
             plugin=policy.plugin,
             status=JobStatus.PENDING.value,

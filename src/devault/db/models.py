@@ -3,17 +3,57 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, String, Text, func
+from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from devault.db.base import Base
 
 
+class ControlPlaneApiKey(Base):
+    """Hashed REST/gRPC Bearer tokens with RBAC role and optional tenant allow-list."""
+
+    __tablename__ = "control_plane_api_keys"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    role: Mapped[str] = mapped_column(String(32), nullable=False)
+    allowed_tenant_ids: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+
+class Tenant(Base):
+    __tablename__ = "tenants"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    slug: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    policies: Mapped[list["Policy"]] = relationship("Policy", back_populates="tenant")
+    jobs: Mapped[list["Job"]] = relationship("Job", back_populates="tenant")
+
+
 class Policy(Base):
     __tablename__ = "policies"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     plugin: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
     config: Mapped[dict] = mapped_column(JSONB, nullable=False)
@@ -25,6 +65,7 @@ class Policy(Base):
     )
     updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    tenant: Mapped["Tenant"] = relationship("Tenant", back_populates="policies")
     schedules: Mapped[list["Schedule"]] = relationship(
         "Schedule",
         back_populates="policy",
@@ -36,6 +77,12 @@ class Schedule(Base):
     __tablename__ = "schedules"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
     policy_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("policies.id", ondelete="CASCADE"),
@@ -56,14 +103,21 @@ class Schedule(Base):
 
 class Job(Base):
     __tablename__ = "jobs"
+    __table_args__ = (UniqueConstraint("tenant_id", "idempotency_key", name="uq_jobs_tenant_id_idempotency_key"),)
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
     kind: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
     plugin: Mapped[str] = mapped_column(String(32), nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
     policy_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     trigger: Mapped[str] = mapped_column(String(32), nullable=False, default="manual")
-    idempotency_key: Mapped[str | None] = mapped_column(String(255), nullable=True, unique=True)
+    idempotency_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
     config_snapshot: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     restore_artifact_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -76,11 +130,11 @@ class Job(Base):
         DateTime(timezone=True),
         nullable=True,
     )
-    # In-progress S3 multipart bundle upload (Agent resume across restarts; cleared on terminal CompleteJob).
     bundle_wip_multipart_upload_id: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     bundle_wip_content_length: Mapped[int | None] = mapped_column(BigInteger(), nullable=True)
     bundle_wip_part_size_bytes: Mapped[int | None] = mapped_column(BigInteger(), nullable=True)
 
+    tenant: Mapped["Tenant"] = relationship("Tenant", back_populates="jobs")
     artifact: Mapped["Artifact | None"] = relationship(
         "Artifact",
         back_populates="job",
@@ -92,6 +146,12 @@ class Artifact(Base):
     __tablename__ = "artifacts"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
     job_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("jobs.id", ondelete="CASCADE"),

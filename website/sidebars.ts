@@ -64,6 +64,8 @@ const sidebars: SidebarsConfig = {
         'reference/http-api',
         'reference/grpc-services',
         'reference/ports-and-paths',
+        'reference/tenants',
+        'reference/access-control',
       ],
     },
     {

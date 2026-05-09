@@ -10,6 +10,9 @@ description: 预签名、直传与桶生命周期约定
 
 当 `DEVAULT_STORAGE_BACKEND=s3` 时，控制面为 Agent 生成 **预签名 URL**，Agent **直接**与 S3 兼容存储通信上传/下载备份对象，减轻控制面带宽压力。
 
+文件备份对象键包含 **`tenant_id`** 段，与元数据表一致，形如  
+`devault/<env>/tenants/<tenant_id>/artifacts/<job_id>/bundle.tar.gz`（及 `manifest.json`）。详见 [租户模型](../reference/tenants.md)。
+
 ## 桶须事先存在
 
 应用**不会在运行时调用 `CreateBucket`**，以便：

@@ -29,6 +29,8 @@ Docker Compose 中 **仅 api** 在启动时执行 `alembic upgrade head`（**sch
 | `http://127.0.0.1:8000/metrics` | Prometheus 指标 |
 | `http://127.0.0.1:8000/ui/jobs` | 简易 UI：策略/调度 CRUD、列表内「立即备份」「恢复」、任务取消/重试（Basic 密码为 `DEVAULT_API_TOKEN`） |
 | `/api/v1/policies`、`/api/v1/schedules` | 策略与 Cron 定时 CRUD |
+| `/api/v1/tenants`、请求头 `X-DeVault-Tenant-Id` | 多租户：其余 `/api/v1/*` 资源按租户隔离（省略头时用 `DEVAULT_DEFAULT_TENANT_SLUG`，默认 `default`）；见文档站 [租户](website/docs/reference/tenants.md) |
+| `devault-admin create-api-key` | 控制面元数据库 **API 密钥**（RBAC 角色 + 可选租户范围）；见 [访问控制](website/docs/reference/access-control.md) |
 
 定时任务由 **`scheduler` 服务**（`devault-scheduler`）只负责**创建待处理任务**；**`agent` 服务**通过 gRPC **拉取租约**并执行备份/恢复，经预签名 URL 与 **MinIO（S3）** 直传。控制面 `DEVAULT_STORAGE_BACKEND` 需为 **`s3`** 才能生成预签名。
 

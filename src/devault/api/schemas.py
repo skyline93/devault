@@ -7,6 +7,33 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
+class TenantCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=255)
+    slug: str = Field(
+        ...,
+        min_length=1,
+        max_length=64,
+        description="Lowercase URL-safe identifier (e.g. acme-corp).",
+    )
+
+    @field_validator("slug")
+    @classmethod
+    def slug_normalized(cls, v: str) -> str:
+        s = v.strip().lower()
+        if not s.replace("-", "").replace("_", "").isalnum():
+            raise ValueError("slug must be alphanumeric with optional hyphens/underscores")
+        return s
+
+
+class TenantOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    slug: str
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 class FileBackupConfigV1(BaseModel):
     """File-plugin backup configuration (version 1)."""
 
@@ -74,6 +101,7 @@ class JobOut(BaseModel):
     """Job row returned by the API."""
 
     id: uuid.UUID
+    tenant_id: uuid.UUID
     kind: str
     plugin: str
     status: str
@@ -96,6 +124,7 @@ class ArtifactOut(BaseModel):
     """Stored backup artifact metadata."""
 
     id: uuid.UUID
+    tenant_id: uuid.UUID
     job_id: uuid.UUID
     storage_backend: str
     bundle_key: str
@@ -131,6 +160,7 @@ class PolicyPatch(BaseModel):
 
 class PolicyOut(BaseModel):
     id: uuid.UUID
+    tenant_id: uuid.UUID
     name: str
     plugin: str
     config: dict[str, Any]
@@ -159,6 +189,7 @@ class SchedulePatch(BaseModel):
 
 class ScheduleOut(BaseModel):
     id: uuid.UUID
+    tenant_id: uuid.UUID
     policy_id: uuid.UUID
     cron_expression: str
     timezone: str

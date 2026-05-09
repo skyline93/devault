@@ -67,6 +67,29 @@ class Settings(BaseSettings):
 
     env_name: str = Field(default="dev", description="Key prefix segment dev|prod")
 
+    default_tenant_slug: str = Field(
+        default="default",
+        description="When HTTP header X-DeVault-Tenant-Id is omitted, resolve tenant by this slug",
+    )
+
+    # --- Optional OIDC (Bearer JWT from enterprise IdP) ---
+    oidc_issuer: str | None = Field(
+        default=None,
+        description="If set with oidc_audience, try OIDC JWT validation before static API tokens",
+    )
+    oidc_audience: str | None = Field(
+        default=None,
+        description="JWT aud claim required when validating OIDC tokens",
+    )
+    oidc_role_claim: str = Field(
+        default="devault_role",
+        description="JWT claim for role: admin | operator | auditor",
+    )
+    oidc_tenant_ids_claim: str = Field(
+        default="devault_tenant_ids",
+        description="JWT claim: list of tenant UUID strings (ignored for admin; required scope for operator/auditor)",
+    )
+
     allowed_path_prefixes: str | None = Field(
         default=None,
         description="Comma-separated absolute path prefixes; if set, backup paths must match one",

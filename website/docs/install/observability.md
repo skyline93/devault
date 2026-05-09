@@ -16,6 +16,8 @@ description: Prometheus、健康检查与日志
 2. 浏览器或 `curl` 访问 `http://<host>:8000/metrics`
 3. 在 Prometheus UI 中查询相关指标
 
+与租户/访问控制相关的增量指标包括 **`devault_http_requests_total`**（`method`、`path_template`）与 **`devault_billing_committed_backup_bytes_total`**（`tenant_id`，备份成功提交时）；详见 [访问控制与 RBAC](../reference/access-control.md)。
+
 ## 健康检查
 
 HTTP 层提供用于编排的就绪类端点（如 Compose 中使用的 **`/healthz`**）。部署时应将负载均衡/滚动更新与此类端点绑定。

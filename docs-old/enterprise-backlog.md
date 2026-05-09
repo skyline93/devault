@@ -139,11 +139,11 @@
 
 | 状态 | 优先级 | 待办项 | 说明与验收要点 |
 |------|--------|--------|----------------|
-| [ ] | P0 | **租户模型** | `Tenant`（或 Organization）实体；Job、Policy、Schedule、Artifact 外键关联；对象存储 key 含 `tenant_id` 段。 |
-| [ ] | P0 | **API 与 UI 作用域** | 所有读写按租户过滤；禁止跨租户 ID 枚举。 |
-| [ ] | P1 | **RBAC** | 角色：如 Admin、Operator、Auditor；权限矩阵（创建策略、触发备份、恢复、只读审计）。 |
-| [ ] | P1 | **SSO / OIDC（可选）** | 替代或并存于 HTTP Basic；与企业 IdP 集成。 |
-| [ ] | P2 | **计费与用量埋点** | 存储字节、API 调用、作业次数（若 SaaS 化）。 |
+| [x] | P0 | **租户模型** | `Tenant` 实体；`policies` / `jobs` / `schedules` / `artifacts` 外键 `tenant_id`；S3 键 `devault/<env>/tenants/<tenant_id>/artifacts/<job_id>/…`；HTTP 头 **`X-DeVault-Tenant-Id`** 或 **`DEVAULT_DEFAULT_TENANT_SLUG`**；迁移 **`0005`**；文档 **`website/docs/reference/tenants.md`**。 |
+| [x] | P0 | **API 与 UI 作用域** | REST/UI 在 **`get_effective_tenant` / `get_effective_tenant_ui`** 解析租户后调用 **`AuthContext.ensure_tenant_access`**；跨租户 UUID 返回 **403/404**（与租户不存在统一为 404 的策略保持不变）。 |
+| [x] | P1 | **RBAC** | 角色 **`admin` / `operator` / `auditor`**；**`control_plane_api_keys`**（迁移 **`0006`**，`SHA256` 存证）；写操作 **`require_write`** / 创建租户 **`require_admin`**；UI 写操作 **`require_write_ui`**；**`devault-admin create-api-key`**。文档 **`website/docs/reference/access-control.md`**。 |
+| [x] | P1 | **SSO / OIDC（可选）** | **`DEVAULT_OIDC_ISSUER`** / **`DEVAULT_OIDC_AUDIENCE`** 与 JWKS 校验；角色与租户声明可配置；与静态令牌、DB 密钥链式解析。 |
+| [x] | P2 | **计费与用量埋点** | Prometheus：**`devault_http_requests_total`**（`method`、`path_template`）、**`devault_billing_committed_backup_bytes_total`**（`tenant_id`，于 **`CompleteJob`** 成功备份时按 `size_bytes` 递增）。 |
 
 **依赖**：第一节的身份模型应预留 `tenant_id` 与主体绑定。
 
@@ -278,3 +278,5 @@
 | 2026-05-09 | **M1·三**：**`docs/compatibility.json`**、**`docs/RELEASE.md`**、**`verify_compatibility_matrix.py`**、CI **`matrix.suite`**、**`server_capabilities`**（proto + `server_capabilities.py`）、manifest **`devault_release` / `grpc_proto_package`**；**`website/docs/development/compatibility.md`**。 |
 | 2026-05-09 | §3.2 增补 **可增强** 待办：多版本镜像 E2E CI、**`bump_release`** 与 **`compatibility.json`** 联动、Agent **`server_capabilities`** 降级路径（均为 `[ ]`）。 |
 | 2026-05-09 | **M1·二 P2**：控制面 **STS / AssumeRole** 访问 S3（`s3_client.py`、配置项、单测）；文档站 **`storage/sts-assume-role.md`**；**`docs-old/s3-data-plane.md`** 与 **`enterprise-backlog.md`** 对应行勾选。 |
+| 2026-05-09 | **M1·四 P0**：**租户模型**落地（`tenants` 表、各资源 `tenant_id`、默认租户种子、幂等键按租户唯一、**`GET/POST /api/v1/tenants`**、对象键含租户段、Lease `config_json` 含 **`tenant_id`**）；文档 **`reference/tenants.md`** 及配置/API/对象存储说明更新。 |
+| 2026-05-09 | **M1·四**：**API/UI 作用域强化**、**RBAC**（`control_plane_api_keys` + 三角色）、**可选 OIDC JWT**、**计费向 Prometheus**（HTTP 计数 + 备份提交字节）；**`devault-admin`** CLI；文档 **`reference/access-control.md`** 与配置/安全页更新。 |

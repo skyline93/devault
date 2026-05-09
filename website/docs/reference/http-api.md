@@ -22,5 +22,8 @@ description: OpenAPI 入口与主要资源
 | `/api/v1/schedules` | Cron 调度 CRUD |
 | `/api/v1/jobs` | 备份/恢复任务创建与查询 |
 | `/api/v1/artifacts` | 可恢复产物列表 |
+| `/api/v1/tenants` | 租户列表与创建（不依赖 `X-DeVault-Tenant-Id`） |
+
+上述除 **`/tenants`** 外的资源均按 [租户与 HTTP 作用域](./tenants.md) 限定在某一租户内。
 
 鉴权见 [API 访问控制](../security/api-access.md)。

@@ -23,3 +23,7 @@ description: Jobs UI 能力范围与认证方式
 - **立即备份**、**恢复**、任务**取消**/**重试**
 
 复杂运维场景请优先使用 API、CLI 或上层平台集成。
+
+## 与租户作用域的关系
+
+浏览器表单请求**不会**自动携带 `X-DeVault-Tenant-Id`，因此 UI 与未带头部的 REST 调用一样，使用 **`DEVAULT_DEFAULT_TENANT_SLUG`**（默认 **`default`**）解析租户。多租户运维请用 API 带头或扩展 UI。详见 [租户模型](../reference/tenants.md)。

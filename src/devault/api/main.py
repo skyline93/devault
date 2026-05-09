@@ -2,14 +2,15 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import Response
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from devault import __version__
-from devault.api.routes import artifacts, jobs, policies, schedules, ui
+from devault.api.routes import artifacts, jobs, policies, schedules, tenants, ui
 from devault.grpc.server import start_grpc_server, stop_grpc_server
 from devault.release_meta import GRPC_API_PACKAGE
+from devault.observability.metrics import HTTP_REQUESTS_TOTAL
 from devault.settings import get_settings
 
 _OPENAPI_DESCRIPTION = """
@@ -36,8 +37,12 @@ _OPENAPI_TAGS = [
         "description": "CRUD for cron schedules attached to policies (driven by devault-scheduler).",
     },
     {
+        "name": "tenants",
+        "description": "List and create tenants; other resources are scoped per `X-DeVault-Tenant-Id` (or default slug).",
+    },
+    {
         "name": "ui",
-        "description": "Minimal HTML forms for the same operations (HTTP Basic: password = DEVAULT_API_TOKEN).",
+        "description": "Minimal HTML forms (HTTP Basic password = API token or DB API key secret).",
     },
 ]
 
@@ -61,7 +66,17 @@ app.include_router(jobs.router, prefix="/api/v1")
 app.include_router(artifacts.router, prefix="/api/v1")
 app.include_router(policies.router, prefix="/api/v1")
 app.include_router(schedules.router, prefix="/api/v1")
+app.include_router(tenants.router, prefix="/api/v1")
 app.include_router(ui.router)
+
+
+@app.middleware("http")
+async def _count_http_requests(request: Request, call_next):
+    response = await call_next(request)
+    route = request.scope.get("route")
+    path_template = getattr(route, "path", request.url.path) if route else request.url.path
+    HTTP_REQUESTS_TOTAL.labels(request.method, path_template).inc()
+    return response
 
 
 @app.get("/metrics")

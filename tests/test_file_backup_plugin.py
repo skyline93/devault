@@ -3,6 +3,7 @@ from __future__ import annotations
 import uuid
 from pathlib import Path
 
+from devault.db.constants import DEFAULT_TENANT_UUID
 from devault.db.models import Job
 from devault.plugins.file import run_file_backup
 from devault.settings import Settings
@@ -16,6 +17,7 @@ def test_run_file_backup_tar_gz_to_local_storage(tmp_path: Path) -> None:
 
     job = Job(
         id=uuid.uuid4(),
+        tenant_id=DEFAULT_TENANT_UUID,
         kind="backup",
         plugin="file",
         status="pending",

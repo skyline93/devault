@@ -17,6 +17,18 @@ description: 常用环境变量分组说明
 | `DEVAULT_API_TOKEN` | HTTP Bearer 与简易 UI Basic 密码 |
 | `DEVAULT_GRPC_LISTEN` | 绑定 gRPC 的 `host:port`（如 `0.0.0.0:50051`） |
 | `DEVAULT_ENV_NAME` | 环境名标签（指标等） |
+| `DEVAULT_DEFAULT_TENANT_SLUG` | 未带 `X-DeVault-Tenant-Id` 时按此 slug 解析租户（默认 `default`）；须与迁移种子一致 |
+
+### OIDC（可选，Bearer JWT）
+
+与静态令牌、**`control_plane_api_keys`** 并存；Bearer 为 JWT 时优先按 OIDC 校验。详见 [访问控制与 RBAC](../reference/access-control.md)。
+
+| 变量 | 说明 |
+|------|------|
+| `DEVAULT_OIDC_ISSUER` | 发行方 URL（无尾斜杠亦可），用于 `/.well-known/openid-configuration` |
+| `DEVAULT_OIDC_AUDIENCE` | 必填 `aud` |
+| `DEVAULT_OIDC_ROLE_CLAIM` | 默认 `devault_role`：`admin` \| `operator` \| `auditor` |
+| `DEVAULT_OIDC_TENANT_IDS_CLAIM` | 默认 `devault_tenant_ids`：非 admin 时的租户 UUID 列表 |
 | `DEVAULT_SERVER_GIT_SHA` | （可选）写入 **`GET /version`** 的 `git_sha` 字段，便于与镜像 digest 对齐 |
 
 ### gRPC 版本策略（控制面）

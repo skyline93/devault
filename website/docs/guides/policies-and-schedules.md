@@ -8,7 +8,7 @@ description: 策略、Cron 调度与并发语义
 
 ## 策略（Policy）
 
-策略描述**备份什么**与**如何备份**（插件、`config` 等）。HTTP 资源路径为 **`/api/v1/policies`**（详见 OpenAPI）。
+策略描述**备份什么**与**如何备份**（插件、`config` 等）。HTTP 资源路径为 **`/api/v1/policies`**（详见 OpenAPI）。策略归属某一**租户**（`tenant_id`）；API 通过 **`X-DeVault-Tenant-Id`** 或默认 slug 限定作用域，见 [租户模型](../reference/tenants.md)。
 
 ## 调度（Schedule）
 

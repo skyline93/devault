@@ -25,3 +25,15 @@ MULTIPART_RESUME_GRANTS_TOTAL = Counter(
     "devault_multipart_resume_grants_total",
     "Storage grants that continued an in-flight multipart upload (ListParts + partial presigns)",
 )
+
+HTTP_REQUESTS_TOTAL = Counter(
+    "devault_http_requests_total",
+    "HTTP API requests (control plane)",
+    ["method", "path_template"],
+)
+
+BILLING_COMMITTED_BYTES_TOTAL = Counter(
+    "devault_billing_committed_backup_bytes_total",
+    "Declared backup artifact bytes on successful CompleteJob (usage / chargeback signal)",
+    ["tenant_id"],
+)
