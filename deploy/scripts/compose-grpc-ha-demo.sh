@@ -17,7 +17,12 @@ docker compose \
   -f docker-compose.yml \
   -f docker-compose.grpc-tls.yml \
   -f docker-compose.grpc-ha-example.yml \
-  up --build -d --scale api=3
+  pull
+docker compose \
+  -f docker-compose.yml \
+  -f docker-compose.grpc-tls.yml \
+  -f docker-compose.grpc-ha-example.yml \
+  up -d --scale api=3
 
 docker compose \
   -f docker-compose.yml \

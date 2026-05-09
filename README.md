@@ -10,12 +10,12 @@ From the repository root:
 
 ```bash
 cd deploy
-docker compose up --build -d
+docker compose pull && docker compose up -d
 ```
 
 Then open **Swagger** at <http://127.0.0.1:8000/docs>. In Compose, database migrations run on **api** startup (`alembic upgrade head`).
 
-The same `docker-compose.yml` sets both `build` (for this checkout) and `image: ${DEVAULT_IMAGE:-glf9832/devault:latest}` so `docker compose up --build` tags the result; override `DEVAULT_IMAGE` for another registry or name. For a **pre-built** image only, set `DEVAULT_IMAGE` and run `docker compose pull` / `up` without `--build`.
+`docker-compose.yml` uses **pre-built images only** (`image: ${DEVAULT_IMAGE:-glf9832/devault:latest}` for api, scheduler, and agent). Override **`DEVAULT_IMAGE`** for another registry or tag. Build the image separately (`make docker-build-push`, CI, etc.); Compose does not run `build`.
 
 ### Remote install (no `git clone`)
 
@@ -27,7 +27,7 @@ curl -fsSL https://raw.githubusercontent.com/skyline93/devault/main/deploy/scrip
 
 Optional: `DEVAULT_REF` (branch or tag, default `main`) to pin which revision of `deploy/` is fetched; `DEVAULT_INSTALL_BASE_URL` only if you mirror the `deploy/` tree elsewhere.
 
-From a **local clone**, `./deploy/scripts/install.sh` runs inside `deploy/` and uses **`docker compose up --build`** by default. `--dir` is ignored in that mode.
+From a **local clone**, `./deploy/scripts/install.sh` runs inside `deploy/`, pulls images, then **`docker compose up -d`**. `--dir` is ignored in that mode.
 
 Maintainers: GitHub Actions secrets `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` (typically the Docker Hub user that owns `glf9832/devault`), optional repository variable `DOCKERHUB_IMAGE` to push under a different repo name. Workflow: `.github/workflows/docker-publish.yml` (default push target: `glf9832/devault`).
 

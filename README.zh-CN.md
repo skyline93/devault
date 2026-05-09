@@ -10,12 +10,12 @@
 
 ```bash
 cd deploy
-docker compose up --build -d
+docker compose pull && docker compose up -d
 ```
 
 启动后可在本机访问 **Swagger**：<http://127.0.0.1:8000/docs>。数据库迁移在 Compose 中由 **api** 服务在启动时执行（`alembic upgrade head`）。
 
-同一份 `docker-compose.yml` 同时包含 **`build`**（本仓库源码构建）与 **`image: ${DEVAULT_IMAGE:-glf9832/devault:latest}`**；`docker compose up --build` 会把构建结果打上该镜像名。若只用预构建镜像，设置 **`DEVAULT_IMAGE`** 后执行 `pull` / `up`（不加 `--build`）即可。
+`docker-compose.yml` **仅使用预构建镜像**（api / scheduler / agent 的 **`image: ${DEVAULT_IMAGE:-glf9832/devault:latest}`**）。更换仓库或标签请设置 **`DEVAULT_IMAGE`**。镜像需用 **`Makefile`**、CI 或 `docker build` 单独构建；Compose 中**没有** `build` 段。
 
 ### 远程一键安装（无需 `git clone`）
 
@@ -27,7 +27,7 @@ curl -fsSL https://raw.githubusercontent.com/skyline93/devault/main/deploy/scrip
 
 可选：`DEVAULT_REF` 指定分支或 tag（默认 `main`）以固定所拉取的 `deploy/` 版本；仅在镜像了 `deploy/` 目录时才需要 `DEVAULT_INSTALL_BASE_URL`。更多见 `deploy/scripts/install.sh` 头部注释。
 
-**本地克隆**：执行 `./deploy/scripts/install.sh` 会在仓库的 **`deploy/`** 目录内运行，默认 **`docker compose up --build`**；`--dir` 在此模式下会被忽略。
+**本地克隆**：执行 `./deploy/scripts/install.sh` 会在仓库的 **`deploy/`** 目录内先 **`compose pull`** 再 **`up -d`**；`--dir` 在此模式下会被忽略。
 
 维护者：GitHub Actions 密钥 `DOCKERHUB_USERNAME`、`DOCKERHUB_TOKEN`（一般为拥有 `glf9832/devault` 的 Docker Hub 账号），可选仓库变量 `DOCKERHUB_IMAGE` 以推送其它镜像名。工作流：`.github/workflows/docker-publish.yml`（默认推送 `glf9832/devault`）。
 

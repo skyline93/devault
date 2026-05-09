@@ -12,10 +12,10 @@ description: 使用 Docker Compose 最短路径跑通备份与恢复
 
 ```bash
 cd deploy
-docker compose up --build -d
+docker compose pull && docker compose up -d
 ```
 
-Compose 会拉起 PostgreSQL、Redis、MinIO、一次性 **minio-init** 建桶、**api**（含 HTTP 与 gRPC）、**scheduler**、**agent** 等。`api` 启动时会执行 `alembic upgrade head`。
+Compose 会拉起 PostgreSQL、Redis、MinIO、一次性 **minio-init** 建桶、**api**（含 HTTP 与 gRPC）、**scheduler**、**agent** 等；应用镜像为预构建 **`DEVAULT_IMAGE`**（默认见 `docker-compose.yml`）。`api` 启动时会执行 `alembic upgrade head`。
 
 默认将 `deploy/demo_data/` 挂载到 agent 容器的只读 **`/data`**，恢复卷挂载为 **`/restore`**。
 

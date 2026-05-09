@@ -1,8 +1,6 @@
-# Pre-built image: default Docker Hub glf9832/devault; override DEVAULT_IMAGE for other registries, e.g.
-#   registry.cn-shenzhen.aliyuncs.com/greene/devault:latest-amd64
-# Local build from checkout: `cd deploy && docker compose up --build -d` (default tag names the build).
-# When both `image` and `build` are set, `compose up --build` builds and tags as `image`; `up` without
-# `--build` uses a pulled or existing image (no source tree needed next to this file).
+# Pre-built images only (no compose `build`). Default app image: Docker Hub glf9832/devault.
+# Override: DEVAULT_IMAGE=registry.example.com/acme/devault:tag
+# Run: cd deploy && docker compose pull && docker compose up -d
 
 services:
   postgres:
@@ -63,9 +61,6 @@ services:
     restart: "no"
 
   api:
-    build:
-      context: ..
-      dockerfile: deploy/Dockerfile
     image: ${DEVAULT_IMAGE:-glf9832/devault:latest}
     command: >
       sh -c "alembic upgrade head &&
@@ -108,9 +103,6 @@ services:
       start_period: 120s
 
   scheduler:
-    build:
-      context: ..
-      dockerfile: deploy/Dockerfile
     image: ${DEVAULT_IMAGE:-glf9832/devault:latest}
     # Do not run alembic here: api already runs `alembic upgrade head` on startup.
     # Concurrent migrations from multiple containers race on CREATE alembic_version.
@@ -149,9 +141,6 @@ services:
   # with DEVAULT_GRPC_REGISTRATION_SECRET (must match api) to obtain the shared API token in memory.
   # To skip Register and pin a token, set DEVAULT_API_TOKEN on the agent explicitly.
   agent:
-    build:
-      context: ..
-      dockerfile: deploy/Dockerfile
     image: ${DEVAULT_IMAGE:-glf9832/devault:latest}
     command: devault-agent
     environment:

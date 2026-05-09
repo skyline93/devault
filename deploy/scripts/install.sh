@@ -6,7 +6,6 @@
 #
 # Optional flags:
 #   --dir PATH   Install directory (default: current directory). Ignored when run from a local checkout.
-#   --build      Local checkout only: force "docker compose up --build".
 #   --help
 #
 # Optional environment (only when you need to deviate from defaults):
@@ -22,13 +21,12 @@ set -eu
 
 INSTALL_DIR="${DEVAULT_INSTALL_DIR:-${PWD}}"
 DIR_FLAG=0
-USE_BUILD=0
 POS_BASE=""
 
 usage() {
   echo "Usage: curl -fsSL https://raw.githubusercontent.com/skyline93/devault/main/deploy/scripts/install.sh | sh"
-  echo "       ./deploy/scripts/install.sh [--build]"
-  echo "Flags: --dir PATH | --build | --help"
+  echo "       ./deploy/scripts/install.sh"
+  echo "Flags: --dir PATH | --help"
 }
 
 while [ "$#" -gt 0 ]; do
@@ -37,10 +35,6 @@ while [ "$#" -gt 0 ]; do
       DIR_FLAG=1
       INSTALL_DIR="$2"
       shift 2
-      ;;
-    --build)
-      USE_BUILD=1
-      shift
       ;;
     -h | --help)
       usage
@@ -121,14 +115,6 @@ detect_arch_suffix() {
   esac
 }
 
-resolve_effective_image() {
-  if [ -n "${DEVAULT_IMAGE:-}" ]; then
-    printf '%s' "$DEVAULT_IMAGE"
-    return
-  fi
-  return 1
-}
-
 env_set_devault_image() {
   _val="$1"
   tmp="$(mktemp)"
@@ -162,10 +148,6 @@ else
 fi
 
 if [ "$remote" -eq 1 ]; then
-  if [ "$USE_BUILD" -eq 1 ]; then
-    echo "Cannot use --build with a remote compose file (no build context). Run from a git checkout to build." >&2
-    exit 1
-  fi
   mkdir -p "$INSTALL_DIR"
   cd "$INSTALL_DIR"
   echo ">> Install directory: $(pwd)"
@@ -195,39 +177,23 @@ if [ "$remote" -eq 1 ]; then
   env_set_devault_image "$img"
   export DEVAULT_IMAGE="$img"
   echo ">> Using image: $DEVAULT_IMAGE"
+elif [ -n "${DEVAULT_IMAGE:-}" ]; then
+  export DEVAULT_IMAGE="$DEVAULT_IMAGE"
+  echo ">> Using image: $DEVAULT_IMAGE"
 fi
 
-if [ "$remote" -eq 0 ]; then
-  if [ "$USE_BUILD" -eq 1 ] || ! resolve_effective_image >/dev/null 2>&1; then
-    echo ">> Starting stack (build from source)..."
-    # shellcheck disable=SC2086
-    $DOCKER_COMPOSE -f "$COMPOSE_FILE" up --build -d
-  else
-    img=$(resolve_effective_image)
-    export DEVAULT_IMAGE="$img"
-    echo ">> Using image: $DEVAULT_IMAGE"
-    if $DOCKER_COMPOSE -f "$COMPOSE_FILE" pull --help 2>&1 | grep -q -- '--policy'; then
-      # shellcheck disable=SC2086
-      $DOCKER_COMPOSE -f "$COMPOSE_FILE" pull --policy missing || true
-    else
-      # shellcheck disable=SC2086
-      $DOCKER_COMPOSE -f "$COMPOSE_FILE" pull || true
-    fi
-    # shellcheck disable=SC2086
-    $DOCKER_COMPOSE -f "$COMPOSE_FILE" up -d
-  fi
-else
-  if $DOCKER_COMPOSE -f "$COMPOSE_FILE" pull --help 2>&1 | grep -q -- '--policy'; then
-    # shellcheck disable=SC2086
-    $DOCKER_COMPOSE -f "$COMPOSE_FILE" pull --policy missing
-  else
-    # shellcheck disable=SC2086
-    $DOCKER_COMPOSE -f "$COMPOSE_FILE" pull
-  fi
-  echo ">> Starting stack..."
+echo ">> Pulling images..."
+if $DOCKER_COMPOSE -f "$COMPOSE_FILE" pull --help 2>&1 | grep -q -- '--policy'; then
   # shellcheck disable=SC2086
-  $DOCKER_COMPOSE -f "$COMPOSE_FILE" up -d
+  $DOCKER_COMPOSE -f "$COMPOSE_FILE" pull --policy missing || true
+else
+  # shellcheck disable=SC2086
+  $DOCKER_COMPOSE -f "$COMPOSE_FILE" pull || true
 fi
+
+echo ">> Starting stack..."
+# shellcheck disable=SC2086
+$DOCKER_COMPOSE -f "$COMPOSE_FILE" up -d
 
 echo ""
 echo "DeVault is up. Swagger: http://127.0.0.1:8000/docs"

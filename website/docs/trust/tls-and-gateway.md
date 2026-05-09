@@ -15,7 +15,8 @@ bash scripts/gen_grpc_dev_tls.sh
 ## Compose 叠加
 
 ```bash
-docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.grpc-tls.yml up --build
+docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.grpc-tls.yml pull
+docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.grpc-tls.yml up -d
 ```
 
 典型：**Agent → 网关 TLS**，网关 → **`api:50051` 明文 gRPC**。

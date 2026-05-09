@@ -12,7 +12,7 @@ description: 本地与演示环境的服务角色与启动方式
 
 ```bash
 cd deploy
-docker compose up --build -d
+docker compose pull && docker compose up -d
 ```
 
 ## 可选：多实例 `api`（gRPC 负载均衡）

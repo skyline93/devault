@@ -1,5 +1,5 @@
 # 单源依赖：仅从 pyproject.toml 安装。
-# pip 缓存需 BuildKit：`DOCKER_BUILDKIT=1 docker compose build`（Docker Desktop 默认已开启）
+# pip 缓存需 BuildKit：`DOCKER_BUILDKIT=1 docker build -f deploy/Dockerfile .` 或 `make docker-build`（Docker Desktop 默认已开启）
 FROM python:3.12-slim
 
 WORKDIR /app

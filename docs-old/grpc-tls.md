@@ -48,7 +48,7 @@
 
 ```bash
 bash scripts/gen_grpc_dev_tls.sh
-docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.grpc-tls.yml up --build
+docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.grpc-tls.yml pull && docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.grpc-tls.yml up -d
 ```
 
 证书输出目录：`deploy/tls/dev/`（已在 `.gitignore` 中忽略）。`grpc-gateway` 监听 **50052**（TLS），管理接口 **9901**。
