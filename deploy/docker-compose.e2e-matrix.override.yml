@@ -1,0 +1,17 @@
+# 与 deploy/docker-compose.yml 叠加：使用预构建镜像（CI 多版本矩阵 / 本地联调）。
+# 需设置 DEVAULT_E2E_CP_IMAGE、DEVAULT_E2E_AGENT_IMAGE（控制面与 scheduler 共用 CP 镜像）。
+# 示例：
+#   export DEVAULT_E2E_CP_IMAGE=devault-e2e-cp:local DEVAULT_E2E_AGENT_IMAGE=devault-e2e-agent:local
+#   docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.e2e-matrix.override.yml up -d --no-build --wait
+#
+# Compose 2.24+：`build: !reset` 去掉基文件中的 build，避免覆盖 image 时仍触发本地构建。
+services:
+  api:
+    image: ${DEVAULT_E2E_CP_IMAGE:?Set DEVAULT_E2E_CP_IMAGE}
+    build: !reset
+  scheduler:
+    image: ${DEVAULT_E2E_CP_IMAGE:?}
+    build: !reset
+  agent:
+    image: ${DEVAULT_E2E_AGENT_IMAGE:?Set DEVAULT_E2E_AGENT_IMAGE}
+    build: !reset

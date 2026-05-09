@@ -58,6 +58,11 @@ MULTIPART_RESUME_GRANTS_TOTAL = Counter(
     "Storage grants that continued an in-flight multipart upload (ListParts + partial presigns)",
 )
 
+MULTIPART_ENCRYPTED_MPU_COMPLETES_TOTAL = Counter(
+    "devault_multipart_encrypted_mpu_completes_total",
+    "Successful backup CompleteJob where bundle used S3 multipart and manifest carried encryption",
+)
+
 HTTP_REQUESTS_TOTAL = Counter(
     "devault_http_requests_total",
     "HTTP API requests (control plane)",

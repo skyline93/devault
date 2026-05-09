@@ -31,6 +31,7 @@ from devault.observability.metrics import (
     BILLING_COMMITTED_BYTES_TOTAL,
     JOB_DURATION_SECONDS,
     JOB_TOTAL,
+    MULTIPART_ENCRYPTED_MPU_COMPLETES_TOTAL,
     MULTIPART_RESUME_GRANTS_TOTAL,
     agent_error_class,
     job_terminal_label_values,
@@ -747,6 +748,8 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
                             )
                             raise RuntimeError("unreachable")
                         encrypted_flag = bool(mf.get("encryption"))
+                        if mpu_id and mpu_json and encrypted_flag:
+                            MULTIPART_ENCRYPTED_MPU_COMPLETES_TOTAL.inc()
                         finished = datetime.now(timezone.utc)
                         retain_until = retain_until_from_backup_config(
                             job.config_snapshot or {},

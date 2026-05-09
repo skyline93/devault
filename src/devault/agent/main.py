@@ -22,6 +22,7 @@ from devault.plugins.file.multipart_wip import (
     clear_job_multipart_state,
 )
 from devault.db.constants import DEFAULT_TENANT_UUID
+from devault.plugins.file.multipart_resume import validate_multipart_resume_checkpoint
 from devault.plugins.file.plugin import (
     BackupOutcome,
     _build_backup_tarball,
@@ -174,7 +175,27 @@ def _run_one_job(
                     ck_data = None
                     resume_upload_id = None
 
+            use_multipart_resume = False
             if resume_upload_id and wip_bundle.is_file() and ck_data is not None:
+                ok_ck, ck_reason = validate_multipart_resume_checkpoint(
+                    wip_bundle=wip_bundle,
+                    checkpoint=ck_data,
+                    policy_config=cfg,
+                )
+                if ok_ck:
+                    use_multipart_resume = True
+                else:
+                    logger.warning(
+                        "multipart resume checkpoint rejected job_id=%s reason=%s; clearing local state",
+                        job_id,
+                        ck_reason,
+                    )
+                    clear_job_multipart_state(s, job_id)
+                    ck_data = None
+                    resume_upload_id = None
+
+            if use_multipart_resume:
+                assert ck_data is not None
                 tmp_path = wip_bundle
                 manifest = ck_data["manifest"]
                 size_bytes = int(ck_data["content_length"])

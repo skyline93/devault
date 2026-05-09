@@ -60,5 +60,32 @@
     "control_plane_release": "0.4.0",
     "default_min_agent": "0.1.0",
     "default_max_tested_agent": "same as control plane release when DEVAULT_GRPC_MAX_TESTED_AGENT_VERSION is unset"
+  },
+  "ci_e2e": {
+    "workflow": ".github/workflows/e2e-version-matrix.yml",
+    "previous_minor_git_ref": "",
+    "notes": "When previous_minor_git_ref is set to a resolvable git ref (e.g. v0.3.0), the workflow adds two cross-build rows (current CP + older Agent image, and the reverse). Leave empty to run only the homogeneous row (same SHA for both images).",
+    "matrix_definitions": [
+      {
+        "matrix_job_id": "homogeneous",
+        "control_plane_git_ref": "_github_sha",
+        "agent_git_ref": "_github_sha",
+        "maps_to_compatibility_rows": ["cp-0.4-agent-0.4-s3"]
+      },
+      {
+        "matrix_job_id": "cp_current_agent_prev_minor",
+        "control_plane_git_ref": "_github_sha",
+        "agent_git_ref": "_previous_minor_git_ref",
+        "maps_to_compatibility_rows": ["cp-0.4-agent-0.4-s3", "cp-0.4-agent-0.1-legacy"],
+        "requires_non_empty_previous_minor_git_ref": true
+      },
+      {
+        "matrix_job_id": "cp_prev_minor_agent_current",
+        "control_plane_git_ref": "_previous_minor_git_ref",
+        "agent_git_ref": "_github_sha",
+        "maps_to_compatibility_rows": ["cp-0.3-agent-0.3-s3"],
+        "requires_non_empty_previous_minor_git_ref": true
+      }
+    ]
   }
 }

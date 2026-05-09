@@ -33,3 +33,4 @@
 
 - [ ] **`GET /healthz`**、**`GET /version`**（含 `git_sha` 若配置）。
 - [ ] Agent 一次 **Heartbeat** 日志无 **`AGENT_VERSION_*`** 致命错误；抽查 **`server_capabilities`** 与存储后端一致。
+- [ ] （建议）在默认分支手动运行 **`.github/workflows/e2e-version-matrix.yml`**（Compose + **Register** / **Heartbeat** 冒烟）。若需「当前控制面 + 上一 MINOR Agent」等交叉行，先将 **`docs/compatibility.json`** · **`ci_e2e.previous_minor_git_ref`** 设为可解析的 git ref（例如 **`v0.3.0`** tag）并合并后再跑；详见 **`website/docs/development/compatibility.md`**。

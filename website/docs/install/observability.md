@@ -53,6 +53,8 @@ docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prometheus.
 | **`devault_jobs_overdue_nonterminal`** | Gauge：**`stale_bucket`** = `active_work`（`running` / `uploading` / `verifying` 且超过 **`DEVAULT_JOB_STUCK_THRESHOLD_SECONDS`**）或 `pending_unleased`（长期 `pending`）。阈值见 [配置参考](./configuration.md)。 |
 | **`devault_policy_lock_contention_total`** | 同策略备份 **Redis 互斥锁** 争用（跳过或失败）计数；按 **`plugin`** 标签。 |
 | **`devault_retention_purge_errors_total`** | 保留策略清理（对象删除或 DB）失败次数。 |
+| **`devault_multipart_resume_grants_total`** | 控制面在 **`RequestStorageGrant`** 上为 **进行中 Multipart** 签发「续传」类授权（`ListParts` + 缺失分片预签名）的次数。 |
+| **`devault_multipart_encrypted_mpu_completes_total`** | 成功的备份 **`CompleteJob`** 中，bundle 走 **S3 Multipart** 且 manifest 含 **`encryption`**（`encrypt_artifacts`）的完成次数；用于观察大密文包上传闭环。 |
 
 示例告警规则（可按环境调阈值）位于仓库 **`deploy/prometheus/alerts.yml`**，由 **`deploy/prometheus.yml`** 的 **`rule_files`** 加载；叠加 Compose 文件 **`deploy/docker-compose.prometheus.yml`** 已挂载该文件并启用 **Alertmanager**。与 [企业部署参考架构](./enterprise-reference-architecture.md)、[安全白皮书摘要](../security/security-whitepaper.md) 交叉阅读。
 

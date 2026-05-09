@@ -37,6 +37,7 @@
   - **控制面**：`jobs.bundle_wip_multipart_upload_id`（及 `bundle_wip_content_length`、`bundle_wip_part_size_bytes`）记录进行中的 MPU；`RequestStorageGrant` 可带 **`resume_bundle_multipart_upload_id`**（须与 WIP 一致），服务端 **`ListParts`** 后仅为缺失分片签发预签名；若 S3 上已齐片，则返回 **`bundle_multipart_completed_parts_json`**，Agent 直接 `CompleteJob`。
   - **Agent**：`~/.cache/devault-agent/multipart/<job_id>/` 下保留 **`bundle.tar.gz`** 与 **`checkpoint.json`**（含 manifest、校验和、已完成 `PartNumber`+`ETag`）；同一作业在租约回收为 **PENDING** 后再次被拉取时，可继续上传。目录根可通过 **`DEVAULT_AGENT_MULTIPART_STATE_DIR`** 配置。
   - **孤儿 MPU**：同一作业 **发起新的** Multipart（不带 resume）前，控制面对旧 WIP 调用 **`AbortMultipartUpload`**；作业 **`CompleteJob` 失败**（终态 FAILED）时亦会 Abort 并清空 WIP 列。
+- **Artifact 加密（`encrypt_artifacts`）与续传**：Agent 在 **加密后** 才将 bundle 移入 WIP 路径并写入 **`checkpoint.json`**（manifest 已含 **`encryption`** 块，且 `checksum_sha256` / `content_length` 为 **密文** 维度）。续传前执行 **`validate_multipart_resume_checkpoint`**（`src/devault/plugins/file/multipart_resume.py`）：**策略 `encrypt_artifacts` 必须与 manifest 是否含 `encryption` 一致**；**WIP 文件大小** 须与 checkpoint 的 `content_length` 一致，否则 **清空本地 multipart 状态** 并重新打 tarball + 加密，避免半写入或策略切换后的静默错传。checkpoint JSON 另含 **`encrypt_artifacts`** 布尔字段便于排障。成功且为 Multipart + 加密的 **`CompleteJob`** 递增指标 **`devault_multipart_encrypted_mpu_completes_total`**（控制面）。
 - **STS / AssumeRole（控制面 → S3）**：可通过 `DEVAULT_S3_ASSUME_ROLE_ARN` 等变量使用 **短时**会话密钥；与静态 `DEVAULT_S3_ACCESS_KEY` / `DEVAULT_S3_SECRET_KEY` 或默认凭证链（IRSA 等）组合方式见 **`website/docs/storage/sts-assume-role.md`** 与 `src/devault/storage/s3_client.py`。
 
 ---

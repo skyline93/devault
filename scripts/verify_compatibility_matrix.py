@@ -70,6 +70,56 @@ def verify() -> int:
                 print(f"error: matrices[{i}] missing required key {k!r}", file=sys.stderr)
                 return 1
 
+    matrix_ids = {str(m["id"]) for m in mats if isinstance(m, dict) and "id" in m}
+    e2e = data.get("ci_e2e")
+    if e2e is not None:
+        if not isinstance(e2e, dict):
+            print("error: ci_e2e must be an object when present", file=sys.stderr)
+            return 1
+        prev = e2e.get("previous_minor_git_ref", "")
+        if not isinstance(prev, str):
+            print("error: ci_e2e.previous_minor_git_ref must be a string", file=sys.stderr)
+            return 1
+        wf = e2e.get("workflow")
+        if wf is not None:
+            if not isinstance(wf, str) or not wf.strip():
+                print("error: ci_e2e.workflow must be a non-empty string when set", file=sys.stderr)
+                return 1
+            wf_path = REPO / wf
+            if not wf_path.is_file():
+                print(f"error: ci_e2e.workflow points to missing file {wf_path}", file=sys.stderr)
+                return 1
+        defs = e2e.get("matrix_definitions")
+        if defs is not None:
+            if not isinstance(defs, list) or not defs:
+                print("error: ci_e2e.matrix_definitions must be a non-empty list when set", file=sys.stderr)
+                return 1
+            for j, d in enumerate(defs):
+                if not isinstance(d, dict):
+                    print(f"error: ci_e2e.matrix_definitions[{j}] must be an object", file=sys.stderr)
+                    return 1
+                for req in ("matrix_job_id", "control_plane_git_ref", "agent_git_ref", "maps_to_compatibility_rows"):
+                    if req not in d:
+                        print(
+                            f"error: ci_e2e.matrix_definitions[{j}] missing required key {req!r}",
+                            file=sys.stderr,
+                        )
+                        return 1
+                maps = d["maps_to_compatibility_rows"]
+                if not isinstance(maps, list) or not maps:
+                    print(
+                        f"error: ci_e2e.matrix_definitions[{j}].maps_to_compatibility_rows must be a non-empty list",
+                        file=sys.stderr,
+                    )
+                    return 1
+                for mid in maps:
+                    if str(mid) not in matrix_ids:
+                        print(
+                            f"error: ci_e2e.matrix_definitions[{j}] references unknown matrices.id {mid!r}",
+                            file=sys.stderr,
+                        )
+                        return 1
+
     print("ok: compatibility.json ↔ release metadata")
     return 0
 

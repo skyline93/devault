@@ -28,7 +28,16 @@ GitHub Actions **`ci.yml`** 使用 **`matrix.suite`**：
 - **`full`**：全量 **`pytest`**，并执行 **`verify_release_docs.py`**、**`verify_compatibility_matrix.py`**。
 - **`compatibility`**：再次执行上述校验脚本，并仅跑 **`tests/test_proto_contracts.py`**、**`tests/test_agent_version_gate.py`**、**`tests/test_verify_compatibility_matrix.py`**，作为与「契约 / 版本门控」相关的轻量切片（与全量并行，便于快速发现契约回归）。
 
-更重的「多版本镜像」端到端矩阵、发版脚本与 JSON 联动、Agent 侧按 capabilities 降级等，记在 **`docs-old/enterprise-backlog.md`**（**M1 · 三、版本管理** §3.2 末尾 **[ ] 可增强** 行），便于排期。
+### 多版本镜像 Compose + gRPC 冒烟
+
+工作流 **`.github/workflows/e2e-version-matrix.yml`**（**`workflow_dispatch`** 与 **每周一 schedule**）按 **`docs/compatibility.json`** 中的 **`ci_e2e`** 定义生成矩阵：
+
+- **`homogeneous`**：控制面镜像与 Agent 镜像均从当前 **`GITHUB_SHA`** 构建；在宿主机与 **Agent 容器内** 各执行一次 **`scripts/e2e_grpc_register_heartbeat.py`**（`Register` + `Heartbeat`），Compose 使用 **`deploy/docker-compose.yml`** 与 **`deploy/docker-compose.e2e-matrix.override.yml`**（预构建镜像，不经由 Compose `build`）。
+- 当 **`ci_e2e.previous_minor_git_ref`** 为非空且可解析的 git ref（例如上一 MINOR 的 **`v0.3.0`** tag）时，额外跑两行交叉：**当前 SHA 控制面 + 旧 ref Agent**、**旧 ref 控制面 + 当前 SHA Agent**。ref 留空时仅跑 **`homogeneous`**，避免无 tag 仓库误配导致 nightly 全红。
+
+矩阵语义与 **`matrices[].id`** 的对应关系写在 **`ci_e2e.matrix_definitions`** 中；**`verify_compatibility_matrix.py`** 会校验 **`maps_to_compatibility_rows`** 中的 id 均存在于 **`matrices`**。
+
+发版脚本与 **`compatibility.json`** 的自动联动、Agent 按 **`server_capabilities`** 降级等仍见 **`docs-old/enterprise-backlog.md`**（**M1 · 三** §3.2 与 **§十三**）。
 
 ## 发版模板
 

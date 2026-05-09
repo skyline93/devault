@@ -356,6 +356,7 @@ def write_multipart_checkpoint(
                 "content_length": content_length,
                 "part_size": part_size,
                 "checksum_sha256": checksum_sha256,
+                "encrypt_artifacts": bool(manifest.get("encryption")),
                 "manifest": manifest,
                 "parts": parts,
             },

@@ -8,7 +8,9 @@ description: 分片上传、重试与恢复侧行为
 
 ## 分片上传（Multipart）
 
-超过阈值时，备份路径可使用 **Multipart** 分片上传，以提高大文件可靠性与吞吐。实现细节见 `src/devault/storage/` 下相关模块。
+超过阈值时，备份路径可使用 **Multipart** 分片上传，以提高大文件可靠性与吞吐。实现细节见 `src/devault/storage/` 下相关模块；与 **Agent 本地续传 checkpoint**、**S3 `ListParts` 补签** 的完整叙述见仓库 `docs-old/s3-data-plane.md` §3。
+
+启用 **`encrypt_artifacts`** 时，**仅在加密完成后** 才进入 Multipart WIP；续传前会校验 **策略与 manifest 的 encryption 块一致** 以及 **WIP 文件大小与 checkpoint**，不匹配则丢弃本地状态并重建（见 [Artifact 静态加密](../security/artifact-encryption.md)）。
 
 ## 重试
 

@@ -57,7 +57,7 @@
 | 波次 | 名称 | 未完成条目（§ 指向） |
 |------|------|------------------------|
 | **1** | M1 基础设施与运维闭环 | **已收敛**：Helm（`deploy/helm/devault`）+ **告警路由**（`deploy/alertmanager.yml`、`deploy/docker-compose.prometheus.yml`、`monitoring.enabled`、文档 **`website/docs/install/observability.md`**） |
-| **2** | 发布工程与数据面韧性 | §二 Multipart×Artifact 加密联调；§三 CI 多版本镜像 E2E；§三 bump_release ↔ compatibility.json；§三 Agent server_capabilities 降级 |
+| **2** | 发布工程与数据面韧性 | §二 Multipart×加密 **已交付**；§三 CI 多版本镜像 E2E **已交付**；剩余：§三 bump_release ↔ compatibility.json；§三 Agent server_capabilities 降级 |
 | **3** | 网关与身份演进 | §一 Envoy local_rate_limit；§一 Register 每 Agent 令牌 / 吊销 / Redis |
 | **4** | 合规与统一存储扩展 | §五 KMS / 信封 / 租户 DEK；§五 默认或租户级强制加密；§五 WORM；§五 Legal Hold；§五 BYOB |
 | **5** | M2 数据库备份 MVP | §九 全部未完成项（建议在 **波次 1～2** 收敛后再启动） |
@@ -98,7 +98,7 @@
 | 二-04 | §二 | [x] | P1 | — | **恢复侧大文件流式下载** |
 | 二-05 | §二 | [x] | P1 | — | **预签名权限最小化** |
 | 二-06 | §二 | [x] | P2 | — | **STS / AssumeRole 临时凭证（控制面 → S3）** |
-| 二-07 | §二 | [ ] | P3 | 2 | **Multipart 与 Artifact 加密的联调与边界（可增强）** |
+| 二-07 | §二 | [x] | P3 | — | **Multipart 与 Artifact 加密的联调与边界（可增强）** |
 | 三-01 | §三 | [x] | P0 | — | **仓库根 `CHANGELOG.md`** |
 | 三-02 | §三 | [x] | P0 | — | **单一事实来源（SSOT）与发布脚本** |
 | 三-03 | §三 | [x] | P0 | — | **双端版本在协议中可见** |
@@ -109,7 +109,7 @@
 | 三-08 | §三 | [x] | P1 | — | **发布说明模板** |
 | 三-09 | §三 | [x] | P2 | — | **运行时特性协商（可选）** |
 | 三-10 | §三 | [x] | P2 | — | **Artifact / manifest 中的 producer 版本** |
-| 三-11 | §三 | [ ] | P2 | 2 | **CI：多版本镜像端到端矩阵（可增强）** |
+| 三-11 | §三 | [x] | P2 | 2 | **CI：多版本镜像端到端矩阵（可增强）** |
 | 三-12 | §三 | [ ] | P3 | 2 | **发版脚本与 compatibility.json 联动（可增强）** |
 | 三-13 | §三 | [ ] | P3 | 2 | **Agent 基于 server_capabilities 的降级路径（可增强）** |
 | 三-注 | §三.3 | — | — | — | **CHANGELOG 编写约定**（持续执行流程，非 `[ ]` 勾选项；见 **§三.3**） |
@@ -188,7 +188,7 @@
 | [x] | P1 | **恢复侧大文件流式下载** | 预签名恢复改为 **httpx stream + 分块 SHA-256**，不再整包 `read_bytes()`。 |
 | [x] | P1 | **预签名权限最小化** | 仍按 **job 维度** 的 object key；manifest 与 bundle 分离；TTL 与 `DEVAULT_PRESIGN_TTL_SECONDS` 对齐；云差异见 [`docs/s3-data-plane.md`](./s3-data-plane.md)。 |
 | [x] | P2 | **STS / AssumeRole 临时凭证（控制面 → S3）** | 控制面通过 **STS `AssumeRole`** 获取 **短时**会话密钥，用于预签名、Multipart 控制 API 与 `head_object` 等；`DEVAULT_S3_ASSUME_ROLE_*` / `DEVAULT_S3_STS_*`；与静态 `DEVAULT_S3_ACCESS_KEY` / `SECRET` 或 boto3 **默认凭证链**（IRSA、实例配置、Vault 注入等）组合；AssumeRole 结果 **内存缓存** 至临近过期。文档：**`website/docs/storage/sts-assume-role.md`**；实现：`src/devault/storage/s3_client.py`。 |
-| [ ] | P3 | **Multipart 与 Artifact 加密的联调与边界（可增强）** | 大对象 **Multipart** 路径上 **encrypt_artifacts** 的续传检查点、失败 Abort 与指标；文档与夜间用例补充（与 **`s3-data-plane.md`** / **`artifact-encryption.md`** 互链）。 |
+| [x] | P3 | **Multipart 与 Artifact 加密的联调与边界（可增强）** | Agent **`validate_multipart_resume_checkpoint`**（策略 vs manifest encryption、WIP 大小）；checkpoint 增加 **`encrypt_artifacts`**；**`devault_multipart_encrypted_mpu_completes_total`**；**`docs-old/s3-data-plane.md`** §3、**`artifact-encryption.md`**、**`large-objects.md`**、**`observability.md`**；单测 **`tests/test_multipart_encrypt_checkpoint.py`**。 |
 
 **依赖**：第一节中存储授权接口需能承载「多 part」或「会话 token」语义；**跨重启续传**依赖租约与预签名策略可扩展；**STS** 依赖云账号与信任策略落地。  
 **与 M2 关系**：大 dump 强依赖 Multipart 与续传；**建议在开启数据库备份 MVP 前完成或并行关闭**「跨重启续传」主线风险。
@@ -224,11 +224,11 @@
 | [x] | P1 | **发布说明模板** | **`docs/RELEASE.md`**：升级顺序、兼容性与 proto、不兼容与迁移、观测与密钥、回滚、发布后验证。 |
 | [x] | P2 | **运行时特性协商（可选）** | **`HeartbeatReply`** / **`RegisterReply`** 增加 **`server_capabilities`**；实现见 **`devault.server_capabilities`**；与 **`docs/compatibility.json`** 对齐。 |
 | [x] | P2 | **Artifact / manifest 中的 producer 版本** | 文件插件 **`manifest.json`** 增加 **`devault_release`**、**`grpc_proto_package`**（与 `release_meta` / gRPC 包一致）。 |
-| [ ] | P2 | **CI：多版本镜像端到端矩阵（可增强）** | 在现有契约切片之上，增加 **nightly 或手动 workflow**：拉取「上一 MINOR」控制面镜像 + 当前 Agent（及反向组合），跑通最小路径（Register/Heartbeat、租约、可选 MinIO 备份片段）。验收：矩阵定义与失败告警文档化；与 **`docs/compatibility.json`** 的 `matrices` 互链。 |
+| [x] | P2 | **CI：多版本镜像端到端矩阵（可增强）** | **`.github/workflows/e2e-version-matrix.yml`**（**`workflow_dispatch`** + **每周一 schedule**）：Compose 使用预构建 **CP / Agent** 镜像（**`deploy/docker-compose.e2e-matrix.override.yml`**）；**`scripts/ci_e2e_matrix_plan.py`** 读 **`docs/compatibility.json`** · **`ci_e2e`**；**`scripts/e2e_grpc_register_heartbeat.py`** 在宿主机与 Agent 容器内各跑一次 **Register + Heartbeat**。**`previous_minor_git_ref`** 非空时增加「当前 SHA + 旧 ref」双向交叉行；与 **`matrices`** 的映射见 **`ci_e2e.matrix_definitions`**；文档 **`website/docs/development/compatibility.md`**。 |
 | [ ] | P3 | **发版脚本与 compatibility.json 联动（可增强）** | **`scripts/bump_release.py`** 在 bump 后校验或交互式更新 **`docs/compatibility.json`** 的 **`current.control_plane_release`**；或发版文档中强制 checklist 项（与 **`verify_compatibility_matrix`** 失败信息对齐）。 |
 | [ ] | P3 | **Agent 基于 server_capabilities 的降级路径（可增强）** | 当前 Agent 仅 **DEBUG** 打印 capabilities；后续可按令牌关闭 **multipart 续传**、多段 RPC 等，避免盲调未上线能力。需与 **`compute_enabled_server_capabilities`** 语义一致并加集成测试。 |
 
-**说明**：上表三项 **[ ]**（编号 **三-11～三-13**，见 **[全量待办索引](#全量待办索引)**）为已交付能力的**后续增强**；同类条目亦见文末 **[十三、可增强项汇总](#十三可增强项汇总)**。不阻塞当前里程碑；落地后可将对应行改为 `[x]`，并同步更新**全量索引**与修订记录。
+**说明**：上表 **三-12、三-13** 仍为 **[ ]**（见 **[全量待办索引](#全量待办索引)**）；**三-11** 已落地。同类条目亦见文末 **[十三、可增强项汇总](#十三可增强项汇总)**。不阻塞当前里程碑；落地后可将对应行改为 `[x]`，并同步更新**全量索引**与修订记录。
 
 **依赖**：扩展 `.proto` 后执行 `scripts/gen_proto.sh` 并全量回归；与第一节的 TLS/网关文档一并说明「版本端点是否经网关暴露」。  
 **与 M2 关系**：建议在接入数据库插件、扩大 proto/行为面前完成 **P0** 项，便于灰度与混跑。
@@ -356,7 +356,7 @@
 | E-DOC-001 | 企业文档 | M1 | H |
 | E-DB-001 | 数据库备份 MVP | M2 | C |
 
-**Epic → 排期波次**（与 **[排期波次与全量待办索引](#排期波次与全量待办索引)** 一致）：**E-OPS-001** 中 **Helm / K8s** 与 **告警路由（Prometheus + Alertmanager）** 已交付；**`E-DATA-001` / `E-DATA-002`** 之 **§二 Multipart×加密**、**E-VER-001** 之 **§三 CI / bump_release / capabilities** → **波次 2**；**E-ARCH-001** 之 **§一** 两项可增强 → **波次 3**；**E-GOV-001** 之 **KMS、强制加密、WORM、Legal Hold、BYOB** → **波次 4**；**E-DB-001** → **波次 5**；**E-TRUST-001** 之 **§七 增量与时间线** → **波次 6**。其余 Epic 主线条目在当前仓库已为 `[x]`。
+**Epic → 排期波次**（与 **[排期波次与全量待办索引](#排期波次与全量待办索引)** 一致）：**E-OPS-001** 中 **Helm / K8s** 与 **告警路由（Prometheus + Alertmanager）** 已交付；**`E-DATA-001` / `E-DATA-002`** 之 **§二 Multipart×加密** 已交付；**E-VER-001** 之 **§三 多版本镜像 E2E（三-11）** 已交付，**bump_release ↔ compatibility.json（三-12）**、**Agent 按 server_capabilities 降级（三-13）** → **波次 2** 剩余项；**E-ARCH-001** 之 **§一** 两项可增强 → **波次 3**；**E-GOV-001** 之 **KMS、强制加密、WORM、Legal Hold、BYOB** → **波次 4**；**E-DB-001** → **波次 5**；**E-TRUST-001** 之 **§七 增量与时间线** → **波次 6**。其余 Epic 主线条目在当前仓库已为 `[x]`。
 
 ---
 
@@ -408,6 +408,8 @@
 | 2026-05-09 | **清单重组**：新增 **排期波次（1～6）**、**全量待办索引**（§零～§九 + §三.3 注，共 73 行，与分节表一一对应）；**整体实施路线** 补充排期原则；**如何使用** 增加「排期波次」列说明；**§十** 增加 Epic→波次映射；**§十三** 与全量索引互链。 |
 | 2026-05-09 | **M1·六 P2**：**Helm Chart** 落地（`deploy/helm/devault`、CI `helm lint`、文档 **`website/docs/install/kubernetes-helm.md`**）；**§六** 与全量索引 **六-05** 勾选；**波次 1** 表更新。 |
 | 2026-05-09 | **M1·六 P2**：**告警路由** 落地（`deploy/alertmanager.yml`、`deploy/docker-compose.prometheus.yml` 扩展、**`deploy/prometheus/alerts.yml`** 增补策略锁/保留清理；Helm **`templates/monitoring.yaml`** + **`prometheus-alerts.yml`**；**`website/docs/install/observability.md`** 重写 Alertmanager 章节；**§六** 与全量索引 **六-06** 勾选；**波次 1** 标为已收敛）。 |
+| 2026-05-09 | **M1·二 P3**：**Multipart×Artifact 加密** 联调落地（Agent **`multipart_resume`** 校验、checkpoint **`encrypt_artifacts`**、**`devault_multipart_encrypted_mpu_completes_total`**、文档与单测；**§二**、全量索引 **二-07**、**§十三**、**波次 2** 表更新）。 |
+| 2026-05-09 | **M1·三 P2**：**CI 多版本镜像 E2E 矩阵**（**`e2e-version-matrix.yml`**、**`ci_e2e`** / **`matrix_definitions`**、Compose override、gRPC 冒烟脚本、**`verify_compatibility_matrix`** 扩展、**`compatibility.md`**；全量索引 **三-11**、**§三.2**、**§十三**、**波次 2** 表更新）。 |
 
 ---
 
@@ -421,8 +423,8 @@
 |------|--------|------|--------|----------------|
 | [ ] | P3 | §一 | **Envoy local_rate_limit** | 见 **§一** 表；网关侧补充限流 filter 与文档。 |
 | [ ] | P3 | §一 | **Register → 每 Agent 令牌 / 吊销 / Redis** | 见 **§一** 表；与 gRPC 审计、`reason_code` 一致。 |
-| [ ] | P3 | §二 | **Multipart × 加密联调** | 见 **§二** 表；大对象 + **`encrypt_artifacts`** 边界与文档。 |
-| [ ] | P2 | §三.2 | **CI 多版本镜像 E2E 矩阵** | nightly/手动 workflow；与 **`docs/compatibility.json`** `matrices` 互链。 |
+| [x] | P3 | §二 | **Multipart × 加密联调** | 见 **§二** 表；已实现校验、指标与文档互链。 |
+| [x] | P2 | §三.2 | **CI 多版本镜像 E2E 矩阵** | **`.github/workflows/e2e-version-matrix.yml`**、`ci_e2e`、`e2e_grpc_register_heartbeat.py`；与 **`matrices`** 互链见 **`matrix_definitions`**。 |
 | [ ] | P3 | §三.2 | **bump_release ↔ compatibility.json** | 发版脚本校验或交互更新 **`current.control_plane_release`**。 |
 | [ ] | P3 | §三.2 | **Agent 按 server_capabilities 降级** | 关闭 multipart 续传等盲调路径；集成测试与 **`compute_enabled_server_capabilities`** 对齐。 |
 | [ ] | P2 | §五 | **KMS / 信封 / 租户 DEK** | 见 **§五** 表。 |
