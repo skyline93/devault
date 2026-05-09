@@ -93,3 +93,9 @@ grpc_health_probe -addr=:50051 -service=devault.agent.v1.AgentControl
 ## 8. HTTP 版本端点
 
 控制面提供 `GET /version`，返回 `service`、`version`（与 `devault.__version__` 一致）、`api`、`grpc_proto_package`，以及可选的 `git_sha`（`DEVAULT_SERVER_GIT_SHA`）；与 gRPC **Heartbeat** / **Register** 中的 `agent_release` / `server_release` 等字段互补，用于发布校验与自动化探测。
+
+---
+
+## 9. 多实例控制面（API + gRPC）
+
+水平扩展 **`api`（HTTP 与同进程的 Agent gRPC）**、共享 **PostgreSQL** 与 **Redis**、**Envoy `ROUND_ROBIN`**、**`devault-scheduler` 必须单副本**、以及 **`DEVAULT_GRPC_RPS_PER_PEER` 为每进程令牌桶**（多副本时全局近似 `N ×` 单副本）等，见文档站 **`website/docs/install/grpc-multi-instance.md`**；演示叠加 **`deploy/docker-compose.grpc-ha-example.yml`** 与 **`deploy/scripts/compose-grpc-ha-demo.sh`**。

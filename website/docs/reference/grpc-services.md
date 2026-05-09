@@ -42,6 +42,9 @@ Agent 在 **`Heartbeat`** 与 **`Register`** 请求中携带：
 | `AGENT_PROTO_PACKAGE_MISMATCH` | `FAILED_PRECONDITION` |
 | `AGENT_VERSION_REQUIRED` | `FAILED_PRECONDITION` |
 | `AGENT_VERSION_UNPARSEABLE` | `INVALID_ARGUMENT` |
+| `AGENT_REGISTRY_MISSING` | `FAILED_PRECONDITION`（**`LeaseJobs`**：尚无 **`edge_agents`** 登记记录时；默认需先成功 **`Heartbeat`**） |
+
+登记 **`edge_agents`**、HTTP 查询舰队与 **`LeaseJobs`** 二次校验开关见 [Agent 批量管理与版本策略](./agent-fleet.md)。
 
 相关环境变量见 [配置参考](../install/configuration.md) 中的 **gRPC 版本策略**。
 

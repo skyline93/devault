@@ -10,6 +10,20 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from devault.db.base import Base
 
 
+class EdgeAgent(Base):
+    """Last-known Agent identity from gRPC Heartbeat / Register (fleet inventory)."""
+
+    __tablename__ = "edge_agents"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    agent_release: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    proto_package: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    git_commit: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    last_register_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class ControlPlaneApiKey(Base):
     """Hashed REST/gRPC Bearer tokens with RBAC role and optional tenant allow-list."""
 

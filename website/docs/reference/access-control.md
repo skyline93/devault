@@ -1,5 +1,5 @@
 ---
-sidebar_position: 5
+sidebar_position: 6
 title: 访问控制与 RBAC
 description: API 密钥、角色、OIDC 可选与用量指标
 ---

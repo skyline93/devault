@@ -207,3 +207,23 @@ class ScheduleOut(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class EdgeAgentOut(BaseModel):
+    """Registered edge Agent (from gRPC Heartbeat / Register)."""
+
+    id: uuid.UUID = Field(..., description="Same as DEVAULT_AGENT_ID / Heartbeat agent_id.")
+    first_seen_at: datetime
+    last_seen_at: datetime
+    agent_release: str | None = Field(None, description="Last reported SemVer string.")
+    proto_package: str | None = Field(None, description="Last reported protobuf package (e.g. devault.agent.v1).")
+    git_commit: str | None = Field(None, description="Optional Agent build SHA.")
+    last_register_at: datetime | None = Field(None, description="Last successful Register RPC time, if any.")
+    meets_min_supported_version: bool = Field(
+        ...,
+        description="True when agent_release parses as SemVer >= DEVAULT_GRPC_MIN_SUPPORTED_AGENT_VERSION.",
+    )
+    proto_matches_control_plane: bool = Field(
+        ...,
+        description="True when proto_package is empty or equals the control plane expected package.",
+    )

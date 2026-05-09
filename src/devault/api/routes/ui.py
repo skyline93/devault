@@ -21,7 +21,8 @@ from devault.api.schemas import (
     ScheduleCreate,
     SchedulePatch,
 )
-from devault.db.models import Artifact, Job, Policy, Schedule, Tenant
+from devault.api.presenters import edge_agent_to_out
+from devault.db.models import Artifact, EdgeAgent, Job, Policy, Schedule, Tenant
 from devault.security.auth_context import AuthContext
 from devault.services import control as control_svc
 
@@ -73,6 +74,25 @@ def _http_err_detail(exc: HTTPException) -> str:
     if isinstance(d, str):
         return d
     return str(d)
+
+
+@router.get("/agents", response_class=HTMLResponse, dependencies=_ui_dep)
+def ui_agents(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
+    """Fleet inventory (platform-wide; not scoped by tenant)."""
+    rows = list(
+        db.scalars(select(EdgeAgent).order_by(EdgeAgent.last_seen_at.desc()).limit(200)).all()
+    )
+    agents_out = [edge_agent_to_out(r) for r in rows]
+    return templates.TemplateResponse(
+        request,
+        "agents.html",
+        {
+            "request": request,
+            "agents": agents_out,
+            "flash": request.query_params.get("flash"),
+            "error": request.query_params.get("error"),
+        },
+    )
 
 
 @router.get("/jobs", response_class=HTMLResponse, dependencies=_ui_dep)

@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Agents · DeVault{% endblock %}
+{% block body %}
+<h1>Edge Agents</h1>
+{% if flash %}<p class="flash ok">{{ flash }}</p>{% endif %}
+{% if error %}<p class="flash err">{{ error }}</p>{% endif %}
+<p class="muted">
+  Last-known identity from gRPC <strong>Heartbeat</strong> / <strong>Register</strong> (platform-wide, not per-tenant).
+  Version policy is enforced via control-plane env (see docs). Latest 200 by <code>last_seen_at</code>.
+</p>
+<table>
+  <thead>
+    <tr>
+      <th>Agent ID</th>
+      <th>Release</th>
+      <th>Proto</th>
+      <th>Git</th>
+      <th>≥ min SemVer</th>
+      <th>Proto OK</th>
+      <th>Last seen</th>
+      <th>Registered</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for a in agents %}
+    <tr>
+      <td><code>{{ a.id }}</code></td>
+      <td>{% if a.agent_release %}{{ a.agent_release }}{% else %}—{% endif %}</td>
+      <td>{% if a.proto_package %}<code>{{ a.proto_package }}</code>{% else %}—{% endif %}</td>
+      <td>{% if a.git_commit %}<code>{{ a.git_commit }}</code>{% else %}—{% endif %}</td>
+      <td>{% if a.meets_min_supported_version %}yes{% else %}<strong>no</strong>{% endif %}</td>
+      <td>{% if a.proto_matches_control_plane %}yes{% else %}<strong>no</strong>{% endif %}</td>
+      <td>{{ a.last_seen_at }}</td>
+      <td>{% if a.last_register_at %}{{ a.last_register_at }}{% else %}—{% endif %}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="8" class="muted">No agents have checked in yet.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

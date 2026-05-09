@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Agent 舰队 Web UI**：**`/ui/agents`**（HTTP Basic，只读表格；与 **`GET /api/v1/agents`** 同源）；导航入口；**`devault.api.presenters.edge_agent_to_out`** 供 REST/UI 共用。
+- **Agent 舰队登记与批量版本策略**：表 **`edge_agents`**（Heartbeat/Register 上报）；**`LeaseJobs`** 默认根据登记记录再次执行 **`evaluate_agent_version_gate`**（**`DEVAULT_GRPC_ENFORCE_VERSION_ON_LEASE`**，可关闭）；**`GET /api/v1/agents`** / **`GET /api/v1/agents/{id}`**；CLI **`devault agent list`**。文档 **`website/docs/reference/agent-fleet.md`**。
+- **gRPC / API 多实例部署**：文档 **`website/docs/install/grpc-multi-instance.md`**（扩缩 **`api`**、**`scheduler` 单副本**、`DEVAULT_GRPC_RPS_PER_PEER` 进程级语义、Envoy 负载均衡与 Compose 端口冲突处理）；叠加 **`deploy/docker-compose.grpc-ha-example.yml`**、演示脚本 **`deploy/scripts/compose-grpc-ha-demo.sh`**。
 - **控制面元数据库 DR Runbook**：PostgreSQL **`pg_dump` / `pg_restore`** 流程、可选 **PITR** 说明、**RTO/RPO** 规划表；脚本 **`deploy/scripts/control-plane-pg-backup.sh`**、**`deploy/scripts/control-plane-pg-restore.sh`**。文档 **`website/docs/install/control-plane-database-dr.md`**（与 artifact 数据面说明 **`website/docs/guides/backup-and-restore.md`** 区分）。
 - **保留与生命周期**：文件策略 **`retention_days`**（可选）；备份完成时写入 **`artifacts.retain_until`**；**`devault-scheduler`** 按 **`DEVAULT_RETENTION_CLEANUP_*`** 定时删除过期 **bundle/manifest** 与元数据；Prometheus **`devault_retention_artifacts_purged_total`**、**`devault_retention_purge_errors_total`**；存储抽象 **`delete_object`**。文档 **`website/docs/guides/retention-lifecycle.md`**；Compose **scheduler** 注入与 **api** 一致的 MinIO 变量。
 - **Artifact 静态加密（AES-256-GCM）**：策略 **`encrypt_artifacts`**；Agent **`DEVAULT_ARTIFACT_ENCRYPTION_KEY`**（Base64-32 字节）；分块格式 **`devault-chunked-v1`**；manifest 记录 **`encryption`** 与 **`plaintext_checksum_sha256`**；**`CompleteJob`** 读 manifest 写入 **`artifacts.encrypted`**；恢复侧 **`RequestStorageGrant` READ** 增加 manifest 预签名 GET。文档 **`website/docs/security/artifact-encryption.md`**。
@@ -22,6 +25,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`deploy/docker-compose.prometheus.yml`**：可选叠加文件，用于本地 Prometheus 抓取 `api` 的 `/metrics`（默认 `docker compose up` 不再启动 Prometheus）。
 
 ### Changed
+
+- **`deploy/docker-compose.yml`**：默认在 **api** 上开启 **`DEVAULT_GRPC_REGISTRATION_SECRET`**，**agent** 不再注入 **`DEVAULT_API_TOKEN`**，启动时经 **Register** 换取与 **`DEVAULT_API_TOKEN`** 相同的共享令牌（便于在开发环境验证 Register 与 **`/ui/agents`** 的 Registered 列）。若需恢复旧行为，为 **agent** 显式设置 **`DEVAULT_API_TOKEN`**。
 
 ### Deprecated
 

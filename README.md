@@ -69,6 +69,8 @@ docker compose up --build -d
 
 **agent** 将仓库内 `demo_data/` 挂载为只读 **`/data`**，卷 **`agent_restore`** 挂载为 **`/restore`**。允许的路径前缀为 **`/data`** 与 **`/restore`**（见 `deploy/docker-compose.yml`）。
 
+默认 Compose **不为 agent 设置** **`DEVAULT_API_TOKEN`**：启动时通过 **Register**（**`DEVAULT_GRPC_REGISTRATION_SECRET`** 与 **api** 相同）换取与控制面一致的 Bearer，便于验证 Register 与 **`/ui/agents`** 的登记时间。若需固定 token，可为 agent 显式注入 **`DEVAULT_API_TOKEN`**。
+
 ### 1）发起备份
 
 ```bash
@@ -129,6 +131,7 @@ export DEVAULT_API_TOKEN=changeme
 
 devault file backup /data/sample
 devault job wait <job_id>
+devault agent list
 devault artifact list
 devault file restore <artifact_id> --to /restore/out2 --force
 ```

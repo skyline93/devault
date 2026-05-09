@@ -16,12 +16,14 @@ job_app = typer.Typer(no_args_is_help=True)
 artifact_app = typer.Typer(no_args_is_help=True)
 policy_app = typer.Typer(no_args_is_help=True)
 schedule_app = typer.Typer(no_args_is_help=True)
+agent_app = typer.Typer(no_args_is_help=True)
 
 app.add_typer(file_app, name="file")
 app.add_typer(job_app, name="job")
 app.add_typer(artifact_app, name="artifact")
 app.add_typer(policy_app, name="policy")
 app.add_typer(schedule_app, name="schedule")
+app.add_typer(agent_app, name="agent")
 
 
 def _client() -> httpx.Client:
@@ -126,6 +128,14 @@ def job_retry(job_id: str) -> None:
 def policy_list() -> None:
     with _client() as c:
         r = c.get("/api/v1/policies")
+        r.raise_for_status()
+        typer.echo(json.dumps(r.json(), indent=2))
+
+
+@agent_app.command("list")
+def agent_list() -> None:
+    with _client() as c:
+        r = c.get("/api/v1/agents")
         r.raise_for_status()
         typer.echo(json.dumps(r.json(), indent=2))
 

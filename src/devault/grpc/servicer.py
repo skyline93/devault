@@ -34,6 +34,7 @@ from devault.observability.metrics import (
 )
 from devault.retention.policy import retain_until_from_backup_config
 from devault.plugins.file.plugin import artifact_object_keys
+from devault.services.edge_agents import enforce_edge_agent_for_lease, upsert_edge_agent
 from devault.settings import Settings, get_settings
 from devault.storage import get_storage
 from devault.storage.multipart import (
@@ -204,9 +205,10 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
             if request.registration_secret != settings.grpc_registration_secret:
                 context.abort(grpc.StatusCode.UNAUTHENTICATED, "invalid registration secret")
             try:
-                uuid.UUID(request.agent_id)
+                agent_uuid = uuid.UUID(request.agent_id)
             except ValueError:
                 context.abort(grpc.StatusCode.INVALID_ARGUMENT, "agent_id must be a UUID")
+                raise
             if not settings.api_token:
                 reply = agent_pb2.RegisterReply(
                     ok=False,
@@ -225,6 +227,19 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
                 context=context,
                 server_release=server_release_version,
             )
+            db_reg = SessionLocal()
+            try:
+                upsert_edge_agent(
+                    db_reg,
+                    agent_id=agent_uuid,
+                    agent_release=request.agent_release or None,
+                    proto_package=request.proto_package or None,
+                    git_commit=request.git_commit or None,
+                    touch_register=True,
+                )
+                db_reg.commit()
+            finally:
+                db_reg.close()
             reply = agent_pb2.RegisterReply(
                 ok=True,
                 bearer_token=settings.api_token,
@@ -250,6 +265,11 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
             },
         ):
             _auth(context, settings)
+            try:
+                hb_agent = uuid.UUID(request.agent_id)
+            except ValueError:
+                context.abort(grpc.StatusCode.INVALID_ARGUMENT, "agent_id must be a UUID")
+                raise
             dep = evaluate_agent_version_gate(
                 agent_release=request.agent_release,
                 proto_package=request.proto_package,
@@ -257,6 +277,19 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
                 context=context,
                 server_release=server_release_version,
             )
+            db_hb = SessionLocal()
+            try:
+                upsert_edge_agent(
+                    db_hb,
+                    agent_id=hb_agent,
+                    agent_release=request.agent_release or None,
+                    proto_package=request.proto_package or None,
+                    git_commit=request.git_commit or None,
+                    touch_register=False,
+                )
+                db_hb.commit()
+            finally:
+                db_hb.close()
             reply = agent_pb2.HeartbeatReply(ok=True, deprecation_message=dep)
             attach_control_plane_version_meta(reply, settings)
             apply_server_capabilities(reply, settings)
@@ -286,6 +319,13 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
             leases: list[agent_pb2.JobLease] = []
             try:
                 reclaim_expired_job_leases(db, settings)
+                enforce_edge_agent_for_lease(
+                    db,
+                    agent_id=agent_uuid,
+                    settings=settings,
+                    context=context,
+                    server_release=server_release_version,
+                )
                 for _ in range(max_jobs):
                     job = try_lease_next_job(db, agent_uuid, settings)
                     if job is None:

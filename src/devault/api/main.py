@@ -7,7 +7,7 @@ from fastapi.responses import Response
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from devault import __version__
-from devault.api.routes import artifacts, jobs, policies, schedules, tenants, ui
+from devault.api.routes import agents, artifacts, jobs, policies, schedules, tenants, ui
 from devault.grpc.server import start_grpc_server, stop_grpc_server
 from devault.release_meta import GRPC_API_PACKAGE
 from devault.observability.metrics import HTTP_REQUESTS_TOTAL
@@ -42,7 +42,11 @@ _OPENAPI_TAGS = [
     },
     {
         "name": "ui",
-        "description": "Minimal HTML forms (HTTP Basic password = API token or DB API key secret).",
+        "description": "Minimal HTML UI (HTTP Basic = API token or DB API key): jobs, artifacts, policies, schedules, agents fleet.",
+    },
+    {
+        "name": "agents",
+        "description": "Edge Agent fleet inventory (versions from gRPC Heartbeat / Register).",
     },
 ]
 
@@ -62,6 +66,7 @@ app = FastAPI(
     openapi_tags=_OPENAPI_TAGS,
 )
 
+app.include_router(agents.router, prefix="/api/v1")
 app.include_router(jobs.router, prefix="/api/v1")
 app.include_router(artifacts.router, prefix="/api/v1")
 app.include_router(policies.router, prefix="/api/v1")

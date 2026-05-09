@@ -67,6 +67,8 @@ services:
       DEVAULT_DATABASE_URL: postgresql+psycopg://devault:devault@postgres:5432/devault
       DEVAULT_REDIS_URL: redis://redis:6379/0
       DEVAULT_API_TOKEN: ${DEVAULT_API_TOKEN:-changeme}
+      # Enables Agent Register bootstrap; must match agent service below (dev-only default).
+      DEVAULT_GRPC_REGISTRATION_SECRET: ${DEVAULT_GRPC_REGISTRATION_SECRET:-devault-docker-register-secret}
       DEVAULT_STORAGE_BACKEND: s3
       DEVAULT_S3_ENDPOINT: http://minio:9000
       DEVAULT_S3_ACCESS_KEY: minioadmin
@@ -134,13 +136,17 @@ services:
   # production-like environment; override via shell or a .env next to this file, e.g.
   #   export DEVAULT_ARTIFACT_ENCRYPTION_KEY="$(openssl rand -base64 32)"
   # Format: standard Base64 decoding to exactly 32 bytes (AES-256). See website/docs/security/artifact-encryption.md
+  #
+  # Auth: by default this stack does NOT set DEVAULT_API_TOKEN on the agent — startup calls Register
+  # with DEVAULT_GRPC_REGISTRATION_SECRET (must match api) to obtain the shared API token in memory.
+  # To skip Register and pin a token, set DEVAULT_API_TOKEN on the agent explicitly.
   agent:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
     command: devault-agent
     environment:
-      DEVAULT_API_TOKEN: ${DEVAULT_API_TOKEN:-changeme}
+      DEVAULT_GRPC_REGISTRATION_SECRET: ${DEVAULT_GRPC_REGISTRATION_SECRET:-devault-docker-register-secret}
       DEVAULT_GRPC_TARGET: api:50051
       DEVAULT_ALLOWED_PATH_PREFIXES: /data,/restore
       # Dev/demo default key (literal label: devault-docker-demo-aes256-key!!); override for real use.

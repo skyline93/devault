@@ -24,6 +24,8 @@ docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.grpc-tls.ym
 
 典型模式：**Agent 连接网关 TLS 端口**，网关将请求转发到内网 **`api:50051` 明文 gRPC**。
 
+扩展多个 **`api` 副本**、Envoy **ROUND_ROBIN** 与 Compose 端口注意事项见 [gRPC 与 API 多实例部署](../install/grpc-multi-instance.md)。
+
 ## mTLS 与审计
 
 根据部署目标，可在网关或控制面侧启用 mTLS、连接审计与限流。实现细节随版本演进，请以当前分支下的 `deploy` 与相关文档代码为准。

@@ -1,5 +1,5 @@
 ---
-sidebar_position: 5
+sidebar_position: 6
 title: 配置参考
 description: 常用环境变量分组说明
 ---
@@ -41,6 +41,8 @@ description: 常用环境变量分组说明
 | `DEVAULT_GRPC_MAX_TESTED_AGENT_VERSION` | 最高「已测试」Agent 版本；**空**表示与控制面当前 `version` 相同 |
 | `DEVAULT_GRPC_UPGRADE_URL` | （可选）随 gRPC 回复带给 Agent 的升级说明链接 |
 | `DEVAULT_GRPC_REQUIRE_AGENT_VERSION` | 设为 `true` 时，未带 `agent_release` 的 Agent 将被拒绝 |
+| `DEVAULT_GRPC_ENFORCE_VERSION_ON_LEASE` | 默认 `true`：**`LeaseJobs`** 根据 **`edge_agents`** 表（最近一次 Heartbeat 字段）再次执行版本/proto 校验；紧急绕过可设为 `false` |
+| `DEVAULT_GRPC_REGISTRATION_SECRET` | 若设置：开放 **Register**；Agent 可用该密钥换取控制面当前 **`DEVAULT_API_TOKEN`**（**`deploy/docker-compose.yml`** 开发默认与 Agent 侧同值；生产须轮换） |
 
 ## 存储后端（S3）
 

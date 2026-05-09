@@ -155,6 +155,13 @@ class Settings(BaseSettings):
         default=False,
         description="If true, reject Heartbeat/Register when agent_release is empty",
     )
+    grpc_enforce_version_on_lease: bool = Field(
+        default=True,
+        description=(
+            "If true, LeaseJobs re-checks version/proto against edge_agents (last Heartbeat); "
+            "set false only for break-glass"
+        ),
+    )
     server_git_sha: str | None = Field(
         default=None,
         description="Optional vcs sha; exposed on GET /version when set",
