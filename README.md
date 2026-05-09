@@ -58,7 +58,7 @@ cd deploy
 docker compose up --build -d
 ```
 
-可选：在同一目录叠加 **Prometheus**（抓取 `api:8000/metrics`）时执行  
+可选：在同一目录叠加 **Prometheus + Alertmanager**（抓取 `api:8000/metrics`，告警路由到演示 Webhook；见文档站 [可观测性](website/docs/install/observability.md)）时执行  
 `docker compose -f docker-compose.yml -f docker-compose.prometheus.yml up -d`（或自仓库根目录为两个 `-f deploy/...` 路径）。
 
 **Kubernetes**：见文档站 [Kubernetes（Helm）](website/docs/install/kubernetes-helm.md)（Chart 位于 `deploy/helm/devault`）。

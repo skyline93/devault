@@ -1,10 +1,20 @@
 # DeVault local stack: scrape the control-plane HTTP /metrics endpoint.
-# Used by optional overlay: deploy/docker-compose.prometheus.yml
+# Used by optional overlay: deploy/docker-compose.prometheus.yml (includes Alertmanager + demo webhook).
 # rule_files references deploy/prometheus/alerts.yml — copy both files (or adjust paths) if you reuse this config outside Compose.
+#
+# The `alerting` block targets the Compose service `alertmanager:9093`. For Prometheus without
+# Alertmanager, delete the `alerting:` section to avoid connection errors.
 
 global:
   scrape_interval: 15s
   evaluation_interval: 15s
+
+# Set when running with Alertmanager (deploy/docker-compose.prometheus.yml).
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - alertmanager:9093
 
 rule_files:
   - /etc/prometheus/alerts.yml

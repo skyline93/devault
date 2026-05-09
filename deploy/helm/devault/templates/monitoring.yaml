@@ -1,0 +1,258 @@
+{{- if .Values.monitoring.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "devault.fullname" . }}-alertmanager
+  labels:
+    {{- include "devault.labels" . | nindent 4 }}
+    app.kubernetes.io/component: monitoring
+data:
+  alertmanager.yml: |
+    global:
+      resolve_timeout: 5m
+    route:
+      receiver: demo
+      group_by: ["alertname", "severity"]
+      group_wait: 15s
+      group_interval: 5m
+      repeat_interval: 12h
+      routes:
+        - matchers:
+            - severity="critical"
+          receiver: demo
+          group_wait: 10s
+          repeat_interval: 4h
+    receivers:
+      - name: demo
+        webhook_configs:
+          - url: http://{{ include "devault.fullname" . }}-alertdump:8080/
+            send_resolved: true
+    inhibit_rules: []
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "devault.fullname" . }}-prometheus
+  labels:
+    {{- include "devault.labels" . | nindent 4 }}
+    app.kubernetes.io/component: monitoring
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+    alerting:
+      alertmanagers:
+        - static_configs:
+            - targets:
+                - {{ include "devault.fullname" . }}-alertmanager:9093
+    rule_files:
+      - /etc/prometheus/alerts.yml
+    scrape_configs:
+      - job_name: devault-api
+        metrics_path: /metrics
+        static_configs:
+          - targets:
+              - {{ include "devault.fullname" . }}-api:8000
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "devault.fullname" . }}-prometheus-alerts
+  labels:
+    {{- include "devault.labels" . | nindent 4 }}
+    app.kubernetes.io/component: monitoring
+data:
+  alerts.yml: |
+{{ .Files.Get "prometheus-alerts.yml" | nindent 4 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "devault.fullname" . }}-alertdump
+  labels:
+    {{- include "devault.labels" . | nindent 4 }}
+    app.kubernetes.io/component: alertdump
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+  selector:
+    {{- include "devault.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: alertdump
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "devault.fullname" . }}-alertdump
+  labels:
+    {{- include "devault.labels" . | nindent 4 }}
+    app.kubernetes.io/component: alertdump
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "devault.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: alertdump
+  template:
+    metadata:
+      labels:
+        {{- include "devault.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: alertdump
+    spec:
+      containers:
+        - name: echo
+          image: {{ .Values.monitoring.alertdump.image | quote }}
+          ports:
+            - name: http
+              containerPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "devault.fullname" . }}-alertmanager
+  labels:
+    {{- include "devault.labels" . | nindent 4 }}
+    app.kubernetes.io/component: alertmanager
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 9093
+      targetPort: 9093
+  selector:
+    {{- include "devault.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: alertmanager
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "devault.fullname" . }}-alertmanager
+  labels:
+    {{- include "devault.labels" . | nindent 4 }}
+    app.kubernetes.io/component: alertmanager
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "devault.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: alertmanager
+  template:
+    metadata:
+      labels:
+        {{- include "devault.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: alertmanager
+    spec:
+      initContainers:
+        - name: wait-alertdump
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - until nc -z {{ include "devault.fullname" . }}-alertdump 8080; do sleep 1; done
+      containers:
+        - name: alertmanager
+          image: {{ .Values.monitoring.alertmanager.image | quote }}
+          args:
+            - --config.file=/etc/alertmanager/alertmanager.yml
+            - --web.external-url=http://127.0.0.1:9093
+          ports:
+            - name: http
+              containerPort: 9093
+          volumeMounts:
+            - name: cfg
+              mountPath: /etc/alertmanager/alertmanager.yml
+              subPath: alertmanager.yml
+      volumes:
+        - name: cfg
+          configMap:
+            name: {{ include "devault.fullname" . }}-alertmanager
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "devault.fullname" . }}-prometheus
+  labels:
+    {{- include "devault.labels" . | nindent 4 }}
+    app.kubernetes.io/component: prometheus
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 9090
+      targetPort: 9090
+  selector:
+    {{- include "devault.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: prometheus
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "devault.fullname" . }}-prometheus
+  labels:
+    {{- include "devault.labels" . | nindent 4 }}
+    app.kubernetes.io/component: prometheus
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "devault.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: prometheus
+  template:
+    metadata:
+      labels:
+        {{- include "devault.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: prometheus
+    spec:
+      initContainers:
+        - name: wait-alertmanager
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - until nc -z {{ include "devault.fullname" . }}-alertmanager 9093; do sleep 1; done
+        - name: wait-api-metrics
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              for i in $(seq 1 120); do
+                if wget -q -O- "http://{{ include "devault.fullname" . }}-api:8000/healthz" >/dev/null 2>&1; then
+                  exit 0
+                fi
+                sleep 2
+              done
+              exit 1
+      containers:
+        - name: prometheus
+          image: {{ .Values.monitoring.prometheus.image | quote }}
+          args:
+            - --config.file=/etc/prometheus/prometheus.yml
+            - --storage.tsdb.path=/prometheus
+            - --web.console.libraries=/usr/share/prometheus/console_libraries
+            - --web.console.templates=/usr/share/prometheus/consoles
+          ports:
+            - name: http
+              containerPort: 9090
+          volumeMounts:
+            - name: prom-cfg
+              mountPath: /etc/prometheus/prometheus.yml
+              subPath: prometheus.yml
+            - name: prom-alerts
+              mountPath: /etc/prometheus/alerts.yml
+              subPath: alerts.yml
+          {{- with .Values.monitoring.prometheus.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: prom-cfg
+          configMap:
+            name: {{ include "devault.fullname" . }}-prometheus
+        - name: prom-alerts
+          configMap:
+            name: {{ include "devault.fullname" . }}-prometheus-alerts
+{{- end }}

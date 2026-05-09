@@ -56,7 +56,7 @@
 
 | 波次 | 名称 | 未完成条目（§ 指向） |
 |------|------|------------------------|
-| **1** | M1 基础设施与运维闭环 | §六 **告警路由**（剩余）；§六 Helm/K8s 清单 **已交付**（`deploy/helm/devault`） |
+| **1** | M1 基础设施与运维闭环 | **已收敛**：Helm（`deploy/helm/devault`）+ **告警路由**（`deploy/alertmanager.yml`、`deploy/docker-compose.prometheus.yml`、`monitoring.enabled`、文档 **`website/docs/install/observability.md`**） |
 | **2** | 发布工程与数据面韧性 | §二 Multipart×Artifact 加密联调；§三 CI 多版本镜像 E2E；§三 bump_release ↔ compatibility.json；§三 Agent server_capabilities 降级 |
 | **3** | 网关与身份演进 | §一 Envoy local_rate_limit；§一 Register 每 Agent 令牌 / 吊销 / Redis |
 | **4** | 合规与统一存储扩展 | §五 KMS / 信封 / 租户 DEK；§五 默认或租户级强制加密；§五 WORM；§五 Legal Hold；§五 BYOB |
@@ -131,7 +131,7 @@
 | 六-03 | §六 | [x] | P1 | — | **Agent 批量管理** |
 | 六-04 | §六 | [x] | P2 | — | **Agent 舰队 Web UI** |
 | 六-05 | §六 | [x] | P2 | — | **Helm Chart / K8s 清单** |
-| 六-06 | §六 | [ ] | P2 | 1 | **告警路由** |
+| 六-06 | §六 | [x] | P2 | — | **告警路由** |
 | 七-01 | §七 | [x] | P1 | — | **自动恢复演练 Job** |
 | 七-02 | §七 | [x] | P1 | — | **备份完整性告警** |
 | 七-03 | §七 | [ ] | P2 | 6 | **增量与时间线（长期）** |
@@ -288,7 +288,7 @@
 | [x] | P1 | **Agent 批量管理** | 版本查询、强制升级策略、与控制面协议版本协商（`.proto` 版本号）。**`edge_agents`** 表；**`GET /api/v1/agents`**；**`LeaseJobs`** 可选二次校验 **`DEVAULT_GRPC_ENFORCE_VERSION_ON_LEASE`**；文档 **`website/docs/reference/agent-fleet.md`**。 |
 | [x] | P2 | **Agent 舰队 Web UI** | 简易控制台 **`/ui/agents`**（HTTP Basic，与 API 同源数据）；导航 **`agents.html`**；展示 SemVer / proto 合规列。 |
 | [x] | P2 | **Helm Chart / K8s 清单** | Chart：`deploy/helm/devault`；文档站 **`website/docs/install/kubernetes-helm.md`**；CI **`helm lint`**。Operator 可作为更后阶段。 |
-| [ ] | P2 | **告警路由** | Prometheus 规则 + Alertmanager 或云监控；关键失败率、租约失败、存储配额。 |
+| [x] | P2 | **告警路由** | Prometheus **`rule_files`** + **Alertmanager**（`deploy/alertmanager.yml`）；Compose 叠加 **`deploy/docker-compose.prometheus.yml`**（`alertdump` 演示 Webhook）；Helm **`monitoring.enabled`**；规则含备份/完整性/锁争用/保留清理；**存储配额**见云侧监控说明（`observability.md`）。 |
 
 ---
 
@@ -356,7 +356,7 @@
 | E-DOC-001 | 企业文档 | M1 | H |
 | E-DB-001 | 数据库备份 MVP | M2 | C |
 
-**Epic → 排期波次**（与 **[排期波次与全量待办索引](#排期波次与全量待办索引)** 一致）：**E-OPS-001** 中 **Helm / K8s** 已交付；**告警路由** 仍为 **波次 1** 剩余项；**`E-DATA-001` / `E-DATA-002`** 之 **§二 Multipart×加密**、**E-VER-001** 之 **§三 CI / bump_release / capabilities** → **波次 2**；**E-ARCH-001** 之 **§一** 两项可增强 → **波次 3**；**E-GOV-001** 之 **KMS、强制加密、WORM、Legal Hold、BYOB** → **波次 4**；**E-DB-001** → **波次 5**；**E-TRUST-001** 之 **§七 增量与时间线** → **波次 6**。其余 Epic 主线条目在当前仓库已为 `[x]`。
+**Epic → 排期波次**（与 **[排期波次与全量待办索引](#排期波次与全量待办索引)** 一致）：**E-OPS-001** 中 **Helm / K8s** 与 **告警路由（Prometheus + Alertmanager）** 已交付；**`E-DATA-001` / `E-DATA-002`** 之 **§二 Multipart×加密**、**E-VER-001** 之 **§三 CI / bump_release / capabilities** → **波次 2**；**E-ARCH-001** 之 **§一** 两项可增强 → **波次 3**；**E-GOV-001** 之 **KMS、强制加密、WORM、Legal Hold、BYOB** → **波次 4**；**E-DB-001** → **波次 5**；**E-TRUST-001** 之 **§七 增量与时间线** → **波次 6**。其余 Epic 主线条目在当前仓库已为 `[x]`。
 
 ---
 
@@ -407,6 +407,7 @@
 | 2026-05-09 | **文档**：**`website/docs/intro/target-architecture.md`** 承接原 **`docs-old/target-architecture.md`** 正文；旧文件改为迁移占位；全站引用改为文档站内链；**`observability.md`** 使用 HTML 标题锚点以兼容 MDX。 |
 | 2026-05-09 | **清单重组**：新增 **排期波次（1～6）**、**全量待办索引**（§零～§九 + §三.3 注，共 73 行，与分节表一一对应）；**整体实施路线** 补充排期原则；**如何使用** 增加「排期波次」列说明；**§十** 增加 Epic→波次映射；**§十三** 与全量索引互链。 |
 | 2026-05-09 | **M1·六 P2**：**Helm Chart** 落地（`deploy/helm/devault`、CI `helm lint`、文档 **`website/docs/install/kubernetes-helm.md`**）；**§六** 与全量索引 **六-05** 勾选；**波次 1** 表更新。 |
+| 2026-05-09 | **M1·六 P2**：**告警路由** 落地（`deploy/alertmanager.yml`、`deploy/docker-compose.prometheus.yml` 扩展、**`deploy/prometheus/alerts.yml`** 增补策略锁/保留清理；Helm **`templates/monitoring.yaml`** + **`prometheus-alerts.yml`**；**`website/docs/install/observability.md`** 重写 Alertmanager 章节；**§六** 与全量索引 **六-06** 勾选；**波次 1** 标为已收敛）。 |
 
 ---
 

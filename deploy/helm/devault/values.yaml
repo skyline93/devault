@@ -79,3 +79,15 @@ ingress:
         - path: /
           pathType: Prefix
   tls: []
+
+# Optional in-cluster Prometheus + Alertmanager + demo webhook echo (ClusterIP only).
+# Chart bundles `prometheus-alerts.yml` (sync with deploy/prometheus/alerts.yml when rules change).
+monitoring:
+  enabled: false
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    resources: {}
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+  alertdump:
+    image: mendhak/http-https-echo:35

@@ -18,3 +18,10 @@
 6. Agent gRPC (in-cluster): {{ include "devault.fullname" . }}-api:50051 — set DEVAULT_GRPC_REGISTRATION_SECRET to match the same secret key on agents outside the chart.
 
 7. bundled PostgreSQL / Redis / MinIO are for lab use only; run a single scheduler replica (already enforced).
+{{- if .Values.monitoring.enabled }}
+
+8. Monitoring is enabled: Prometheus scrapes the API; Alertmanager routes to demo webhook echo.
+   kubectl port-forward svc/{{ include "devault.fullname" . }}-prometheus 9090:9090
+   kubectl port-forward svc/{{ include "devault.fullname" . }}-alertmanager 9093:9093
+   kubectl logs -f deploy/{{ include "devault.fullname" . }}-alertdump
+{{- end }}

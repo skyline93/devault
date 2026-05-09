@@ -18,6 +18,7 @@ jobs:
         run: |
           helm lint deploy/helm/devault
           helm template helm-ci deploy/helm/devault >/dev/null
+          helm template helm-ci-mon deploy/helm/devault --set monitoring.enabled=true >/dev/null
 
   test:
     runs-on: ubuntu-latest

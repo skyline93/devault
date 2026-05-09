@@ -19,15 +19,21 @@ docker compose up --build -d
 
 控制面 **`api` 水平扩展**（Envoy、Compose `--scale`、调度器单副本约束）见 [gRPC 与 API 多实例部署](./grpc-multi-instance.md)。仓库提供 **`deploy/docker-compose.grpc-ha-example.yml`** 叠加示例（避免多副本与宿主机端口冲突）。
 
-## 可选：Prometheus
+## 可选：Prometheus 与 Alertmanager
 
-核心栈不含 Prometheus。需要本地抓取 **`/metrics`** 时，在 `deploy/` 下叠加：
+核心栈不含 Prometheus。需要本地抓取 **`/metrics`** 并走 **Alertmanager 告警路由** 时，在 `deploy/` 下叠加（含 **Prometheus、Alertmanager、演示 Webhook 接收端 `alertdump`**）：
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.prometheus.yml up -d
 ```
 
 （自仓库根目录请将 `-f` 指向 `deploy/docker-compose.yml` 与 `deploy/docker-compose.prometheus.yml`。）
+
+- Prometheus UI：[http://127.0.0.1:9090](http://127.0.0.1:9090)
+- Alertmanager UI：[http://127.0.0.1:9093](http://127.0.0.1:9093)
+- 查看演示 Webhook 收到的告警负载：`docker compose -f docker-compose.yml -f docker-compose.prometheus.yml logs -f alertdump`
+
+生产接收器请编辑 `deploy/alertmanager.yml`，详见 [可观测性](./observability.md)。
 
 ## 服务角色
 

@@ -39,6 +39,17 @@ helm upgrade --install dv deploy/helm/devault \
 
 默认从 `values.yaml` 读取演示密钥（`secrets.apiToken`、`postgresql.auth.password` 等）。**任何共享或生产环境请全部替换**（可配合 ExternalSecrets、SealedSecrets 或 `helm --set-file`）。
 
+### 可选：集群内 Prometheus + Alertmanager
+
+与 Compose 叠加栈一致，可打开内置监控（**ClusterIP**，需自行 `kubectl port-forward`）：
+
+```bash
+helm upgrade --install dv deploy/helm/devault -n devault \
+  --set monitoring.enabled=true
+```
+
+详见 [可观测性](./observability.md)（Alertmanager 路由、演示 Webhook、生产接收器替换说明）。Chart 内 **`prometheus-alerts.yml`** 为 `deploy/prometheus/alerts.yml` 的副本，改规则时请同步更新。
+
 ---
 
 ## 验证
@@ -67,6 +78,7 @@ helm test dv -n devault
 | `redis.enabled` / `minio.enabled` | 当前 Chart 版本在二者为 `true` 时生成完整演示栈；关闭需自行改模板或提 Issue |
 | `agent.enabled` | 默认 `false`；开启后部署带 `emptyDir` 的演示 Agent（路径前缀见 `agent.allowedPathPrefixes`） |
 | `ingress.enabled` | 为 HTTP API 创建 Ingress（gRPC 仍建议集群内或专用网关） |
+| `monitoring.enabled` | 部署 Prometheus、Alertmanager、演示 Webhook；抓取本 Release 的 `api` Service |
 
 完整默认值见 `deploy/helm/devault/values.yaml`。
 
