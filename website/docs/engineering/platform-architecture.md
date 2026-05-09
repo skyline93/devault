@@ -88,5 +88,6 @@ Artifact 落在平台运维的 **S3 兼容**集群，通过前缀或桶策略做
 | 边缘执行 | **`devault-agent`** |
 | 控制面编排 | **FastAPI `api`**：`DEVAULT_GRPC_LISTEN`、`devault-scheduler` Cron |
 | 队列语义 | Redis 锁 / PG 作业状态 |
+| 水平扩缩 | **`api` 可多副本**（共享 PG/Redis）；**`scheduler` 单副本**；Agent 多实例；详见 [gRPC 与 API 多实例](../admin/grpc-multi-instance.md) |
 
 演进见 [产品路线图](../product/roadmap.md) 与 **`CHANGELOG`**。

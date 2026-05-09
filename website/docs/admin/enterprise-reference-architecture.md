@@ -14,36 +14,34 @@ description: DMZ、网关、控制面 VPC 与出站策略单页图
 flowchart LR
   subgraph corp["客户内网"]
     SRC[受保护数据源]
-    AG[DeVault Agent]
+    AG["DeVault Agent<br/>────────<br/>边缘多实例"]
     SRC --> AG
   end
 
   subgraph dmz["DMZ / 专线对端区"]
-    GW[gRPC 网关<br/>TLS · 限流 · 审计]
+    GW["gRPC 网关<br/>────────<br/>可多副本 · TLS · 限流 · 审计"]
   end
 
   subgraph vpc["控制面 VPC"]
-    API[HTTP API / UI / OpenAPI]
-    GRPC[gRPC Agent 服务]
-    PG[(PostgreSQL)]
-    RD[(Redis)]
-    SCH[devault-scheduler]
-    API --> PG
-    GRPC --> PG
+    APIGRPC["api：HTTP / UI / OpenAPI<br/>+ Agent gRPC 同进程<br/>────────<br/>Deployment 可多副本 (N)"]
+    PG["PostgreSQL<br/>────────<br/>逻辑单库 · RDS/托管 HA"]
+    RD["Redis<br/>────────<br/>集群/哨兵由基础设施"]
+    SCH["devault-scheduler<br/>────────<br/>单副本 · Cron / 保留清理"]
+    APIGRPC --> PG
     SCH --> PG
-    GRPC --> RD
+    APIGRPC --> RD
     SCH --> RD
   end
 
   subgraph obj["对象存储区域"]
-    S3[(S3 兼容桶<br/>预签名 / STS)]
+    S3["S3 兼容桶<br/>────────<br/>预签名 / STS · 存储面扩缩"]
   end
 
   AG -->|"443 出站 gRPC"| GW
-  GW --> GRPC
+  GW --> APIGRPC
   AG -->|"443 出站 HTTPS 数据面"| S3
-  GRPC -->|"控制面凭证与校验"| S3
-  API -->|"运维/集成"| PG
+  APIGRPC -->|"控制面凭证与校验"| S3
+  APIGRPC -->|"运维/集成"| PG
 ```
 
 | 边界 | 说明 |
@@ -52,7 +50,7 @@ flowchart LR
 | **Agent → 对象存储** | 备份/恢复字节流；短时预签名 |
 | **控制面 → 对象存储** | Manifest、Multipart 收尾、保留删除；可用 AssumeRole |
 
-HTTP API：生产建议 TLS、OIDC/API Key/RBAC（见 [租户与访问控制](./tenants-and-rbac.md)）。
+HTTP / UI：生产建议 Ingress 或 ALB 前置于 **多副本 api**；TLS、OIDC/API Key/RBAC 见 [租户与访问控制](./tenants-and-rbac.md)。**scheduler 保持单副本**；扩缩与探针见 [gRPC 与 API 多实例](./grpc-multi-instance.md)。
 
 ## 出站与防火墙
 

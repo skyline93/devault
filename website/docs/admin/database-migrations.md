@@ -25,7 +25,7 @@ Docker Compose 下 **`api`** 启动脚本包含上述命令。
 
 自建编排保持 **单一迁移责任**，避免并发 `alembic`。
 
-控制面 **PostgreSQL** 的备份与 PITR 见 [控制面元数据库备份与 DR](./control-plane-database-dr.md)。
+控制面 **PostgreSQL** 的备份与 PITR 见 [控制面元数据库备份与 DR](./control-plane-database-dr.md)。表级关系见工程文档 [控制面数据库 ER 图](../engineering/control-plane-database-er.md)。
 
 ## 本地开发
 

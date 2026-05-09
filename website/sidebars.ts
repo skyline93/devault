@@ -159,7 +159,11 @@ const sidebars: SidebarsConfig = {
       type: 'category',
       label: '架构与契约',
       collapsed: true,
-      items: ['engineering/platform-architecture', 'engineering/compatibility'],
+      items: [
+        'engineering/platform-architecture',
+        'engineering/control-plane-database-er',
+        'engineering/compatibility',
+      ],
     },
     {
       type: 'category',
