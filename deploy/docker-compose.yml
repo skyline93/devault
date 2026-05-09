@@ -4,7 +4,7 @@
 
 services:
   postgres:
-    image: postgres:16-alpine
+    image: postgres:14
     environment:
       POSTGRES_USER: devault
       POSTGRES_PASSWORD: devault
@@ -20,7 +20,7 @@ services:
       retries: 20
 
   redis:
-    image: redis:7-alpine
+    image: redis:7
     ports:
       - "6379:6379"
 
