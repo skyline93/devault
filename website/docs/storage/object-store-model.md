@@ -21,4 +21,4 @@ Docker Compose 通过 **`minio-init`** 一次性服务在 MinIO 就绪后执行 
 
 ## 密钥与端点
 
-`DEVAULT_S3_*` 环境变量需与对象存储实际部署一致；跨区域复制、生命周期策略等在存储侧配置，不由 DeVault 替代。
+`DEVAULT_S3_*` 环境变量需与对象存储实际部署一致；生产环境推荐使用 **STS AssumeRole** 或节点/Pod 身份替代长期静态密钥，见 [STS 与 AssumeRole](./sts-assume-role.md)。跨区域复制、生命周期策略等在存储侧配置，不由 DeVault 替代。

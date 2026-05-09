@@ -36,12 +36,19 @@ description: 常用环境变量分组说明
 |------|------|
 | `DEVAULT_STORAGE_BACKEND` | 设为 `s3` 以启用预签名与 Agent 直传路径 |
 | `DEVAULT_S3_ENDPOINT` | S3 API 端点 |
-| `DEVAULT_S3_ACCESS_KEY` / `DEVAULT_S3_SECRET_KEY` | 访问密钥 |
+| `DEVAULT_S3_ACCESS_KEY` / `DEVAULT_S3_SECRET_KEY` | 访问密钥（可选；与 AssumeRole / 默认凭证链组合见下） |
+| `DEVAULT_S3_ASSUME_ROLE_ARN` | （可选）STS AssumeRole 目标角色；设置后控制面用临时会话密钥访问 S3 |
+| `DEVAULT_S3_ASSUME_ROLE_EXTERNAL_ID` | （可选）AssumeRole 的 `ExternalId` |
+| `DEVAULT_S3_ASSUME_ROLE_SESSION_NAME` | （可选）默认 `devault-control-plane` |
+| `DEVAULT_S3_ASSUME_ROLE_DURATION_SECONDS` | （可选）900–43200，默认 `3600` |
+| `DEVAULT_S3_STS_REGION` | （可选）STS 区域，默认同 `DEVAULT_S3_REGION` |
+| `DEVAULT_S3_STS_ENDPOINT_URL` | （可选）自定义 STS 端点（如 LocalStack） |
+| `DEVAULT_S3_STS_USE_SSL` | （可选）默认 `true` |
 | `DEVAULT_S3_BUCKET` | 桶名（须事先存在） |
 | `DEVAULT_S3_USE_SSL` | 是否使用 HTTPS |
 | `DEVAULT_S3_REGION` | 部分云厂商需要 |
 
-大对象相关阈值见 [存储调优](../storage/tuning.md)。
+STS、IRSA 与凭证链顺序见 [STS 与 AssumeRole](../storage/sts-assume-role.md)。大对象相关阈值见 [存储调优](../storage/tuning.md)。
 
 ## Agent
 

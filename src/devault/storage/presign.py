@@ -1,23 +1,15 @@
 from __future__ import annotations
 
-import boto3
 from botocore.client import BaseClient
 
-from devault.settings import Settings
+from devault.storage.s3_client import s3_client_from_settings
 
-
-def s3_client_from_settings(settings: Settings) -> BaseClient:
-    if not settings.s3_access_key or not settings.s3_secret_key:
-        raise RuntimeError("S3 presign requires DEVAULT_S3_ACCESS_KEY and DEVAULT_S3_SECRET_KEY")
-    session = boto3.session.Session()
-    return session.client(
-        "s3",
-        endpoint_url=settings.s3_endpoint or None,
-        aws_access_key_id=settings.s3_access_key,
-        aws_secret_access_key=settings.s3_secret_key,
-        region_name=settings.s3_region,
-        use_ssl=settings.s3_use_ssl,
-    )
+__all__ = [
+    "presign_get_object",
+    "presign_put_object",
+    "presign_upload_part",
+    "s3_client_from_settings",
+]
 
 
 def presign_put_object(

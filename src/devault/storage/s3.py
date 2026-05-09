@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import boto3
 from botocore.client import BaseClient
 
 
@@ -11,26 +10,9 @@ class S3Storage:
 
     backend_name = "s3"
 
-    def __init__(
-        self,
-        *,
-        endpoint_url: str | None,
-        access_key: str,
-        secret_key: str,
-        bucket: str,
-        region: str,
-        use_ssl: bool,
-    ) -> None:
+    def __init__(self, *, client: BaseClient, bucket: str) -> None:
+        self.client = client
         self.bucket = bucket
-        session = boto3.session.Session()
-        self.client: BaseClient = session.client(
-            "s3",
-            endpoint_url=endpoint_url or None,
-            aws_access_key_id=access_key,
-            aws_secret_access_key=secret_key,
-            region_name=region,
-            use_ssl=use_ssl,
-        )
 
     def put_file(self, key: str, src_path: Path) -> None:
         self.client.upload_file(str(src_path), self.bucket, key)

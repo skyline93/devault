@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **控制面 S3 凭证：STS AssumeRole 与默认链**：`DEVAULT_S3_ASSUME_ROLE_ARN`（及 `EXTERNAL_ID`、`SESSION_NAME`、`DURATION_SECONDS`、`DEVAULT_S3_STS_*`）通过 STS 获取短时会话密钥；与静态 `DEVAULT_S3_ACCESS_KEY`/`SECRET` 或 boto3 默认凭证链（IRSA、实例配置等）组合；AssumeRole 结果带过期前刷新缓存。实现见 **`src/devault/storage/s3_client.py`**；说明见 **`website/docs/storage/sts-assume-role.md`**。
 - **发版 SSOT 与脚本**：`pyproject.toml` 的 `[project].version` 为唯一维护处；`devault.__version__` 在安装包上读 `importlib.metadata`，源码/pytest 仅 `PYTHONPATH=src` 时回读仓库根 `pyproject.toml`。新增 **`scripts/bump_release.py`**（将 `[Unreleased]` 折叠进新版本并 bump 版本号）、**`scripts/verify_release_docs.py`**（校验 CHANGELOG 含当前版本节）。CI **`.github/workflows/ci.yml`** 跑 pytest 与校验脚本。
 - **gRPC 双端版本协商**：扩展 **`Heartbeat` / `Register`**（`agent_release`、`proto_package`、`git_commit` 与控制面 `server_release`、`min_*`、`max_*`、`upgrade_url`、`deprecation_message`）；不兼容时在 **trailing metadata** `devault-reason-code` 与明确 gRPC 状态。控制面环境变量 **`DEVAULT_GRPC_MIN_SUPPORTED_AGENT_VERSION`** 等；依赖 **`packaging`** 做 SemVer 比较。
 - **HTTP `GET /version`**：增加 `api`、`grpc_proto_package`、可选 **`git_sha`**（`DEVAULT_SERVER_GIT_SHA`）。**`devault` / `devault-agent` / `devault-scheduler`** 支持 **`--version` / `-V`**。

@@ -33,6 +33,38 @@ class Settings(BaseSettings):
     s3_region: str = "us-east-1"
     s3_use_ssl: bool = False
 
+    # STS AssumeRole for control-plane S3 (optional; see website/docs/storage/sts-assume-role.md)
+    s3_assume_role_arn: str | None = Field(
+        default=None,
+        description="If set, control plane calls STS AssumeRole and uses returned creds for S3",
+    )
+    s3_assume_role_external_id: str | None = Field(
+        default=None,
+        description="Optional ExternalId for cross-account AssumeRole",
+    )
+    s3_assume_role_session_name: str = Field(
+        default="devault-control-plane",
+        description="RoleSessionName for AssumeRole (max 64 chars; truncated if longer)",
+    )
+    s3_assume_role_duration_seconds: int = Field(
+        default=3600,
+        ge=900,
+        le=43200,
+        description="AssumeRole DurationSeconds (AWS allows 900–43200 for most roles)",
+    )
+    s3_sts_region: str | None = Field(
+        default=None,
+        description="STS client region; defaults to s3_region when unset",
+    )
+    s3_sts_endpoint_url: str | None = Field(
+        default=None,
+        description="Custom STS endpoint (e.g. LocalStack); omit for AWS regional STS",
+    )
+    s3_sts_use_ssl: bool = Field(
+        default=True,
+        description="Use TLS for STS client; set false only for http STS endpoints (e.g. some lab setups)",
+    )
+
     env_name: str = Field(default="dev", description="Key prefix segment dev|prod")
 
     allowed_path_prefixes: str | None = Field(
@@ -145,6 +177,15 @@ class Settings(BaseSettings):
         default=None,
         description="Agent only: optional short git SHA sent on Heartbeat/Register",
     )
+
+    @model_validator(mode="after")
+    def _s3_key_pair_consistent(self) -> Self:
+        ak, sk = self.s3_access_key, self.s3_secret_key
+        if (ak is None) ^ (sk is None):
+            raise ValueError(
+                "DEVAULT_S3_ACCESS_KEY and DEVAULT_S3_SECRET_KEY must be set together or both omitted"
+            )
+        return self
 
     @model_validator(mode="after")
     def _grpc_tls_paths_consistent(self) -> Self:

@@ -41,6 +41,7 @@ const sidebars: SidebarsConfig = {
       collapsed: false,
       items: [
         'storage/object-store-model',
+        'storage/sts-assume-role',
         'storage/large-objects',
         'storage/tuning',
       ],

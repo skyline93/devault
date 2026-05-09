@@ -40,8 +40,8 @@ Docker Compose 中 **仅 api** 在启动时执行 `alembic upgrade head`（**sch
 
 ### S3 大对象与恢复流式（阶段 B）
 
-- 见文档站：[大对象与恢复](website/docs/storage/large-objects.md)、[存储调优](website/docs/storage/tuning.md)。  
-- 相关环境变量：`DEVAULT_S3_MULTIPART_THRESHOLD_BYTES`、`DEVAULT_S3_MULTIPART_PART_SIZE_BYTES`。
+- 见文档站：[大对象与恢复](website/docs/storage/large-objects.md)、[存储调优](website/docs/storage/tuning.md)、[STS 与 AssumeRole](website/docs/storage/sts-assume-role.md)（控制面短时会话密钥访问 S3）。  
+- 相关环境变量：`DEVAULT_S3_MULTIPART_THRESHOLD_BYTES`、`DEVAULT_S3_MULTIPART_PART_SIZE_BYTES`；生产 IAM 见 `DEVAULT_S3_ASSUME_ROLE_ARN` 等（同上 STS 文档）。
 
 ### 对象存储桶（企业约定）
 

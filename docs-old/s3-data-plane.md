@@ -37,7 +37,7 @@
   - **控制面**：`jobs.bundle_wip_multipart_upload_id`（及 `bundle_wip_content_length`、`bundle_wip_part_size_bytes`）记录进行中的 MPU；`RequestStorageGrant` 可带 **`resume_bundle_multipart_upload_id`**（须与 WIP 一致），服务端 **`ListParts`** 后仅为缺失分片签发预签名；若 S3 上已齐片，则返回 **`bundle_multipart_completed_parts_json`**，Agent 直接 `CompleteJob`。
   - **Agent**：`~/.cache/devault-agent/multipart/<job_id>/` 下保留 **`bundle.tar.gz`** 与 **`checkpoint.json`**（含 manifest、校验和、已完成 `PartNumber`+`ETag`）；同一作业在租约回收为 **PENDING** 后再次被拉取时，可继续上传。目录根可通过 **`DEVAULT_AGENT_MULTIPART_STATE_DIR`** 配置。
   - **孤儿 MPU**：同一作业 **发起新的** Multipart（不带 resume）前，控制面对旧 WIP 调用 **`AbortMultipartUpload`**；作业 **`CompleteJob` 失败**（终态 FAILED）时亦会 Abort 并清空 WIP 列。
-- **待办**：**STS / AssumeRole 临时凭证**（控制面访问 S3 使用短时会话密钥）仍见 [`enterprise-backlog.md`](./enterprise-backlog.md) **M1 · 二** P2 行。
+- **STS / AssumeRole（控制面 → S3）**：可通过 `DEVAULT_S3_ASSUME_ROLE_ARN` 等变量使用 **短时**会话密钥；与静态 `DEVAULT_S3_ACCESS_KEY` / `DEVAULT_S3_SECRET_KEY` 或默认凭证链（IRSA 等）组合方式见 **`website/docs/storage/sts-assume-role.md`** 与 `src/devault/storage/s3_client.py`。
 
 ---
 
@@ -50,7 +50,7 @@
 ## 5. 云厂商差异（简要）
 
 - **MinIO** 与 **AWS S3** 在预签名 URL、ETag 引号、`complete_multipart_upload` 行为上基本一致；若遇兼容问题，优先核对 **endpoint / path-style / region** 与 **时钟偏差**（预签名过期）。
-- **STS 临时凭证**：仍为 backlog **P2**，当前控制面仍使用配置的 AK/SK 或等价环境变量。
+- **STS 临时凭证**：控制面支持 **`AssumeRole`** 返回的会话密钥（可缓存至临近过期），亦支持仅静态密钥或仅默认凭证链；详见 **`website/docs/storage/sts-assume-role.md`**。
 
 ---
 
