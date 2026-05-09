@@ -10,7 +10,7 @@
 
 ## 2. 兼容性与契约
 
-- [ ] 已更新 **`docs/compatibility.json`** 中 **`current.control_plane_release`**（及必要时的 **`matrices`**）。
+- [ ] 已更新 **`docs/compatibility.json`** 中 **`current.control_plane_release`**（及必要时的 **`matrices`**）。推荐使用 **`python scripts/bump_release.py`** 与 **`pyproject.toml`** 同步写入。
 - [ ] CI 通过 **`scripts/verify_compatibility_matrix.py`** 与 **`scripts/verify_release_docs.py`**。
 - [ ] 若修改 **`proto/agent.proto`**：已执行 **`bash scripts/gen_proto.sh`**，且 Agent 与控制面制品来自兼容矩阵。
 

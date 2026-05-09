@@ -52,6 +52,8 @@ Agent 在 **`Heartbeat`** 与 **`Register`** 请求中携带：
 
 **`HeartbeatReply`** 与成功/失败路径上的 **`RegisterReply`** 均携带 **`server_capabilities`** 重复字段，取值来自控制面运行时（如 **`s3_presign_bundle`**、**`multipart_resume`** 等）。权威名称列表与语义说明见仓库 **`docs/compatibility.json`**（`grpc.known_capabilities` 与 `capability_notes`），与 [兼容性与版本矩阵](../development/compatibility.md) 交叉阅读。
 
+Agent 侧行为：**`multipart_resume`** 未出现时不会沿用本地 multipart checkpoint 续传（会清空相关本地状态并重建 tarball）；**`multipart_upload`** 未出现时即使 bundle 超过阈值也不会走「写入 `wip` + MPU」路径，而是使用控制面通过 **`RequestStorageGrant`** 返回的单对象预签名 PUT（若控制面仍宣告 **`s3_presign_bundle`**）。每次成功 **`Heartbeat`** 后刷新 capability 集合（仅 **`HeartbeatReply.ok=true`** 时覆盖；失败则保留上一次集合，例如仍沿用 **`Register`** 时的宣告）。
+
 ## CompleteJob 与恢复演练
 
 成功完成 **`kind=restore_drill`** 作业时，Agent 可在 **`CompleteJobRequest`** 中填充 **`result_summary_json`**（与 Agent 磁盘上的 **`.devault-drill-report.json`** 一致的控制面回传字段）；控制面解析后写入 **`jobs.result_meta`**。语义与运维说明见 [自动恢复演练](../guides/restore-drill.md)。

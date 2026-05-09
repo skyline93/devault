@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-Bump ``[project].version`` in pyproject.toml and fold ``[Unreleased]`` into ``[new_version]``.
+Bump ``[project].version`` in pyproject.toml, fold ``[Unreleased]`` into ``[new_version]``,
+and set ``docs/compatibility.json`` → ``current.control_plane_release`` to the same version.
 
 Prerequisites:
   - ``CHANGELOG.md`` has a ``## [Unreleased]`` block followed by ``---`` then ``## [previous]``.
@@ -15,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import json
 import re
 import sys
 import tomllib
@@ -56,6 +58,19 @@ def _set_project_version(pyproject_path: Path, new_version: str) -> str:
     if text.count(token) != 1:
         raise SystemExit(f"error: expected exactly one {token!r} in pyproject.toml")
     return text.replace(token, f'version = "{new_version}"', 1)
+
+
+def sync_compatibility_current_release(repo: Path, new_version: str) -> None:
+    """Set ``docs/compatibility.json`` → ``current.control_plane_release`` to match the release."""
+    path = repo / "docs" / "compatibility.json"
+    if not path.is_file():
+        raise SystemExit(f"error: missing {path}")
+    data = json.loads(path.read_text(encoding="utf-8"))
+    cur = data.get("current")
+    if not isinstance(cur, dict):
+        raise SystemExit("error: compatibility.json missing current object")
+    cur["control_plane_release"] = new_version
+    path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
 def _fold_changelog(changelog_text: str, new_version: str, release_date: str) -> str:
@@ -104,12 +119,15 @@ def main() -> int:
     if args.dry_run:
         print(f"Would set pyproject.toml: {old_v!r} -> {new_v!r}")
         print(f"Would fold CHANGELOG [Unreleased] into [{new_v}] - {release_date}")
+        print(f"Would set docs/compatibility.json current.control_plane_release -> {new_v!r}")
         return 0
 
     pyproject_path.write_text(new_pyproject, encoding="utf-8")
     changelog_path.write_text(new_changelog, encoding="utf-8")
+    sync_compatibility_current_release(repo, new_v)
     print(f"Updated pyproject.toml: {old_v!r} -> {new_v!r}")
     print(f"Folded CHANGELOG [Unreleased] into [{new_v}] - {release_date}")
+    print(f"Updated docs/compatibility.json current.control_plane_release -> {new_v!r}")
     print("Next: review diff, commit, tag, publish.")
     return 0
 

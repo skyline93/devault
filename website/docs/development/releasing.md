@@ -8,14 +8,14 @@ description: 版本号 SSOT、CHANGELOG 与发版脚本
 
 ## 版本号（单一事实来源）
 
-**唯一需要手改版本号的地方**：仓库根目录 **`pyproject.toml`** 中 `[project]` → **`version`**（SemVer）。
+**维护发行版号时**：以仓库根目录 **`pyproject.toml`** 中 `[project]` → **`version`**（SemVer）为准；推荐使用下文 **`scripts/bump_release.py`** 一次性更新 **`pyproject.toml`**、折叠 **`CHANGELOG.md`**，并写入 **`docs/compatibility.json`** → **`current.control_plane_release`**（与 **`verify_compatibility_matrix.py`** 对齐）。若仅手改 **`pyproject.toml`**，须同步修改 **`docs/compatibility.json`** 或通过校验脚本发现不一致。
 
 运行时 **`devault.__version__`**（以及 `GET /version`、Agent 启动日志等）按以下顺序解析：
 
 1. 已安装发行包：**`importlib.metadata.version("devault")`**（与 wheel/sdist 元数据一致，推荐生产镜像构建路径）。
 2. 仅有源码树、未安装元数据时（例如本地 **`pytest`** 且 `pythonpath = ["src"]`）：读取仓库根 **`pyproject.toml`** 的同一字段。
 
-不要在其他文件里再写一份发行版号字符串；文档若需写示例版本，请表述为「与 `pyproject.toml` 一致」或引用上述端点。
+除 **`compatibility.json`** 中由 bump 脚本维护的 **`current.control_plane_release`**（须与 **`pyproject.toml`** 一致）外，不要在其他文件里再写一份独立的「当前发行版」字符串；文档若需写示例版本，请表述为「与 `pyproject.toml` 一致」或引用上述端点。
 
 ## CHANGELOG
 
@@ -43,6 +43,7 @@ python scripts/bump_release.py <新版本号>
 1. 将 **`[Unreleased]`** 与紧随其后的 **`---`** 之间的正文，折叠为新小节 **`## [<新版本>] - <日期>`**（日期默认当天，可用 **`--date YYYY-MM-DD`** 覆盖）。
 2. 在文件顶部重置空的 **`[Unreleased]`** 模板（含各 Keep a Changelog 分类小节）。
 3. 更新 **`pyproject.toml`** 中的 `version`。
+4. 更新 **`docs/compatibility.json`** 中 **`current.control_plane_release`** 为新版本号。
 
 使用 **`--dry-run`** 可只打印将要执行的操作、不写文件。
 
@@ -54,7 +55,7 @@ python scripts/bump_release.py <新版本号>
 
 若本次发布修改了 **`proto/agent.proto`**（含 Heartbeat / Register 等消息字段），发版前请在仓库根执行 **`bash scripts/gen_proto.sh`**，并确保 **控制面镜像与 Agent 制品** 来自同一提交或兼容矩阵（见 [兼容性与版本矩阵](./compatibility.md) 与 [gRPC 服务参考](../reference/grpc-services.md)）。
 
-发版前同步更新 **`docs/compatibility.json`**（至少 **`current.control_plane_release`**），并跑通 **`python scripts/verify_compatibility_matrix.py`**。
+发版前确认 **`docs/compatibility.json`**（至少 **`current.control_plane_release`**）已与 **`pyproject.toml`** 一致（使用 **`bump_release.py`** 可自动同步），并跑通 **`python scripts/verify_compatibility_matrix.py`**。
 
 ## 文档站
 

@@ -7,12 +7,14 @@ import shutil
 import sys
 import time
 import uuid
+from dataclasses import dataclass, field
 from pathlib import Path
 from types import SimpleNamespace
 
 import grpc
 
 from devault import __version__
+from devault.agent.capabilities import gate_multipart_resume, gate_multipart_upload
 from devault.core.enums import JobKind
 from devault.grpc_gen import agent_pb2, agent_pb2_grpc
 from devault.plugins.file import FileBackupError, run_file_restore_with_presigned_bundle
@@ -34,6 +36,13 @@ from devault.plugins.file.plugin import (
 from devault.settings import Settings, get_settings
 
 logger = logging.getLogger(__name__)
+
+@dataclass
+class AgentCapabilityState:
+    """Latest ``server_capabilities`` from Register / Heartbeat (empty set if none advertised yet)."""
+
+    caps: frozenset[str] = field(default_factory=frozenset)
+
 
 _FATAL_VERSION_REASONS = frozenset(
     {
@@ -104,7 +113,12 @@ def _job_view(job_id: str, lease: agent_pb2.JobLease, cfg: dict) -> SimpleNamesp
     )
 
 
-def _bootstrap_token_if_needed(stub: agent_pb2_grpc.AgentControlStub, agent_id: str, token: dict) -> None:
+def _bootstrap_token_if_needed(
+    stub: agent_pb2_grpc.AgentControlStub,
+    agent_id: str,
+    token: dict,
+    cap_state: AgentCapabilityState,
+) -> None:
     if token.get("value"):
         return
     s = get_settings()
@@ -140,6 +154,7 @@ def _bootstrap_token_if_needed(stub: agent_pb2_grpc.AgentControlStub, agent_id: 
         logger.info("obtained API token via Register (bootstrap)")
     if reply.deprecation_message:
         logger.warning("Register: %s", reply.deprecation_message)
+    cap_state.caps = frozenset(reply.server_capabilities)
 
 
 def _run_one_job(
@@ -147,6 +162,8 @@ def _run_one_job(
     agent_id: str,
     lease: agent_pb2.JobLease,
     bearer: str,
+    *,
+    server_capabilities: frozenset[str],
 ) -> None:
     s = get_settings()
     job_id = lease.job_id
@@ -177,22 +194,31 @@ def _run_one_job(
 
             use_multipart_resume = False
             if resume_upload_id and wip_bundle.is_file() and ck_data is not None:
-                ok_ck, ck_reason = validate_multipart_resume_checkpoint(
-                    wip_bundle=wip_bundle,
-                    checkpoint=ck_data,
-                    policy_config=cfg,
-                )
-                if ok_ck:
-                    use_multipart_resume = True
-                else:
+                if not gate_multipart_resume(server_capabilities):
                     logger.warning(
-                        "multipart resume checkpoint rejected job_id=%s reason=%s; clearing local state",
+                        "multipart resume not advertised by server; clearing local multipart state job_id=%s",
                         job_id,
-                        ck_reason,
                     )
                     clear_job_multipart_state(s, job_id)
                     ck_data = None
                     resume_upload_id = None
+                else:
+                    ok_ck, ck_reason = validate_multipart_resume_checkpoint(
+                        wip_bundle=wip_bundle,
+                        checkpoint=ck_data,
+                        policy_config=cfg,
+                    )
+                    if ok_ck:
+                        use_multipart_resume = True
+                    else:
+                        logger.warning(
+                            "multipart resume checkpoint rejected job_id=%s reason=%s; clearing local state",
+                            job_id,
+                            ck_reason,
+                        )
+                        clear_job_multipart_state(s, job_id)
+                        ck_data = None
+                        resume_upload_id = None
 
             if use_multipart_resume:
                 assert ck_data is not None
@@ -215,7 +241,9 @@ def _run_one_job(
                     tmp_path,
                     manifest,
                 )
-                if size_bytes >= int(s.s3_multipart_threshold_bytes):
+                if size_bytes >= int(s.s3_multipart_threshold_bytes) and gate_multipart_upload(
+                    server_capabilities
+                ):
                     wip_bundle.parent.mkdir(parents=True, exist_ok=True)
                     shutil.move(str(tmp_path), str(wip_bundle))
                     tmp_path = wip_bundle
@@ -360,11 +388,12 @@ def run_forever() -> None:
     logger.info("DeVault agent %s starting (DeVault %s)", agent_id, __version__)
 
     token: dict[str, str | None] = {"value": None}
+    cap_state = AgentCapabilityState()
     channel = _build_channel(target, settings=s)
     stub = agent_pb2_grpc.AgentControlStub(channel)
 
     try:
-        _bootstrap_token_if_needed(stub, agent_id, token)
+        _bootstrap_token_if_needed(stub, agent_id, token, cap_state)
     except grpc.RpcError as e:
         reason = _trailing_reason_code(e)
         if e.code() in (
@@ -394,12 +423,14 @@ def run_forever() -> None:
                 ),
                 metadata=md,
             )
+            if hb.ok:
+                cap_state.caps = frozenset(hb.server_capabilities)
             if not hb.ok:
                 logger.warning("heartbeat not ok")
             if hb.deprecation_message:
                 logger.warning("control plane: %s", hb.deprecation_message)
-            if hb.server_capabilities:
-                logger.debug("server_capabilities: %s", sorted(hb.server_capabilities))
+            if hb.ok and hb.server_capabilities:
+                logger.info("server_capabilities: %s", sorted(hb.server_capabilities))
             leased = stub.LeaseJobs(
                 agent_pb2.LeaseJobsRequest(agent_id=agent_id, max_jobs=1),
                 metadata=md,
@@ -408,7 +439,13 @@ def run_forever() -> None:
                 time.sleep(2.0)
                 continue
             for job in leased.jobs:
-                _run_one_job(stub, agent_id, job, bearer)
+                _run_one_job(
+                    stub,
+                    agent_id,
+                    job,
+                    bearer,
+                    server_capabilities=cap_state.caps,
+                )
         except grpc.RpcError as e:
             reason = _trailing_reason_code(e)
             if e.code() in (

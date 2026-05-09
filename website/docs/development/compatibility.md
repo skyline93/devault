@@ -13,13 +13,13 @@ description: SemVer 策略、compatibility.json 与 gRPC capabilities
 | **应用 SemVer** | 控制面与 Agent 共用 `pyproject.toml` / 同次 tag 的发行线；**同一 MAJOR** 内 **MINOR** 以向后兼容为目标（见 CHANGELOG 中破坏性标注）。 |
 | **Protobuf 包** | 当前为 **`devault.agent.v1`**，与应用版本解耦；破坏性 RPC 变更时递增包名（如 `v2`）并走协调升级。 |
 | **gRPC 协商** | **`Heartbeat`** / **`Register`** 交换 `agent_release`、`proto_package` 等；运维可用 **`DEVAULT_GRPC_MIN_SUPPORTED_AGENT_VERSION`** 等收紧策略（见 [配置参考](../install/configuration.md)）。 |
-| **运行时能力** | 控制面在相同回复中返回 **`server_capabilities`** 字符串列表（如 `multipart_resume`），Agent 可据此做能力探测；权威列表见下文 JSON。 |
+| **运行时能力** | 控制面在相同回复中返回 **`server_capabilities`**。Agent **按令牌开关路径**：未宣告 **`multipart_resume`** 则不使用本地 MPU 续传 checkpoint；未宣告 **`multipart_upload`** 则超过阈值仍走单对象预签名 PUT（见 [gRPC 参考](../reference/grpc-services.md) §server_capabilities）。权威列表见下文 JSON。 |
 
 ## 机器可读矩阵
 
 仓库根 **`docs/compatibility.json`** 与代码中的 **`devault.server_capabilities.ALL_KNOWN_SERVER_CAPABILITIES`** 必须一致；CI 运行 **`python scripts/verify_compatibility_matrix.py`** 做校验。
 
-发版时请将 JSON 内 **`current.control_plane_release`** 更新为与 **`pyproject.toml`** 相同的版本号，并按需在 **`matrices`** 中补充组合说明。
+发版时请将 JSON 内 **`current.control_plane_release`** 与 **`pyproject.toml`** 对齐。使用 **`python scripts/bump_release.py <版本>`** 时会**自动**写入该字段；手工改版本号时切勿遗漏。
 
 ## CI 矩阵
 
@@ -37,7 +37,7 @@ GitHub Actions **`ci.yml`** 使用 **`matrix.suite`**：
 
 矩阵语义与 **`matrices[].id`** 的对应关系写在 **`ci_e2e.matrix_definitions`** 中；**`verify_compatibility_matrix.py`** 会校验 **`maps_to_compatibility_rows`** 中的 id 均存在于 **`matrices`**。
 
-发版脚本与 **`compatibility.json`** 的自动联动、Agent 按 **`server_capabilities`** 降级等仍见 **`docs-old/enterprise-backlog.md`**（**M1 · 三** §3.2 与 **§十三**）。
+§三 **可增强** 中与能力降级、bump 联动相关的历史排期见 **`docs-old/enterprise-backlog.md`**（**M1 · 三** §3.2 与 **§十三**）；已实现项以本站说明为准。
 
 ## 发版模板
 
