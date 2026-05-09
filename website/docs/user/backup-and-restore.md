@@ -176,4 +176,4 @@ devault artifact list
 devault file restore <artifact_id> --to /restore/out2 --force
 ```
 
-详见仓库根 `README.md` 中的 CLI 小节。
+根目录 **`README.md`**（英文，默认）与 **`README.zh-CN.md`**（中文）为仓库速览；CLI 与本地运行细节以本站 **安装 / 运维** 章节为准。

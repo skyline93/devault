@@ -1,38 +1,40 @@
 # DeVault
 
-面向企业交付的**备份与恢复**平台：控制面（HTTP API、gRPC、PostgreSQL、Redis）与边缘 Agent（gRPC + S3 兼容存储）分离，Pull 模型调度，支持策略与 Cron、任务取消/重试、Prometheus 与简易 Web UI。
+Enterprise-oriented **backup and restore** platform: a control plane (HTTP API, gRPC, PostgreSQL, Redis) and edge **Agents** (gRPC + S3-compatible storage), **pull**-based scheduling, policies and Cron, cancel/retry, Prometheus metrics, and a lightweight Web UI.
 
-## 快速开始
+> **中文说明**见 [`README.zh-CN.md`](README.zh-CN.md)。
 
-在仓库根目录执行：
+## Quick start
+
+From the repository root:
 
 ```bash
 cd deploy
 docker compose up --build -d
 ```
 
-启动后可在本机访问 **Swagger**：<http://127.0.0.1:8000/docs>。数据库迁移在 Compose 中由 **api** 服务在启动时执行（`alembic upgrade head`）。
+Then open **Swagger** at <http://127.0.0.1:8000/docs>. In Compose, database migrations run on **api** startup (`alembic upgrade head`).
 
-## 文档
+## Documentation
 
-- **完整用户与运维说明**：[文档站源码](website/)，正文在 [`website/docs/`](website/docs/index.md)。本地预览：`cd website && npm ci && npm start` → <http://localhost:3000>
-- **控制面 ↔ Agent 兼容矩阵**（机器可读）：[`docs/compatibility.json`](docs/compatibility.json)
-- **发版记录**：[`docs/RELEASE.md`](docs/RELEASE.md)
+- **Full user and ops guides**: [documentation site source](website/), content in [`website/docs/`](website/docs/index.md). Local preview: `cd website && npm ci && npm start` → <http://localhost:3000>
+- **Control plane ↔ Agent compatibility matrix** (machine-readable): [`docs/compatibility.json`](docs/compatibility.json)
+- **Release notes**: [`docs/RELEASE.md`](docs/RELEASE.md)
 
-API 端点、gRPC/TLS、S3 与 Helm 等细节见文档站对应章节，不再在根 README 展开。
+API surfaces, gRPC/TLS, S3, and Helm are covered in the doc site; this root README stays short.
 
-## 仓库结构（节选）
+## Repository layout
 
-| 目录 | 说明 |
-|------|------|
-| `src/devault/` | 控制面与 Agent 相关 Python 包 |
-| `deploy/` | Docker Compose、镜像与 Helm Chart |
-| `website/` | Docusaurus 文档站 |
-| `tests/` | pytest |
+| Path | Purpose |
+|------|---------|
+| `src/devault/` | Control plane and Agent Python packages |
+| `deploy/` | Docker Compose, images, and Helm chart |
+| `website/` | Docusaurus documentation site |
+| `tests/` | pytest suite |
 
-## 本地开发（摘要）
+## Local development (summary)
 
-需要 **Python ≥ 3.12**、PostgreSQL、Redis 与 S3 兼容端点（与生产 Agent 预签名一致）。安装与运行示例见文档站 **运维 / 安装** 类页面；常用命令：
+You need **Python ≥ 3.12**, PostgreSQL, Redis, and an S3-compatible endpoint (aligned with production Agent presigning). See the doc site for install/run examples; common commands:
 
 ```bash
 python -m venv .venv && source .venv/bin/activate  # Windows: .venv\Scripts\activate
@@ -41,8 +43,8 @@ alembic upgrade head
 pytest -q
 ```
 
-修改 `proto/agent.proto` 后执行 `bash scripts/gen_proto.sh`（需 `grpcio-tools`）。
+After changing `proto/agent.proto`, run `bash scripts/gen_proto.sh` (requires `grpcio-tools`).
 
-## 许可证
+## License
 
-MIT（可按需在仓库根目录补充 `LICENSE` 文件）。
+MIT (add a root `LICENSE` file if you want an explicit copy in-repo).
