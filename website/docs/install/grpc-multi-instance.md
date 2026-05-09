@@ -1,5 +1,5 @@
 ---
-sidebar_position: 5
+sidebar_position: 6
 title: gRPC 与 API 多实例部署
 description: 水平扩展控制面、Etcd 无关共享状态、调度器单副本与 Envoy 负载均衡
 ---

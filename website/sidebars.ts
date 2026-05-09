@@ -21,6 +21,7 @@ const sidebars: SidebarsConfig = {
       items: [
         'install/requirements',
         'install/docker-compose',
+        'install/kubernetes-helm',
         'install/database-migrations',
         'install/control-plane-database-dr',
         'install/grpc-multi-instance',

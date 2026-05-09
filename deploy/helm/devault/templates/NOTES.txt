@@ -1,0 +1,20 @@
+1. Build the application image from the repository root (context must include pyproject.toml, src/, alembic/):
+
+   docker build -f deploy/Dockerfile -t {{ .Values.image.repository }}:{{ .Values.image.tag }} .
+
+2. If you use a private registry, retag/push and set image.repository / image.tag accordingly.
+
+3. Wait for the API pod to become Ready, then port-forward HTTP:
+
+   kubectl wait --for=condition=available deployment/{{ include "devault.fullname" . }}-api --timeout=300s
+   kubectl port-forward svc/{{ include "devault.fullname" . }}-api 8000:8000
+
+4. Call the health endpoint:
+
+   curl -sf http://127.0.0.1:8000/healthz
+
+5. API token (HTTP Bearer and static admin flows) is stored in secret {{ include "devault.fullname" . }}-app key DEVAULT_API_TOKEN (default from values unless overridden).
+
+6. Agent gRPC (in-cluster): {{ include "devault.fullname" . }}-api:50051 — set DEVAULT_GRPC_REGISTRATION_SECRET to match the same secret key on agents outside the chart.
+
+7. bundled PostgreSQL / Redis / MinIO are for lab use only; run a single scheduler replica (already enforced).

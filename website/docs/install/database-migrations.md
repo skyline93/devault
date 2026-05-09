@@ -1,5 +1,5 @@
 ---
-sidebar_position: 3
+sidebar_position: 4
 title: 数据库迁移
 description: Alembic 升级与多实例注意事项
 ---

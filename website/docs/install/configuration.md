@@ -1,5 +1,5 @@
 ---
-sidebar_position: 6
+sidebar_position: 7
 title: 配置参考
 description: 常用环境变量分组说明
 ---

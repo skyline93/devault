@@ -1,0 +1,81 @@
+# Default values for a single-namespace demo / lab install.
+# For production: disable bundled Postgres/Redis/MinIO and point devault.* at managed services.
+
+nameOverride: ""
+fullnameOverride: ""
+
+image:
+  repository: devault
+  tag: latest
+  pullPolicy: IfNotPresent
+
+api:
+  replicas: 1
+  resources: {}
+  podAnnotations: {}
+
+scheduler:
+  resources: {}
+  podAnnotations: {}
+
+agent:
+  enabled: false
+  replicas: 1
+  allowedPathPrefixes: /data,/restore
+  resources: {}
+  podAnnotations: {}
+
+postgresql:
+  enabled: true
+  image: postgres:16-alpine
+  storageClass: ""
+  size: 10Gi
+  auth:
+    username: devault
+    password: devault
+    database: devault
+
+redis:
+  enabled: true
+  image: redis:7-alpine
+
+minio:
+  enabled: true
+  image: minio/minio:latest
+  mcImage: minio/mc:latest
+  storageClass: ""
+  size: 20Gi
+  rootUser: minioadmin
+  rootPassword: minioadmin
+  bucket: devault
+
+secrets:
+  # Override in production (e.g. helm --set-file, SealedSecrets, ExternalSecrets).
+  apiToken: changeme
+  grpcRegistrationSecret: devault-helm-register-secret
+
+devault:
+  # When postgresql.enabled is false, set a full SQLAlchemy URL (e.g. managed RDS).
+  databaseUrl: ""
+  envName: dev
+  retentionCleanupEnabled: "true"
+  retentionCleanupIntervalSeconds: "900"
+  # Optional artifact encryption key for Agent (Base64-32-bytes); demo default only.
+  artifactEncryptionKey: ""
+
+service:
+  api:
+    type: ClusterIP
+    httpPort: 8000
+    grpcPort: 50051
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: devault.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []

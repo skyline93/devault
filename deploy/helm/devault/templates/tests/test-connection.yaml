@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "devault.fullname" . }}-test-connection
+  labels:
+    {{- include "devault.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: test
+    helm.sh/hook-delete-policy: hook-succeeded,before-hook-creation
+spec:
+  restartPolicy: Never
+  containers:
+    - name: curl
+      image: curlimages/curl:8.5.0
+      command:
+        - curl
+        - -sf
+        - http://{{ include "devault.fullname" . }}-api:8000/healthz

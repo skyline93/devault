@@ -7,6 +7,18 @@ on:
     branches: [main, master]
 
 jobs:
+  helm-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.14.4
+      - name: Helm lint & template
+        run: |
+          helm lint deploy/helm/devault
+          helm template helm-ci deploy/helm/devault >/dev/null
+
   test:
     runs-on: ubuntu-latest
     strategy:

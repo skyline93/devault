@@ -1,0 +1,6 @@
+apiVersion: v2
+name: devault
+description: DeVault control plane (HTTP + Agent gRPC), scheduler, and optional demo dependencies
+type: application
+version: 0.1.0
+appVersion: "0.4.0"

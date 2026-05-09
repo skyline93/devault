@@ -1,5 +1,5 @@
 ---
-sidebar_position: 4
+sidebar_position: 5
 title: 控制面元数据库备份与灾难恢复
 description: PostgreSQL 逻辑备份、可选 PITR、RTO/RPO 与 Compose 脚本示例
 ---

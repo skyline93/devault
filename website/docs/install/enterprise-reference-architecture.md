@@ -1,12 +1,12 @@
 ---
-sidebar_position: 8
+sidebar_position: 9
 title: 企业部署参考架构
 description: DMZ、网关、控制面 VPC、对象存储与出站策略的单页参考图
 ---
 
 # 企业部署参考架构
 
-本文给出**生产常见拆分**下的单页视图，便于安全评审与网络策略对齐。原则、控制面/数据面划分与 Pull 序列见 [目标架构](../intro/target-architecture.md)；信任域组件图亦见 [架构概览](../intro/architecture-overview.md)。实现以仓库代码与 `deploy/` 编排为准。
+本文给出**生产常见拆分**下的单页视图，便于安全评审与网络策略对齐。原则、控制面/数据面划分与 Pull 序列见 [目标架构](../intro/target-architecture.md)；信任域组件图亦见 [架构概览](../intro/architecture-overview.md)。实现以仓库代码与 `deploy/` 编排为准；Kubernetes 一体化演示安装见 [Kubernetes（Helm）](./kubernetes-helm.md)。
 
 ## 网络分区与信任域
 

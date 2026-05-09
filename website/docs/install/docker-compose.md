@@ -6,7 +6,7 @@ description: 本地与演示环境的服务角色与启动方式
 
 # Docker Compose
 
-仓库在 `deploy/docker-compose.yml` 提供一体化栈，便于快速验证备份/恢复闭环。
+仓库在 `deploy/docker-compose.yml` 提供一体化栈，便于快速验证备份/恢复闭环。若在 **Kubernetes** 上安装，请使用 [Kubernetes（Helm）](./kubernetes-helm.md)（`deploy/helm/devault`）。
 
 ## 启动
 

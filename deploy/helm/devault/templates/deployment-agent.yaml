@@ -1,0 +1,68 @@
+{{- if .Values.agent.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "devault.fullname" . }}-agent
+  labels:
+    {{- include "devault.labels" . | nindent 4 }}
+    app.kubernetes.io/component: agent
+spec:
+  replicas: {{ .Values.agent.replicas }}
+  selector:
+    matchLabels:
+      {{- include "devault.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: agent
+  template:
+    metadata:
+      labels:
+        {{- include "devault.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: agent
+      {{- with .Values.agent.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      initContainers:
+        - name: wait-api-grpc
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - until nc -z {{ include "devault.fullname" . }}-api 50051; do sleep 2; done
+      containers:
+        - name: agent
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - devault-agent
+          env:
+            - name: PYTHONPATH
+              value: /app/src
+            - name: DEVAULT_GRPC_TARGET
+              value: {{ printf "%s-api:50051" (include "devault.fullname" .) | quote }}
+            - name: DEVAULT_GRPC_REGISTRATION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "devault.fullname" . }}-app
+                  key: DEVAULT_GRPC_REGISTRATION_SECRET
+            - name: DEVAULT_ALLOWED_PATH_PREFIXES
+              value: {{ .Values.agent.allowedPathPrefixes | quote }}
+            {{- if .Values.devault.artifactEncryptionKey }}
+            - name: DEVAULT_ARTIFACT_ENCRYPTION_KEY
+              value: {{ .Values.devault.artifactEncryptionKey | quote }}
+            {{- end }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: restore
+              mountPath: /restore
+          {{- with .Values.agent.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: data
+          emptyDir: {}
+        - name: restore
+          emptyDir: {}
+{{- end }}
