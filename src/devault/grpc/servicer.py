@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session, aliased
 from devault import __version__ as server_release_version
 from devault.core.enums import JobKind, JobStatus, PluginName
 from devault.core.locking import release_policy_job_lock, try_acquire_policy_job_lock
-from devault.db.models import Artifact, Job
+from devault.db.models import Artifact, Job, Tenant
 from devault.db.session import SessionLocal
 from devault.security.agent_grpc_session import (
     mint_agent_session_token,
@@ -42,10 +42,15 @@ from devault.observability.metrics import (
     job_terminal_label_values,
 )
 from devault.retention.policy import retain_until_from_backup_config
+from devault.grpc.object_lock_params import object_lock_params_from_backup_cfg
+from devault.plugins.file.encryption_policy import (
+    encryption_required,
+    manifest_declares_chunked_encryption,
+)
 from devault.plugins.file.plugin import artifact_object_keys
 from devault.services.edge_agents import enforce_edge_agent_for_lease, upsert_edge_agent
 from devault.settings import Settings, get_settings
-from devault.storage import get_storage
+from devault.storage import get_storage_for_tenant
 from devault.storage.multipart import (
     abort_multipart_upload_best_effort,
     build_multipart_part_presigns,
@@ -55,11 +60,8 @@ from devault.storage.multipart import (
     multipart_upload_is_complete,
     start_multipart_upload,
 )
-from devault.storage.presign import (
-    presign_get_object,
-    presign_put_object,
-    s3_client_from_settings,
-)
+from devault.storage.presign import presign_get_object, presign_put_object
+from devault.storage.s3_client import build_s3_client_for_tenant, effective_s3_bucket
 
 logger = logging.getLogger(__name__)
 
@@ -228,6 +230,9 @@ def try_lease_next_job(db: Session, agent_id: uuid.UUID, settings: Settings) -> 
 def _lease_config_json(db: Session, job: Job) -> str:
     cfg = dict(job.config_snapshot or {})
     cfg["tenant_id"] = str(job.tenant_id)
+    tenant = db.get(Tenant, job.tenant_id)
+    if tenant and tenant.kms_envelope_key_id:
+        cfg.setdefault("kms_envelope_key_id", tenant.kms_envelope_key_id)
     if job.kind in (JobKind.RESTORE.value, JobKind.RESTORE_DRILL.value) and job.restore_artifact_id:
         art = db.get(Artifact, job.restore_artifact_id)
         if art:
@@ -442,15 +447,22 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
                     context.abort(grpc.StatusCode.FAILED_PRECONDITION, "job not active")
 
                 ttl = int(settings.presign_ttl_seconds)
-                client = s3_client_from_settings(settings)
-                bucket = settings.s3_bucket
+                tenant = db.get(Tenant, job.tenant_id)
+                client = build_s3_client_for_tenant(settings, tenant)
+                bucket = effective_s3_bucket(settings, tenant)
+                ol_mode, ol_until = object_lock_params_from_backup_cfg(job.config_snapshot)
 
                 if request.intent == agent_pb2.STORAGE_INTENT_WRITE:
                     if job.kind != JobKind.BACKUP.value:
                         context.abort(grpc.StatusCode.INVALID_ARGUMENT, "WRITE only for backup jobs")
                     bundle_key, manifest_key = artifact_object_keys(settings, job.id, job.tenant_id)
                     manifest_url = presign_put_object(
-                        client, bucket=bucket, key=manifest_key, expires_in=ttl
+                        client,
+                        bucket=bucket,
+                        key=manifest_key,
+                        expires_in=ttl,
+                        object_lock_mode=ol_mode,
+                        object_lock_retain_until=ol_until,
                     )
                     blen = int(request.bundle_content_length or 0)
                     resume_id = (request.resume_bundle_multipart_upload_id or "").strip()
@@ -537,7 +549,11 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
                                 db.flush()
 
                             upload_id = start_multipart_upload(
-                                client, bucket=bucket, key=bundle_key
+                                client,
+                                bucket=bucket,
+                                key=bundle_key,
+                                object_lock_mode=ol_mode,
+                                object_lock_retain_until=ol_until,
                             )
                             job.bundle_wip_multipart_upload_id = upload_id
                             job.bundle_wip_content_length = blen
@@ -580,7 +596,12 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
                             bundle_key=bundle_key,
                             manifest_key=manifest_key,
                             bundle_http_url=presign_put_object(
-                                client, bucket=bucket, key=bundle_key, expires_in=ttl
+                                client,
+                                bucket=bucket,
+                                key=bundle_key,
+                                expires_in=ttl,
+                                object_lock_mode=ol_mode,
+                                object_lock_retain_until=ol_until,
                             ),
                             manifest_http_url=manifest_url,
                             expires_in_seconds=ttl,
@@ -689,7 +710,8 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
 
                 if request.success:
                     if job.kind == JobKind.BACKUP.value:
-                        storage = get_storage(settings)
+                        tenant_row = db.get(Tenant, job.tenant_id)
+                        storage = get_storage_for_tenant(settings, tenant_row)
                         bundle_key = request.bundle_key or ""
                         manifest_key = request.manifest_key or ""
                         if not bundle_key or not manifest_key:
@@ -734,10 +756,11 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
                                 }
                                 for p in parts_sorted
                             ]
-                            s3c = s3_client_from_settings(settings)
+                            s3c = build_s3_client_for_tenant(settings, tenant_row)
+                            bucket_eff = effective_s3_bucket(settings, tenant_row)
                             try:
                                 s3c.complete_multipart_upload(
-                                    Bucket=settings.s3_bucket,
+                                    Bucket=bucket_eff,
                                     Key=bundle_key,
                                     UploadId=mpu_id,
                                     MultipartUpload={"Parts": parts_boto},
@@ -789,6 +812,17 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
                                 f"cannot read manifest: {e}",
                             )
                             raise RuntimeError("unreachable") from e
+                        if encryption_required(settings, tenant_row) and not manifest_declares_chunked_encryption(
+                            mf
+                        ):
+                            BACKUP_INTEGRITY_CONTROL_REJECTS_TOTAL.labels(
+                                reason="encryption_required_not_met",
+                            ).inc()
+                            context.abort(
+                                grpc.StatusCode.FAILED_PRECONDITION,
+                                "encrypted artifacts required by policy but manifest is not encrypted",
+                            )
+                            raise RuntimeError("unreachable")
                         mf_chk = str(mf.get("checksum_sha256") or "").lower()
                         req_chk = str(request.checksum_sha256 or "").lower()
                         if mf_chk and req_chk and mf_chk != req_chk:
@@ -800,7 +834,7 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
                                 "bundle checksum does not match manifest",
                             )
                             raise RuntimeError("unreachable")
-                        encrypted_flag = bool(mf.get("encryption"))
+                        encrypted_flag = manifest_declares_chunked_encryption(mf)
                         if mpu_id and mpu_json and encrypted_flag:
                             MULTIPART_ENCRYPTED_MPU_COMPLETES_TOTAL.inc()
                         finished = datetime.now(timezone.utc)
@@ -855,11 +889,12 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
                     if job.kind == JobKind.BACKUP.value and settings.storage_backend == "s3":
                         uid = job.bundle_wip_multipart_upload_id
                         if uid:
-                            s3c = s3_client_from_settings(settings)
+                            tenant_row = db.get(Tenant, job.tenant_id)
+                            s3c = build_s3_client_for_tenant(settings, tenant_row)
                             bk, _mk = artifact_object_keys(settings, job.id, job.tenant_id)
                             abort_multipart_upload_best_effort(
                                 s3c,
-                                bucket=settings.s3_bucket,
+                                bucket=effective_s3_bucket(settings, tenant_row),
                                 key=bk,
                                 upload_id=uid,
                             )

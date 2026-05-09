@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import os
@@ -124,17 +125,58 @@ def finalize_bundle_with_optional_encryption(
     """If ``encrypt_artifacts`` is set in policy config, encrypt tarball and refresh manifest."""
     if not cfg.get("encrypt_artifacts"):
         return tarball_path, manifest, int(manifest["size_bytes"]), str(manifest["checksum_sha256"])
-    key = parse_aes256_key_from_settings(settings)
-    if key is None:
-        raise FileBackupError(
-            "ENCRYPTION_KEY_MISSING",
-            "encrypt_artifacts requires DEVAULT_ARTIFACT_ENCRYPTION_KEY (Base64-encoded 32-byte key)",
-        )
+
+    kms_key = (cfg.get("kms_envelope_key_id") or "").strip() or (settings.kms_envelope_key_id or "").strip()
+
     inner_checksum = str(manifest["checksum_sha256"])
     inner_size = int(manifest["size_bytes"])
     fd, enc_path_str = tempfile.mkstemp(suffix=".dvenc", prefix="bundle-")
     os.close(fd)
     enc_path = Path(enc_path_str)
+
+    if kms_key:
+        from devault.crypto.kms_envelope import generate_aes_data_key
+
+        dek, ct_blob = generate_aes_data_key(settings, key_id=kms_key)
+        try:
+            size_b, outer_checksum = encrypt_bundle_file(
+                dek,
+                tarball_path,
+                enc_path,
+                chunk_size=DEFAULT_CHUNK_SIZE,
+            )
+            manifest["plaintext_checksum_sha256"] = inner_checksum
+            manifest["plaintext_size_bytes"] = inner_size
+            manifest["checksum_sha256"] = outer_checksum
+            manifest["size_bytes"] = size_b
+            manifest["encryption"] = {
+                "algorithm": "aes-256-gcm",
+                "format": "devault-chunked-v1",
+                "chunk_size_bytes": DEFAULT_CHUNK_SIZE,
+                "aad": "chunk-index-u64be",
+                "key_wrap": "kms",
+                "kms_key_id": kms_key,
+                "kms_ciphertext_blob_base64": base64.b64encode(ct_blob).decode("ascii"),
+            }
+            try:
+                tarball_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+            return enc_path, manifest, size_b, outer_checksum
+        except ArtifactCryptoError as e:
+            try:
+                enc_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+            raise FileBackupError("ENCRYPTION_FAILED", str(e)) from e
+
+    key = parse_aes256_key_from_settings(settings)
+    if key is None:
+        raise FileBackupError(
+            "ENCRYPTION_KEY_MISSING",
+            "encrypt_artifacts requires KMS key (kms_envelope_key_id / DEVAULT_KMS_ENVELOPE_KEY_ID) "
+            "or DEVAULT_ARTIFACT_ENCRYPTION_KEY (Base64-encoded 32-byte key)",
+        )
     try:
         size_b, outer_checksum = encrypt_bundle_file(
             key,
@@ -163,6 +205,28 @@ def finalize_bundle_with_optional_encryption(
         except OSError:
             pass
         raise FileBackupError("ENCRYPTION_FAILED", str(e)) from e
+
+
+def _dek_from_manifest_encryption(manifest: dict, settings: Settings) -> bytes:
+    enc = manifest.get("encryption") or {}
+    if isinstance(enc, dict) and enc.get("key_wrap") == "kms":
+        try:
+            from devault.crypto.kms_envelope import decrypt_aes_data_key, kms_ciphertext_blob_from_manifest_b64
+
+            b64 = enc.get("kms_ciphertext_blob_base64") or ""
+            blob = kms_ciphertext_blob_from_manifest_b64(str(b64))
+            return decrypt_aes_data_key(settings, ciphertext_blob=blob)
+        except FileBackupError:
+            raise
+        except Exception as e:
+            raise FileBackupError("KMS_DECRYPT_FAILED", str(e)) from e
+    key = parse_aes256_key_from_settings(settings)
+    if key is None:
+        raise FileBackupError(
+            "ENCRYPTION_KEY_MISSING",
+            "restore encrypted artifact requires DEVAULT_ARTIFACT_ENCRYPTION_KEY",
+        )
+    return key
 
 
 def artifact_object_keys(settings: Settings, job_id: uuid.UUID, tenant_id: uuid.UUID) -> tuple[str, str]:
@@ -653,12 +717,7 @@ def run_file_restore(
             raise FileBackupError("CHECKSUM_MISMATCH", "stored bundle checksum mismatch")
 
         if manifest.get("encryption"):
-            key = parse_aes256_key_from_settings(settings)
-            if key is None:
-                raise FileBackupError(
-                    "ENCRYPTION_KEY_MISSING",
-                    "restore encrypted artifact requires DEVAULT_ARTIFACT_ENCRYPTION_KEY",
-                )
+            key = _dek_from_manifest_encryption(manifest, settings)
             inner_expect = str(manifest.get("plaintext_checksum_sha256") or "")
             if not inner_expect:
                 raise FileBackupError("INVALID_MANIFEST", "manifest missing plaintext_checksum_sha256")
@@ -728,12 +787,7 @@ def run_file_restore_with_presigned_bundle(
             raise FileBackupError("CHECKSUM_MISMATCH", "Downloaded bundle checksum mismatch")
 
         if manifest and manifest.get("encryption"):
-            key = parse_aes256_key_from_settings(settings)
-            if key is None:
-                raise FileBackupError(
-                    "ENCRYPTION_KEY_MISSING",
-                    "restore encrypted artifact requires DEVAULT_ARTIFACT_ENCRYPTION_KEY",
-                )
+            key = _dek_from_manifest_encryption(manifest, settings)
             inner_expect = str(manifest.get("plaintext_checksum_sha256") or "")
             if not inner_expect:
                 raise FileBackupError("INVALID_MANIFEST", "manifest missing plaintext_checksum_sha256")

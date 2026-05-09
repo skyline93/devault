@@ -14,6 +14,7 @@ from devault.api.schemas import (
     CreateBackupJobBody,
     CreateRestoreDrillJobBody,
     CreateRestoreJobBody,
+    FileBackupConfigV1,
     PolicyCreate,
     PolicyPatch,
     RestoreDrillScheduleCreate,
@@ -21,11 +22,23 @@ from devault.api.schemas import (
     ScheduleCreate,
     SchedulePatch,
     TenantCreate,
+    TenantPatch,
 )
 from devault.core.enums import JobKind, JobStatus, JobTrigger, PluginName
 from devault.core.locking import release_policy_job_lock
 from devault.db.models import Artifact, Job, Policy, RestoreDrillSchedule, Schedule, Tenant
+from devault.plugins.file.encryption_policy import encryption_required
 from devault.settings import get_settings
+
+
+def validate_backup_config_for_tenant(db: Session, tenant_id: uuid.UUID, cfg: FileBackupConfigV1) -> None:
+    settings = get_settings()
+    tenant = db.get(Tenant, tenant_id)
+    if encryption_required(settings, tenant) and not cfg.encrypt_artifacts:
+        raise HTTPException(
+            400,
+            detail="encrypt_artifacts is required for this tenant or global DEVAULT_REQUIRE_ENCRYPTED_ARTIFACTS",
+        )
 
 
 def create_tenant(db: Session, body: TenantCreate) -> Tenant:
@@ -40,9 +53,31 @@ def create_tenant(db: Session, body: TenantCreate) -> Tenant:
     return t
 
 
+def patch_tenant(db: Session, tenant_id: uuid.UUID, body: TenantPatch) -> Tenant:
+    t = db.get(Tenant, tenant_id)
+    if t is None:
+        raise HTTPException(404, detail="tenant not found")
+    if body.name is not None:
+        t.name = body.name.strip()
+    if body.require_encrypted_artifacts is not None:
+        t.require_encrypted_artifacts = body.require_encrypted_artifacts
+    if body.kms_envelope_key_id is not None:
+        t.kms_envelope_key_id = body.kms_envelope_key_id.strip() or None
+    if body.s3_bucket is not None:
+        t.s3_bucket = body.s3_bucket.strip() or None
+    if body.s3_assume_role_arn is not None:
+        t.s3_assume_role_arn = body.s3_assume_role_arn.strip() or None
+    if body.s3_assume_role_external_id is not None:
+        t.s3_assume_role_external_id = body.s3_assume_role_external_id.strip() or None
+    db.commit()
+    db.refresh(t)
+    return t
+
+
 def create_policy(db: Session, body: PolicyCreate, *, tenant_id: uuid.UUID) -> Policy:
     if body.plugin != "file":
         raise HTTPException(400, detail="Only plugin=file is supported")
+    validate_backup_config_for_tenant(db, tenant_id, body.config)
     p = Policy(
         tenant_id=tenant_id,
         name=body.name,
@@ -63,6 +98,7 @@ def patch_policy(db: Session, policy_id: uuid.UUID, body: PolicyPatch, *, tenant
     if body.name is not None:
         p.name = body.name
     if body.config is not None:
+        validate_backup_config_for_tenant(db, tenant_id, body.config)
         p.config = body.config.model_dump(mode="json")
     if body.enabled is not None:
         p.enabled = body.enabled
@@ -70,6 +106,22 @@ def patch_policy(db: Session, policy_id: uuid.UUID, body: PolicyPatch, *, tenant
     db.commit()
     db.refresh(p)
     return p
+
+
+def patch_artifact_legal_hold(
+    db: Session,
+    artifact_id: uuid.UUID,
+    *,
+    tenant_id: uuid.UUID,
+    legal_hold: bool,
+) -> Artifact:
+    art = db.get(Artifact, artifact_id)
+    if art is None or art.tenant_id != tenant_id:
+        raise HTTPException(404, detail="artifact not found")
+    art.legal_hold = legal_hold
+    db.commit()
+    db.refresh(art)
+    return art
 
 
 def delete_policy(db: Session, policy_id: uuid.UUID, *, tenant_id: uuid.UUID) -> None:
@@ -139,6 +191,7 @@ def create_backup_job(db: Session, body: CreateBackupJobBody, *, tenant_id: uuid
         policy_id = pol.id
     else:
         assert body.config is not None
+        validate_backup_config_for_tenant(db, tenant_id, body.config)
         snap = body.config.model_dump(mode="json")
 
     job = Job(

@@ -60,11 +60,23 @@ description: 常用环境变量分组说明
 | `DEVAULT_S3_STS_REGION` | （可选）STS 区域，默认同 `DEVAULT_S3_REGION` |
 | `DEVAULT_S3_STS_ENDPOINT_URL` | （可选）自定义 STS 端点（如 LocalStack） |
 | `DEVAULT_S3_STS_USE_SSL` | （可选）默认 `true` |
-| `DEVAULT_S3_BUCKET` | 桶名（须事先存在） |
+| `DEVAULT_S3_BUCKET` | 全局默认桶名（须事先存在）；可按租户覆盖，见 [租户模型](../reference/tenants.md) |
 | `DEVAULT_S3_USE_SSL` | 是否使用 HTTPS |
 | `DEVAULT_S3_REGION` | 部分云厂商需要 |
 
-STS、IRSA 与凭证链顺序见 [STS 与 AssumeRole](../storage/sts-assume-role.md)。大对象相关阈值见 [存储调优](../storage/tuning.md)。
+STS、IRSA 与凭证链顺序见 [STS 与 AssumeRole](../storage/sts-assume-role.md)。**按租户 AssumeRole（BYOB）** 时在租户字段中配置角色 ARN（与全局变量二选一优先级见该文档）。大对象相关阈值见 [存储调优](../storage/tuning.md)。
+
+## Artifact 加密与合规（控制面）
+
+与 Agent 侧的 **`DEVAULT_ARTIFACT_ENCRYPTION_KEY`**（静态 DEK）及 **KMS 信封** 配合；详见 [Artifact 静态加密](../security/artifact-encryption.md)。
+
+| 变量 | 说明 |
+|------|------|
+| `DEVAULT_REQUIRE_ENCRYPTED_ARTIFACTS` | 默认 `false`；为 `true` 时 **`CompleteJob` 备份成功路径** 要求 manifest 为 **AES-GCM chunked 密文**（与租户级 **`require_encrypted_artifacts`** 叠加，任一开启即生效） |
+| `DEVAULT_KMS_ENVELOPE_KEY_ID` | （可选）KMS CMK **KeyId 或 ARN**；策略 / 租户未指定 **`kms_envelope_key_id`** 时的默认；**Agent 进程**在信封路径下调用 **`kms:GenerateDataKey`** / **`kms:Decrypt`**（须为 Agent 身份授权，非控制面） |
+| `DEVAULT_KMS_REGION` | （可选）KMS API 区域；未设置时使用 **`DEVAULT_S3_REGION`**（**Agent 须能访问该区域 KMS**） |
+
+信封加密的密码学操作在 **Agent** 侧执行（与 tarball 同进程）；控制面仅传递策略/租户默认 CMK 等元数据（如租约 **`config_json`**）。CMK 策略须允许 **Agent 执行角色** **`kms:GenerateDataKey`**、**`kms:Decrypt`**。
 
 ## Agent
 
@@ -75,13 +87,13 @@ STS、IRSA 与凭证链顺序见 [STS 与 AssumeRole](../storage/sts-assume-role
 | `DEVAULT_API_TOKEN` | 与注册/鉴权相关的令牌（与实现版本一致） |
 | `DEVAULT_AGENT_MULTIPART_STATE_DIR` | （可选）Multipart 续传状态与 WIP `bundle.tar.gz` 的根目录；默认 `~/.cache/devault-agent` |
 | `DEVAULT_AGENT_GIT_COMMIT` | （可选）随 Heartbeat / Register 上报的短 git SHA |
-| `DEVAULT_ARTIFACT_ENCRYPTION_KEY` | （可选）Base64 编码的 32 字节 AES-256 密钥；当策略启用 **`encrypt_artifacts`** 时用于加密备份包及解密恢复；须与运维密钥治理一致 |
+| `DEVAULT_ARTIFACT_ENCRYPTION_KEY` | （可选）Base64 编码的 32 字节 AES-256 **静态 DEK**；当策略启用 **`encrypt_artifacts`** 且**未**走 KMS 信封路径时用于加密 / 解密；KMS 信封备份的恢复由控制面用 **`kms:Decrypt`** 解密 DEK，Agent 仍可仅用静态密钥模式处理旧 artifact |
 
 详见 [Artifact 静态加密](../security/artifact-encryption.md)。
 
 ### Scheduler（`devault-scheduler`）
 
-除 Cron 触发备份外，scheduler 进程执行 **artifact 保留清理**（需能连 **PostgreSQL**、与 **`DEVAULT_STORAGE_BACKEND`** 一致的存储凭证以删除对象）。见 [保留与生命周期](../guides/retention-lifecycle.md)。
+除 Cron 触发备份外，scheduler 进程执行 **artifact 保留清理**（需能连 **PostgreSQL**，并在 **`s3`** 模式下按 artifact 租户解析桶与 STS 凭证以删除对象）。见 [保留与生命周期](../guides/retention-lifecycle.md)。
 
 | 变量 | 说明 |
 |------|------|

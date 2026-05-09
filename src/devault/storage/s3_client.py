@@ -5,12 +5,15 @@ from __future__ import annotations
 import threading
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import boto3
 from botocore.client import BaseClient
 
 from devault.settings import Settings
+
+if TYPE_CHECKING:
+    from devault.db.models import Tenant
 
 _CACHE_LOCK = threading.Lock()
 _ASSUME_ROLE_CACHE: dict[str, _CachedAssumeRole] = {}
@@ -30,11 +33,30 @@ class _CachedAssumeRole:
     expires_at: datetime
 
 
-def _assume_role_cache_key(settings: Settings) -> str:
+def resolved_assume_role_pair(settings: Settings, tenant: "Tenant | None") -> tuple[str | None, str | None]:
+    """STS AssumeRole target: tenant-scoped BYOB role wins over global settings."""
+    if tenant is not None and tenant.s3_assume_role_arn:
+        return tenant.s3_assume_role_arn, tenant.s3_assume_role_external_id
+    return settings.s3_assume_role_arn, settings.s3_assume_role_external_id
+
+
+def effective_s3_bucket(settings: Settings, tenant: "Tenant | None") -> str:
+    """Resolve S3 bucket for API calls and presigns (tenant override or global default)."""
+    if tenant is not None and tenant.s3_bucket:
+        return tenant.s3_bucket
+    return settings.s3_bucket
+
+
+def _assume_role_cache_key(
+    settings: Settings,
+    *,
+    role_arn: str,
+    external_id: str | None,
+) -> str:
     return "|".join(
         [
-            settings.s3_assume_role_arn or "",
-            settings.s3_assume_role_external_id or "",
+            role_arn,
+            external_id or "",
             settings.s3_assume_role_session_name,
             str(settings.s3_assume_role_duration_seconds),
             settings.s3_sts_region or settings.s3_region,
@@ -54,10 +76,12 @@ def _session_kwargs_for_base_chain(settings: Settings) -> dict[str, Any]:
     return {}
 
 
-def _fetch_assume_role_credentials(settings: Settings) -> _CachedAssumeRole:
-    if not settings.s3_assume_role_arn:
-        raise RuntimeError("s3_assume_role_arn required for AssumeRole credential path")
-
+def _fetch_assume_role_credentials(
+    settings: Settings,
+    *,
+    role_arn: str,
+    external_id: str | None,
+) -> _CachedAssumeRole:
     session = boto3.session.Session(**_session_kwargs_for_base_chain(settings))
     sts_region = settings.s3_sts_region or settings.s3_region
     sts_kwargs: dict[str, Any] = {
@@ -69,12 +93,12 @@ def _fetch_assume_role_credentials(settings: Settings) -> _CachedAssumeRole:
 
     sts = session.client("sts", **sts_kwargs)
     params: dict[str, Any] = {
-        "RoleArn": settings.s3_assume_role_arn,
+        "RoleArn": role_arn,
         "RoleSessionName": settings.s3_assume_role_session_name[:64],
         "DurationSeconds": settings.s3_assume_role_duration_seconds,
     }
-    if settings.s3_assume_role_external_id:
-        params["ExternalId"] = settings.s3_assume_role_external_id
+    if external_id:
+        params["ExternalId"] = external_id
 
     resp = sts.assume_role(**params)
     creds = resp["Credentials"]
@@ -89,10 +113,11 @@ def _fetch_assume_role_credentials(settings: Settings) -> _CachedAssumeRole:
     )
 
 
-def _credentials_for_s3(settings: Settings) -> dict[str, Any]:
+def _credentials_for_s3(settings: Settings, *, tenant: "Tenant | None" = None) -> dict[str, Any]:
     """Return kwargs for boto3 Session().client('s3', **credentials, ...)."""
-    if settings.s3_assume_role_arn:
-        key = _assume_role_cache_key(settings)
+    role_arn, ext_id = resolved_assume_role_pair(settings, tenant)
+    if role_arn:
+        key = _assume_role_cache_key(settings, role_arn=role_arn, external_id=ext_id)
         refresh_margin = timedelta(minutes=5)
         now = datetime.now(timezone.utc)
         with _CACHE_LOCK:
@@ -103,7 +128,7 @@ def _credentials_for_s3(settings: Settings) -> dict[str, Any]:
                     "aws_secret_access_key": cached.secret_access_key,
                     "aws_session_token": cached.session_token,
                 }
-            fresh = _fetch_assume_role_credentials(settings)
+            fresh = _fetch_assume_role_credentials(settings, role_arn=role_arn, external_id=ext_id)
             _ASSUME_ROLE_CACHE[key] = fresh
         return {
             "aws_access_key_id": fresh.access_key_id,
@@ -120,6 +145,23 @@ def _credentials_for_s3(settings: Settings) -> dict[str, Any]:
     return {}
 
 
+def _make_s3_client(settings: Settings, creds: dict[str, Any]) -> BaseClient:
+    session = boto3.session.Session()
+    return session.client(
+        "s3",
+        endpoint_url=settings.s3_endpoint or None,
+        region_name=settings.s3_region,
+        use_ssl=settings.s3_use_ssl,
+        **creds,
+    )
+
+
+def build_s3_client_for_tenant(settings: Settings, tenant: "Tenant | None") -> BaseClient:
+    """S3 client using tenant BYOB AssumeRole when configured, else global settings."""
+    creds = _credentials_for_s3(settings, tenant=tenant)
+    return _make_s3_client(settings, creds)
+
+
 def build_s3_client(settings: Settings) -> BaseClient:
     """
     Control-plane S3 client for presigning, multipart control APIs, and existence checks.
@@ -133,15 +175,7 @@ def build_s3_client(settings: Settings) -> BaseClient:
     2. Else if static keys are set: S3 client with those keys.
     3. Else: S3 client using the default credential chain only (no AssumeRole).
     """
-    creds = _credentials_for_s3(settings)
-    session = boto3.session.Session()
-    return session.client(
-        "s3",
-        endpoint_url=settings.s3_endpoint or None,
-        region_name=settings.s3_region,
-        use_ssl=settings.s3_use_ssl,
-        **creds,
-    )
+    return build_s3_client_for_tenant(settings, None)
 
 
 def s3_client_from_settings(settings: Settings) -> BaseClient:

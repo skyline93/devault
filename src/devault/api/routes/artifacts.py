@@ -6,9 +6,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from devault.api.deps import get_db, get_effective_tenant
-from devault.api.schemas import ArtifactOut
+from devault.api.deps import get_db, get_effective_tenant, require_admin
+from devault.api.schemas import ArtifactLegalHoldPatch, ArtifactOut
 from devault.db.models import Artifact, Tenant
+from devault.security.auth_context import AuthContext
+from devault.services import control as control_svc
 
 router = APIRouter(prefix="/artifacts", tags=["artifacts"])
 
@@ -40,3 +42,19 @@ def list_artifacts(
         .offset(offset)
     )
     return list(db.scalars(stmt).all())
+
+
+@router.patch("/{artifact_id}/legal-hold", response_model=ArtifactOut, summary="Set legal hold (admin)")
+def patch_artifact_legal_hold(
+    artifact_id: uuid.UUID,
+    body: ArtifactLegalHoldPatch,
+    db: Session = Depends(get_db),
+    tenant: Tenant = Depends(get_effective_tenant),
+    _a: AuthContext = Depends(require_admin),
+) -> Artifact:
+    return control_svc.patch_artifact_legal_hold(
+        db,
+        artifact_id,
+        tenant_id=tenant.id,
+        legal_hold=body.legal_hold,
+    )

@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import math
-from typing import TYPE_CHECKING
+from datetime import datetime
+from typing import TYPE_CHECKING, Any
 
 from devault.storage.presign import presign_upload_part
 
@@ -11,8 +12,19 @@ if TYPE_CHECKING:
     from botocore.client import BaseClient
 
 
-def start_multipart_upload(client: "BaseClient", *, bucket: str, key: str) -> str:
-    resp = client.create_multipart_upload(Bucket=bucket, Key=key)
+def start_multipart_upload(
+    client: "BaseClient",
+    *,
+    bucket: str,
+    key: str,
+    object_lock_mode: str | None = None,
+    object_lock_retain_until: datetime | None = None,
+) -> str:
+    kwargs: dict[str, Any] = {"Bucket": bucket, "Key": key}
+    if object_lock_mode and object_lock_retain_until:
+        kwargs["ObjectLockMode"] = object_lock_mode
+        kwargs["ObjectLockRetainUntilDate"] = object_lock_retain_until
+    resp = client.create_multipart_upload(**kwargs)
     return str(resp["UploadId"])
 
 # S3 allows at most 10,000 parts per multipart upload.

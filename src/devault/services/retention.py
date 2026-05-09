@@ -7,11 +7,11 @@ from datetime import datetime, timezone
 
 from sqlalchemy import select
 
-from devault.db.models import Artifact
+from devault.db.models import Artifact, Tenant
 from devault.db.session import SessionLocal
 from devault.observability.metrics import RETENTION_PURGED_TOTAL, RETENTION_PURGE_ERRORS_TOTAL
 from devault.settings import Settings
-from devault.storage import get_storage
+from devault.storage import get_storage_for_tenant
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +27,6 @@ def purge_expired_artifacts(settings: Settings) -> tuple[int, int]:
         return 0, 0
 
     now = datetime.now(timezone.utc)
-    storage = get_storage(settings)
     purged = 0
     errors = 0
 
@@ -39,6 +38,7 @@ def purge_expired_artifacts(settings: Settings) -> tuple[int, int]:
                 .where(
                     Artifact.retain_until.is_not(None),
                     Artifact.retain_until < now,
+                    Artifact.legal_hold.is_(False),
                 )
                 .limit(_BATCH)
                 .order_by(Artifact.retain_until.asc())
@@ -61,6 +61,8 @@ def purge_expired_artifacts(settings: Settings) -> tuple[int, int]:
                 fresh = db_one.get(Artifact, art.id)
                 if fresh is None:
                     continue
+                tenant = db_one.get(Tenant, fresh.tenant_id)
+                storage = get_storage_for_tenant(settings, tenant)
                 storage.delete_object(fresh.bundle_key)
                 storage.delete_object(fresh.manifest_key)
                 db_one.delete(fresh)

@@ -30,8 +30,22 @@ class TenantOut(BaseModel):
     name: str
     slug: str
     created_at: datetime
+    require_encrypted_artifacts: bool = False
+    kms_envelope_key_id: str | None = None
+    s3_bucket: str | None = None
+    s3_assume_role_arn: str | None = None
+    s3_assume_role_external_id: str | None = None
 
     model_config = {"from_attributes": True}
+
+
+class TenantPatch(BaseModel):
+    name: str | None = Field(None, min_length=1, max_length=255)
+    require_encrypted_artifacts: bool | None = None
+    kms_envelope_key_id: str | None = None
+    s3_bucket: str | None = None
+    s3_assume_role_arn: str | None = None
+    s3_assume_role_external_id: str | None = None
 
 
 class FileBackupConfigV1(BaseModel):
@@ -50,13 +64,34 @@ class FileBackupConfigV1(BaseModel):
     one_filesystem: bool = Field(False, description="Stay on one filesystem (reserved).")
     encrypt_artifacts: bool = Field(
         False,
-        description="Encrypt backup bundle with AES-256-GCM before upload (requires Agent encryption key).",
+        description="Encrypt backup bundle with AES-256-GCM before upload (KMS envelope or static key).",
+    )
+    kms_envelope_key_id: str | None = Field(
+        default=None,
+        description="KMS CMK id or ARN for envelope encryption (optional if tenant/platform default is set).",
+    )
+    object_lock_mode: Literal["GOVERNANCE", "COMPLIANCE"] | None = Field(
+        default=None,
+        description="S3 Object Lock mode when the bucket has Object Lock enabled.",
+    )
+    object_lock_retain_days: int | None = Field(
+        default=None,
+        ge=1,
+        description="Object Lock retention window in days from upload time.",
     )
     retention_days: int | None = Field(
         default=None,
         ge=1,
         description="Optional retention: artifact eligible for automatic deletion this many days after successful backup.",
     )
+
+    @model_validator(mode="after")
+    def object_lock_pair(self) -> FileBackupConfigV1:
+        if self.object_lock_mode is not None and self.object_lock_retain_days is None:
+            raise ValueError("object_lock_retain_days is required when object_lock_mode is set")
+        if self.object_lock_retain_days is not None and self.object_lock_mode is None:
+            raise ValueError("object_lock_mode is required when object_lock_retain_days is set")
+        return self
 
 
 class CreateBackupJobBody(BaseModel):
@@ -159,8 +194,13 @@ class ArtifactOut(BaseModel):
     encrypted: bool
     created_at: datetime
     retain_until: datetime | None = None
+    legal_hold: bool = False
 
     model_config = {"from_attributes": True}
+
+
+class ArtifactLegalHoldPatch(BaseModel):
+    legal_hold: bool = Field(..., description="When true, retention purge skips this artifact.")
 
 
 class EnqueueResponse(BaseModel):

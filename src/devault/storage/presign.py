@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from datetime import datetime
+from typing import Any
+
 from botocore.client import BaseClient
 
 from devault.storage.s3_client import s3_client_from_settings
@@ -18,10 +21,16 @@ def presign_put_object(
     bucket: str,
     key: str,
     expires_in: int,
+    object_lock_mode: str | None = None,
+    object_lock_retain_until: datetime | None = None,
 ) -> str:
+    params: dict[str, Any] = {"Bucket": bucket, "Key": key}
+    if object_lock_mode and object_lock_retain_until:
+        params["ObjectLockMode"] = object_lock_mode
+        params["ObjectLockRetainUntilDate"] = object_lock_retain_until
     return client.generate_presigned_url(
         "put_object",
-        Params={"Bucket": bucket, "Key": key},
+        Params=params,
         ExpiresIn=expires_in,
         HttpMethod="PUT",
     )

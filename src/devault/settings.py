@@ -227,6 +227,18 @@ class Settings(BaseSettings):
         default=None,
         description="Base64-encoded 32-byte AES-256 key for bundle encryption at-rest",
     )
+    require_encrypted_artifacts: bool = Field(
+        default=False,
+        description="When true, backup manifests must declare encryption (tenant may tighten further)",
+    )
+    kms_envelope_key_id: str | None = Field(
+        default=None,
+        description="Default KMS CMK id or ARN for envelope encryption (tenant may override)",
+    )
+    kms_region: str | None = Field(
+        default=None,
+        description="KMS API region; defaults to s3_region when unset",
+    )
 
     retention_cleanup_enabled: bool = Field(
         default=True,

@@ -53,6 +53,11 @@ class Tenant(Base):
         server_default=func.now(),
         nullable=False,
     )
+    require_encrypted_artifacts: Mapped[bool] = mapped_column(Boolean(), nullable=False, default=False)
+    kms_envelope_key_id: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    s3_bucket: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    s3_assume_role_arn: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    s3_assume_role_external_id: Mapped[str | None] = mapped_column(String(1224), nullable=True)
 
     policies: Mapped[list["Policy"]] = relationship("Policy", back_populates="tenant")
     jobs: Mapped[list["Job"]] = relationship("Job", back_populates="tenant")
@@ -221,5 +226,6 @@ class Artifact(Base):
         nullable=False,
     )
     retain_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    legal_hold: Mapped[bool] = mapped_column(Boolean(), nullable=False, default=False)
 
     job: Mapped["Job"] = relationship("Job", back_populates="artifact")

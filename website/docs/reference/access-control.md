@@ -27,7 +27,9 @@ description: API 密钥、角色、OIDC 可选与用量指标
 | 读策略/调度/任务/artifact（在租户范围内） | ✓ | ✓ | ✓ |
 | 写策略/调度、触发备份/恢复、取消/重试 | ✓ | ✓ | ✗ |
 | **`POST /api/v1/tenants`**（创建租户） | ✓ | ✗ | ✗ |
+| **`PATCH /api/v1/tenants/{id}`**（BYOB、强制加密、默认 CMK 等） | ✓（**admin**） | ✗ | ✗ |
 | **`GET /api/v1/tenants`** | 全部 | 仅允许的 `tenant_id` | 仅允许的 `tenant_id` |
+| **`PATCH /api/v1/artifacts/{id}/legal-hold`**（**`legal_hold`** 布尔） | ✓（**admin**，且 **header 租户**包含该 artifact） | ✗ | ✗ |
 | **Agent gRPC**（租约、存储授权等） | ✓ | ✓ | ✗（`PERMISSION_DENIED`） |
 
 ## 创建数据库 API 密钥

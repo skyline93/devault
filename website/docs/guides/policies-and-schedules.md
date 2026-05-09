@@ -10,7 +10,17 @@ description: 策略、Cron 调度与并发语义
 
 策略描述**备份什么**与**如何备份**（插件、`config` 等）。HTTP 资源路径为 **`/api/v1/policies`**（详见 OpenAPI）。策略归属某一**租户**（`tenant_id`）；API 通过 **`X-DeVault-Tenant-Id`** 或默认 slug 限定作用域，见 [租户模型](../reference/tenants.md)。
 
-文件插件可选 **`retention_days`**：控制 artifact 的 **`retain_until`** 与调度器侧清理，见 [保留与生命周期](./retention-lifecycle.md)。
+文件插件 **`config`** 常用可选字段：
+
+| 字段 | 说明 |
+|------|------|
+| **`retention_days`**（正整数） | 写入 **`artifacts.retain_until`** 并参与 scheduler 清理，见 [保留与生命周期](./retention-lifecycle.md) |
+| **`encrypt_artifacts`** | **true** 时备份为密文 tarball；密钥为 **静态 `DEVAULT_ARTIFACT_ENCRYPTION_KEY`** 或 **KMS 信封**（见 [Artifact 静态加密](../security/artifact-encryption.md)） |
+| **`kms_envelope_key_id`** | 本策略 KMS CMK，覆盖租户默认与 **`DEVAULT_KMS_ENVELOPE_KEY_ID`** |
+| **`object_lock_mode`** | **`GOVERNANCE`** 或 **`COMPLIANCE`**（桶须启用 Object Lock） |
+| **`object_lock_retain_days`**（正整数） | 与 **`object_lock_mode`** 同时设置：从写入时刻起算的 **WORM 保留天数** |
+
+`object_lock_mode` 与 `object_lock_retain_days` **须成对**出现。
 
 ## 调度（Schedule）
 
