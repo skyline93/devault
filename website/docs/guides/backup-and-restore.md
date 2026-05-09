@@ -10,6 +10,8 @@ description: 设计要点、跨角色与 gRPC 细节时序、API 操作与 CLI
 
 若你要备份的是 **控制面自身的 PostgreSQL 元数据库**（租户、任务、artifact 记录等），请参阅 [控制面元数据库备份与灾难恢复](../install/control-plane-database-dr.md)，勿与下文「Agent → S3 artifact」混淆。
 
+需要 **周期性自动恢复到隔离目录并生成演练报告**（产品化「恢复演练」）时，见 [自动恢复演练](./restore-drill.md)。
+
 ## 设计要点（控制面 vs 数据面）
 
 - **控制面**：经 **HTTP** 创建/查询任务与 artifact；经 **`AgentControl` gRPC**（`proto/agent.proto`）发放租约、存储授权、接收进度与完成回调；在 `s3` 后端下 **签发预签名** 并记录对象 key、artifact 元数据。

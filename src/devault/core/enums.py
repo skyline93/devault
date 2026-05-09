@@ -6,6 +6,7 @@ from enum import StrEnum
 class JobKind(StrEnum):
     BACKUP = "backup"
     RESTORE = "restore"
+    RESTORE_DRILL = "restore_drill"
 
 
 class JobStatus(StrEnum):

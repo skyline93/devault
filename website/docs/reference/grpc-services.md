@@ -51,3 +51,7 @@ Agent 在 **`Heartbeat`** 与 **`Register`** 请求中携带：
 ### server_capabilities
 
 **`HeartbeatReply`** 与成功/失败路径上的 **`RegisterReply`** 均携带 **`server_capabilities`** 重复字段，取值来自控制面运行时（如 **`s3_presign_bundle`**、**`multipart_resume`** 等）。权威名称列表与语义说明见仓库 **`docs/compatibility.json`**（`grpc.known_capabilities` 与 `capability_notes`），与 [兼容性与版本矩阵](../development/compatibility.md) 交叉阅读。
+
+## CompleteJob 与恢复演练
+
+成功完成 **`kind=restore_drill`** 作业时，Agent 可在 **`CompleteJobRequest`** 中填充 **`result_summary_json`**（与 Agent 磁盘上的 **`.devault-drill-report.json`** 一致的控制面回传字段）；控制面解析后写入 **`jobs.result_meta`**。语义与运维说明见 [自动恢复演练](../guides/restore-drill.md)。

@@ -145,6 +145,8 @@ message CompleteJobRequest {
   // {"PartNumber":1,"ETag":"..."} (ETag values as returned by S3 / presigned PUT).
   string bundle_multipart_upload_id = 10;
   string bundle_multipart_parts_json = 11;
+  // Restore-drill success: JSON object mirroring the on-disk `.devault-drill-report.json` (optional).
+  string result_summary_json = 12;
 }
 
 message CompleteJobReply {

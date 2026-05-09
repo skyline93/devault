@@ -55,6 +55,7 @@ const sidebars: SidebarsConfig = {
       collapsed: false,
       items: [
         'guides/backup-and-restore',
+        'guides/restore-drill',
         'guides/policies-and-schedules',
         'guides/retention-lifecycle',
         'guides/web-console',

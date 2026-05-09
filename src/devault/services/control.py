@@ -12,16 +12,19 @@ from sqlalchemy.orm import Session
 from devault.api.cronutil import validate_cron_expression
 from devault.api.schemas import (
     CreateBackupJobBody,
+    CreateRestoreDrillJobBody,
     CreateRestoreJobBody,
     PolicyCreate,
     PolicyPatch,
+    RestoreDrillScheduleCreate,
+    RestoreDrillSchedulePatch,
     ScheduleCreate,
     SchedulePatch,
     TenantCreate,
 )
 from devault.core.enums import JobKind, JobStatus, JobTrigger, PluginName
 from devault.core.locking import release_policy_job_lock
-from devault.db.models import Artifact, Job, Policy, Schedule, Tenant
+from devault.db.models import Artifact, Job, Policy, RestoreDrillSchedule, Schedule, Tenant
 from devault.settings import get_settings
 
 
@@ -167,6 +170,37 @@ def create_backup_job(db: Session, body: CreateBackupJobBody, *, tenant_id: uuid
     return job
 
 
+def create_restore_drill_job(db: Session, body: CreateRestoreDrillJobBody, *, tenant_id: uuid.UUID) -> Job:
+    art = db.get(Artifact, body.artifact_id)
+    if art is None or art.tenant_id != tenant_id:
+        raise HTTPException(status_code=404, detail="artifact not found")
+
+    base = Path(body.drill_base_path)
+    if not base.is_absolute():
+        raise HTTPException(status_code=400, detail="drill_base_path must be absolute")
+    base = base.resolve(strict=False)
+
+    cfg = {
+        "version": 1,
+        "artifact_id": str(body.artifact_id),
+        "drill_base_path": str(base),
+        "restore_drill": True,
+    }
+    job = Job(
+        tenant_id=tenant_id,
+        kind=JobKind.RESTORE_DRILL.value,
+        plugin=PluginName.FILE.value,
+        status=JobStatus.PENDING.value,
+        trigger=JobTrigger.MANUAL.value,
+        config_snapshot=cfg,
+        restore_artifact_id=body.artifact_id,
+    )
+    db.add(job)
+    db.commit()
+    db.refresh(job)
+    return job
+
+
 def create_restore_job(db: Session, body: CreateRestoreJobBody, *, tenant_id: uuid.UUID) -> Job:
     art = db.get(Artifact, body.artifact_id)
     if art is None or art.tenant_id != tenant_id:
@@ -234,6 +268,70 @@ def cancel_job(db: Session, job_id: uuid.UUID, *, tenant_id: uuid.UUID) -> Job:
     db.commit()
     db.refresh(job)
     return job
+
+
+def create_restore_drill_schedule(
+    db: Session, body: RestoreDrillScheduleCreate, *, tenant_id: uuid.UUID
+) -> RestoreDrillSchedule:
+    art = db.get(Artifact, body.artifact_id)
+    if art is None or art.tenant_id != tenant_id:
+        raise HTTPException(status_code=404, detail="artifact not found")
+    validate_cron_expression(body.cron_expression)
+    base = Path(body.drill_base_path)
+    if not base.is_absolute():
+        raise HTTPException(status_code=400, detail="drill_base_path must be absolute")
+    sch = RestoreDrillSchedule(
+        tenant_id=tenant_id,
+        artifact_id=body.artifact_id,
+        cron_expression=body.cron_expression.strip(),
+        timezone=body.timezone,
+        enabled=body.enabled,
+        drill_base_path=str(base.resolve(strict=False)),
+    )
+    db.add(sch)
+    db.commit()
+    db.refresh(sch)
+    return sch
+
+
+def patch_restore_drill_schedule(
+    db: Session,
+    schedule_id: uuid.UUID,
+    body: RestoreDrillSchedulePatch,
+    *,
+    tenant_id: uuid.UUID,
+) -> RestoreDrillSchedule:
+    s = db.get(RestoreDrillSchedule, schedule_id)
+    if s is None or s.tenant_id != tenant_id:
+        raise HTTPException(status_code=404, detail="restore drill schedule not found")
+    if body.artifact_id is not None:
+        art = db.get(Artifact, body.artifact_id)
+        if art is None or art.tenant_id != tenant_id:
+            raise HTTPException(status_code=404, detail="artifact not found")
+        s.artifact_id = body.artifact_id
+    if body.cron_expression is not None:
+        validate_cron_expression(body.cron_expression)
+        s.cron_expression = body.cron_expression.strip()
+    if body.timezone is not None:
+        s.timezone = body.timezone
+    if body.enabled is not None:
+        s.enabled = body.enabled
+    if body.drill_base_path is not None:
+        bp = Path(body.drill_base_path)
+        if not bp.is_absolute():
+            raise HTTPException(status_code=400, detail="drill_base_path must be absolute")
+        s.drill_base_path = str(bp.resolve(strict=False))
+    db.commit()
+    db.refresh(s)
+    return s
+
+
+def delete_restore_drill_schedule(db: Session, schedule_id: uuid.UUID, *, tenant_id: uuid.UUID) -> None:
+    s = db.get(RestoreDrillSchedule, schedule_id)
+    if s is None or s.tenant_id != tenant_id:
+        raise HTTPException(status_code=404, detail="restore drill schedule not found")
+    db.delete(s)
+    db.commit()
 
 
 def retry_failed_backup_job(db: Session, job_id: uuid.UUID, *, tenant_id: uuid.UUID) -> Job:

@@ -21,6 +21,14 @@
     textarea { width: 100%; min-height: 100px; font-family: ui-monospace, monospace; }
     .row-actions { white-space: nowrap; }
     label { margin-right: 0.75rem; }
+    th.col-restore, td.col-restore { width: 1%; white-space: nowrap; }
+    dialog.restore-dialog { border: 1px solid #bbb; border-radius: 10px; padding: 0; max-width: 440px; width: calc(100% - 2rem); }
+    dialog.restore-dialog::backdrop { background: rgba(0, 0, 0, 0.4); }
+    dialog.restore-dialog form { padding: 1rem 1.25rem; display: grid; gap: 10px; margin: 0; }
+    dialog.restore-dialog h2 { margin: 0; font-size: 1.1rem; }
+    dialog.restore-dialog fieldset.restore-confirm { border: 1px solid #ccc; padding: 8px 10px; margin: 0; }
+    dialog.restore-dialog legend { font-size: 12px; padding: 0 4px; }
+    dialog.restore-dialog .dialog-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
   </style>
 </head>
 <body>
@@ -30,6 +38,7 @@
     <a href="/ui/artifacts">Artifacts</a>
     <a href="/ui/policies">Policies</a>
     <a href="/ui/schedules">Schedules</a>
+    <a href="/ui/restore-drill-schedules">Restore drills</a>
     <a href="/docs">Swagger UI</a>
     <a href="/metrics">Metrics</a>
   </nav>

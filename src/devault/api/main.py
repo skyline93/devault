@@ -7,7 +7,7 @@ from fastapi.responses import Response
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from devault import __version__
-from devault.api.routes import agents, artifacts, jobs, policies, schedules, tenants, ui
+from devault.api.routes import agents, artifacts, jobs, policies, restore_drill_schedules, schedules, tenants, ui
 from devault.grpc.server import start_grpc_server, stop_grpc_server
 from devault.release_meta import GRPC_API_PACKAGE
 from devault.observability.metrics import HTTP_REQUESTS_TOTAL
@@ -22,7 +22,7 @@ object storage URLs (see project documentation).
 _OPENAPI_TAGS = [
     {
         "name": "jobs",
-        "description": "Create and query backup/restore jobs; cancel or retry when supported.",
+        "description": "Create and query backup, restore, and restore-drill jobs; cancel or retry when supported.",
     },
     {
         "name": "artifacts",
@@ -37,12 +37,16 @@ _OPENAPI_TAGS = [
         "description": "CRUD for cron schedules attached to policies (driven by devault-scheduler).",
     },
     {
+        "name": "restore-drill-schedules",
+        "description": "Cron schedules that enqueue periodic restore drills (artifact recoverability checks on Agents).",
+    },
+    {
         "name": "tenants",
         "description": "List and create tenants; other resources are scoped per `X-DeVault-Tenant-Id` (or default slug).",
     },
     {
         "name": "ui",
-        "description": "Minimal HTML UI (HTTP Basic = API token or DB API key): jobs, artifacts, policies, schedules, agents fleet.",
+        "description": "Minimal HTML UI (HTTP Basic = API token or DB API key): jobs, artifacts, policies, schedules, restore-drill schedules, agents fleet.",
     },
     {
         "name": "agents",
@@ -71,6 +75,7 @@ app.include_router(jobs.router, prefix="/api/v1")
 app.include_router(artifacts.router, prefix="/api/v1")
 app.include_router(policies.router, prefix="/api/v1")
 app.include_router(schedules.router, prefix="/api/v1")
+app.include_router(restore_drill_schedules.router, prefix="/api/v1")
 app.include_router(tenants.router, prefix="/api/v1")
 app.include_router(ui.router)
 

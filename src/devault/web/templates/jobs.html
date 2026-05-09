@@ -13,7 +13,7 @@
       <th>Status</th>
       <th>Trigger</th>
       <th>Policy</th>
-      <th>Error</th>
+      <th>Error / drill report</th>
       <th>Actions</th>
     </tr>
   </thead>
@@ -25,7 +25,12 @@
       <td>{{ j.status }}</td>
       <td>{{ j.trigger }}</td>
       <td>{% if j.policy_id %}<code>{{ j.policy_id }}</code>{% else %}—{% endif %}</td>
-      <td>{% if j.error_code %}{{ j.error_code }}: {{ j.error_message[:80] }}{% else %}—{% endif %}</td>
+      <td>
+        {% if j.error_code %}{{ j.error_code }}: {{ j.error_message[:80] }}
+        {% elif j.kind == 'restore_drill' and j.result_meta %}
+          <span class="muted">extract</span> <code style="font-size:11px">{{ j.result_meta.get('extract_root', '')[:72] }}{% if (j.result_meta.get('extract_root', '')|length) > 72 %}…{% endif %}</code>
+        {% else %}—{% endif %}
+      </td>
       <td class="row-actions">
         {% set terminal = (j.status == 'success' or j.status == 'failed' or j.status == 'cancelled') %}
         {% if not terminal %}

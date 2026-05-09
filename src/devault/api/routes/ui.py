@@ -14,15 +14,18 @@ from sqlalchemy.orm import Session
 from devault.api.deps import get_db, get_effective_tenant_ui, require_write_ui, verify_ui_basic_auth
 from devault.api.schemas import (
     CreateBackupJobBody,
+    CreateRestoreDrillJobBody,
     CreateRestoreJobBody,
     FileBackupConfigV1,
     PolicyCreate,
     PolicyPatch,
+    RestoreDrillScheduleCreate,
+    RestoreDrillSchedulePatch,
     ScheduleCreate,
     SchedulePatch,
 )
 from devault.api.presenters import edge_agent_to_out
-from devault.db.models import Artifact, EdgeAgent, Job, Policy, Schedule, Tenant
+from devault.db.models import Artifact, EdgeAgent, Job, Policy, RestoreDrillSchedule, Schedule, Tenant
 from devault.security.auth_context import AuthContext
 from devault.services import control as control_svc
 
@@ -173,6 +176,27 @@ def ui_artifacts(
             "error": request.query_params.get("error"),
         },
     )
+
+
+@router.post("/artifacts/restore-drill", dependencies=_ui_dep)
+def ui_artifact_restore_drill(
+    artifact_id: uuid.UUID = Form(),
+    drill_base_path: str = Form(...),
+    db: Session = Depends(get_db),
+    tenant: Tenant = Depends(get_effective_tenant_ui),
+    _w: AuthContext = Depends(require_write_ui),
+) -> RedirectResponse:
+    try:
+        body = CreateRestoreDrillJobBody(
+            artifact_id=artifact_id,
+            drill_base_path=drill_base_path.strip(),
+        )
+        job = control_svc.create_restore_drill_job(db, body, tenant_id=tenant.id)
+        return _redirect("/ui/jobs", flash=f"Restore drill queued: job {job.id}")
+    except HTTPException as e:
+        return _redirect("/ui/artifacts", error=_http_err_detail(e))
+    except ValidationError as e:
+        return _redirect("/ui/artifacts", error=str(e.errors())[:600])
 
 
 @router.post("/artifacts/restore", dependencies=_ui_dep)
@@ -492,3 +516,150 @@ def ui_schedules_delete(
         return _redirect("/ui/schedules", flash="Schedule deleted.")
     except HTTPException as e:
         return _redirect("/ui/schedules", error=_http_err_detail(e))
+
+
+@router.get("/restore-drill-schedules", response_class=HTMLResponse, dependencies=_ui_dep)
+def ui_restore_drill_schedules(
+    request: Request,
+    db: Session = Depends(get_db),
+    tenant: Tenant = Depends(get_effective_tenant_ui),
+) -> HTMLResponse:
+    rows = list(
+        db.scalars(
+            select(RestoreDrillSchedule)
+            .where(RestoreDrillSchedule.tenant_id == tenant.id)
+            .order_by(RestoreDrillSchedule.created_at.desc())
+        ).all()
+    )
+    return templates.TemplateResponse(
+        request,
+        "restore_drill_schedules.html",
+        {
+            "request": request,
+            "schedules": rows,
+            "flash": request.query_params.get("flash"),
+            "error": request.query_params.get("error"),
+        },
+    )
+
+
+@router.get("/restore-drill-schedules/new", response_class=HTMLResponse, dependencies=_ui_dep)
+def ui_restore_drill_schedules_new(
+    request: Request,
+    db: Session = Depends(get_db),
+    tenant: Tenant = Depends(get_effective_tenant_ui),
+) -> HTMLResponse:
+    artifacts = list(
+        db.scalars(
+            select(Artifact).where(Artifact.tenant_id == tenant.id).order_by(Artifact.created_at.desc()).limit(200)
+        ).all()
+    )
+    return templates.TemplateResponse(
+        request,
+        "restore_drill_schedule_form.html",
+        {
+            "request": request,
+            "schedule": None,
+            "artifacts": artifacts,
+            "heading": "New restore drill schedule",
+        },
+    )
+
+
+@router.post("/restore-drill-schedules/new", dependencies=_ui_dep)
+def ui_restore_drill_schedules_create(
+    artifact_id: uuid.UUID = Form(...),
+    drill_base_path: str = Form(...),
+    cron_expression: str = Form(...),
+    timezone: str = Form("UTC"),
+    enabled: str = Form("yes"),
+    db: Session = Depends(get_db),
+    tenant: Tenant = Depends(get_effective_tenant_ui),
+    _w: AuthContext = Depends(require_write_ui),
+) -> RedirectResponse:
+    try:
+        body = RestoreDrillScheduleCreate(
+            artifact_id=artifact_id,
+            drill_base_path=drill_base_path.strip(),
+            cron_expression=cron_expression.strip(),
+            timezone=(timezone or "UTC").strip(),
+            enabled=enabled == "yes",
+        )
+        control_svc.create_restore_drill_schedule(db, body, tenant_id=tenant.id)
+        return _redirect("/ui/restore-drill-schedules", flash="Restore drill schedule created.")
+    except HTTPException as e:
+        return _redirect("/ui/restore-drill-schedules", error=_http_err_detail(e))
+    except ValidationError as e:
+        return _redirect("/ui/restore-drill-schedules", error=str(e)[:800])
+
+
+@router.get("/restore-drill-schedules/{schedule_id}/edit", response_class=HTMLResponse, dependencies=_ui_dep)
+def ui_restore_drill_schedules_edit(
+    request: Request,
+    schedule_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    tenant: Tenant = Depends(get_effective_tenant_ui),
+) -> HTMLResponse:
+    s = db.get(RestoreDrillSchedule, schedule_id)
+    if s is None or s.tenant_id != tenant.id:
+        raise HTTPException(404, detail="restore drill schedule not found")
+    artifacts = list(
+        db.scalars(
+            select(Artifact).where(Artifact.tenant_id == tenant.id).order_by(Artifact.created_at.desc()).limit(200)
+        ).all()
+    )
+    return templates.TemplateResponse(
+        request,
+        "restore_drill_schedule_form.html",
+        {
+            "request": request,
+            "schedule": s,
+            "artifacts": artifacts,
+            "heading": f"Edit restore drill schedule — {schedule_id}",
+        },
+    )
+
+
+@router.post("/restore-drill-schedules/{schedule_id}/edit", dependencies=_ui_dep)
+def ui_restore_drill_schedules_update(
+    schedule_id: uuid.UUID,
+    artifact_id: uuid.UUID = Form(...),
+    drill_base_path: str = Form(...),
+    cron_expression: str = Form(...),
+    timezone: str = Form("UTC"),
+    enabled: str = Form("yes"),
+    db: Session = Depends(get_db),
+    tenant: Tenant = Depends(get_effective_tenant_ui),
+    _w: AuthContext = Depends(require_write_ui),
+) -> RedirectResponse:
+    try:
+        sch = db.get(RestoreDrillSchedule, schedule_id)
+        if sch is None or sch.tenant_id != tenant.id:
+            raise HTTPException(404, detail="restore drill schedule not found")
+        patch = RestoreDrillSchedulePatch(
+            artifact_id=artifact_id,
+            drill_base_path=drill_base_path.strip(),
+            cron_expression=cron_expression.strip(),
+            timezone=(timezone or "UTC").strip(),
+            enabled=enabled == "yes",
+        )
+        control_svc.patch_restore_drill_schedule(db, schedule_id, patch, tenant_id=tenant.id)
+        return _redirect("/ui/restore-drill-schedules", flash="Restore drill schedule updated.")
+    except HTTPException as e:
+        return _redirect("/ui/restore-drill-schedules", error=_http_err_detail(e))
+    except ValidationError as e:
+        return _redirect("/ui/restore-drill-schedules", error=str(e)[:800])
+
+
+@router.post("/restore-drill-schedules/{schedule_id}/delete", dependencies=_ui_dep)
+def ui_restore_drill_schedules_delete(
+    schedule_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    tenant: Tenant = Depends(get_effective_tenant_ui),
+    _w: AuthContext = Depends(require_write_ui),
+) -> RedirectResponse:
+    try:
+        control_svc.delete_restore_drill_schedule(db, schedule_id, tenant_id=tenant.id)
+        return _redirect("/ui/restore-drill-schedules", flash="Restore drill schedule deleted.")
+    except HTTPException as e:
+        return _redirect("/ui/restore-drill-schedules", error=_http_err_detail(e))

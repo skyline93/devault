@@ -12,12 +12,59 @@ from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy import select
 
 from devault.core.enums import JobKind, JobStatus, JobTrigger
-from devault.db.models import Job, Policy, Schedule
+from devault.db.models import Artifact, Job, Policy, RestoreDrillSchedule, Schedule
 from devault.db.session import SessionLocal
 from devault.services.retention import purge_expired_artifacts
 from devault.settings import get_settings
 
 logger = logging.getLogger(__name__)
+
+
+def fire_scheduled_restore_drill(schedule_id: str) -> None:
+    """Enqueue a restore_drill job from a RestoreDrillSchedule row."""
+    sid = uuid.UUID(schedule_id)
+    db = SessionLocal()
+    try:
+        sch = db.get(RestoreDrillSchedule, sid)
+        if sch is None or not sch.enabled:
+            logger.warning("RestoreDrillSchedule %s missing or disabled, skip", schedule_id)
+            return
+        art = db.get(Artifact, sch.artifact_id)
+        if art is None or art.tenant_id != sch.tenant_id:
+            logger.warning(
+                "Artifact %s missing or tenant mismatch for restore drill schedule %s, skip",
+                sch.artifact_id,
+                schedule_id,
+            )
+            return
+
+        cfg = {
+            "version": 1,
+            "artifact_id": str(art.id),
+            "drill_base_path": sch.drill_base_path,
+            "restore_drill": True,
+            "restore_drill_schedule_id": str(sch.id),
+        }
+        job = Job(
+            tenant_id=sch.tenant_id,
+            kind=JobKind.RESTORE_DRILL.value,
+            plugin="file",
+            status=JobStatus.PENDING.value,
+            trigger=JobTrigger.SCHEDULED.value,
+            config_snapshot=cfg,
+            restore_artifact_id=art.id,
+        )
+        db.add(job)
+        db.commit()
+        db.refresh(job)
+        logger.info(
+            "Scheduled restore drill enqueued job_id=%s schedule_id=%s artifact_id=%s",
+            job.id,
+            schedule_id,
+            art.id,
+        )
+    finally:
+        db.close()
 
 
 def fire_scheduled_backup(schedule_id: str) -> None:
@@ -82,10 +129,43 @@ def sync_scheduler(scheduler: BlockingScheduler) -> None:
                 max_instances=1,
                 coalesce=True,
             )
+        rd_rows = db.scalars(
+            select(RestoreDrillSchedule).where(RestoreDrillSchedule.enabled.is_(True))
+        ).all()
+        for sch in rd_rows:
+            art = db.get(Artifact, sch.artifact_id)
+            if art is None or art.tenant_id != sch.tenant_id:
+                continue
+            jid = f"rd_{sch.id}"
+            keep.add(jid)
+            try:
+                tz = ZoneInfo(sch.timezone)
+            except ZoneInfoNotFoundError:
+                logger.warning(
+                    "Unknown timezone %r for restore drill schedule %s, using UTC",
+                    sch.timezone,
+                    sch.id,
+                )
+                tz = ZoneInfo("UTC")
+            trigger = CronTrigger.from_crontab(sch.cron_expression.strip(), timezone=tz)
+            scheduler.add_job(
+                fire_scheduled_restore_drill,
+                trigger,
+                args=[str(sch.id)],
+                id=jid,
+                replace_existing=True,
+                max_instances=1,
+                coalesce=True,
+            )
         for j in scheduler.get_jobs():
-            if j.id.startswith("s_") and j.id not in keep:
-                scheduler.remove_job(j.id)
-                logger.info("Removed stale scheduler job %s", j.id)
+            jid = getattr(j, "id", "")
+            if (
+                isinstance(jid, str)
+                and (jid.startswith("s_") or jid.startswith("rd_"))
+                and jid not in keep
+            ):
+                scheduler.remove_job(jid)
+                logger.info("Removed stale scheduler job %s", jid)
     finally:
         db.close()
 

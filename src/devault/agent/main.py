@@ -273,7 +273,7 @@ def _run_one_job(
                         tmp_path.unlink(missing_ok=True)
                 except OSError:
                     pass
-        elif lease.kind == JobKind.RESTORE.value:
+        elif lease.kind in (JobKind.RESTORE.value, JobKind.RESTORE_DRILL.value):
             g = stub.RequestStorageGrant(
                 agent_pb2.RequestStorageGrantRequest(
                     agent_id=agent_id,
@@ -289,15 +289,22 @@ def _run_one_job(
                     "INVALID_CONFIG",
                     "restore grant missing expected_checksum_sha256",
                 )
-            run_file_restore_with_presigned_bundle(
+            drill_rel = __version__ if lease.kind == JobKind.RESTORE_DRILL.value else None
+            rep = run_file_restore_with_presigned_bundle(
                 job=job_stub,
                 settings=s,
                 bundle_get_url=g.bundle_http_url,
                 expected_checksum_sha256=expected,
                 manifest_get_url=(g.manifest_http_url or "").strip() or None,
+                agent_release_for_drill=drill_rel,
             )
             stub.CompleteJob(
-                agent_pb2.CompleteJobRequest(agent_id=agent_id, job_id=job_id, success=True),
+                agent_pb2.CompleteJobRequest(
+                    agent_id=agent_id,
+                    job_id=job_id,
+                    success=True,
+                    result_summary_json=json.dumps(rep) if rep else "",
+                ),
                 metadata=md,
             )
         else:

@@ -178,7 +178,7 @@ def try_lease_next_job(db: Session, agent_id: uuid.UUID, settings: Settings) -> 
 def _lease_config_json(db: Session, job: Job) -> str:
     cfg = dict(job.config_snapshot or {})
     cfg["tenant_id"] = str(job.tenant_id)
-    if job.kind == JobKind.RESTORE.value and job.restore_artifact_id:
+    if job.kind in (JobKind.RESTORE.value, JobKind.RESTORE_DRILL.value) and job.restore_artifact_id:
         art = db.get(Artifact, job.restore_artifact_id)
         if art:
             cfg["expected_checksum_sha256"] = art.checksum_sha256
@@ -535,7 +535,7 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
                     return reply
 
                 if request.intent == agent_pb2.STORAGE_INTENT_READ:
-                    if job.kind != JobKind.RESTORE.value:
+                    if job.kind not in (JobKind.RESTORE.value, JobKind.RESTORE_DRILL.value):
                         context.abort(grpc.StatusCode.INVALID_ARGUMENT, "READ only for restore jobs")
                     aid = job.restore_artifact_id
                     if aid is None:
@@ -744,6 +744,17 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
                         BILLING_COMMITTED_BYTES_TOTAL.labels(tenant_id=str(job.tenant_id)).inc(
                             max(0, int(request.size_bytes)),
                         )
+                    elif job.kind == JobKind.RESTORE_DRILL.value:
+                        job.status = JobStatus.SUCCESS.value
+                        job.finished_at = datetime.now(timezone.utc)
+                        raw = (request.result_summary_json or "").strip()
+                        if raw:
+                            try:
+                                parsed = json.loads(raw)
+                                job.result_meta = parsed if isinstance(parsed, dict) else {"value": parsed}
+                            except json.JSONDecodeError:
+                                job.result_meta = {"parse_error": "invalid result_summary_json"}
+                        JOB_TOTAL.labels(kind="restore_drill", plugin=job.plugin, status="success").inc()
                     else:
                         job.status = JobStatus.SUCCESS.value
                         job.finished_at = datetime.now(timezone.utc)

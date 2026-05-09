@@ -16,6 +16,7 @@ import pathspec
 from sqlalchemy.orm import Session
 
 from devault import __version__
+from devault.core.enums import JobKind
 from devault.crypto.chunked_aes_gcm import (
     ArtifactCryptoError,
     DEFAULT_CHUNK_SIZE,
@@ -506,8 +507,63 @@ def run_file_backup_with_presigned_urls(
             pass
 
 
+def _is_restore_drill_job(job: Job) -> bool:
+    kind = getattr(job, "kind", None)
+    cfg = job.config_snapshot or {}
+    return kind == JobKind.RESTORE_DRILL.value or bool(cfg.get("restore_drill"))
+
+
+def _resolve_restore_drill_paths(job: Job, settings: Settings) -> tuple[uuid.UUID, Path]:
+    """Resolve artifact id and per-job drill extract root. Prefix checks only; no emptiness check."""
+    if not _is_restore_drill_job(job):
+        raise FileBackupError("INVALID_CONFIG", "restore drill paths only apply to restore_drill jobs")
+    cfg = job.config_snapshot or {}
+    artifact_id = cfg.get("artifact_id") or str(job.restore_artifact_id or "")
+    if not artifact_id:
+        raise FileBackupError("INVALID_CONFIG", "artifact_id required for restore")
+    try:
+        aid = uuid.UUID(str(artifact_id))
+    except ValueError as e:
+        raise FileBackupError("INVALID_CONFIG", "artifact_id must be a UUID") from e
+
+    drill_base_raw = cfg.get("drill_base_path")
+    if not drill_base_raw or not isinstance(drill_base_raw, str):
+        raise FileBackupError("INVALID_CONFIG", "drill_base_path required for restore drill")
+    base = Path(drill_base_raw.strip())
+    if not base.is_absolute():
+        raise FileBackupError("INVALID_CONFIG", "drill_base_path must be absolute")
+    base = base.resolve(strict=False)
+    jid = getattr(job, "id", None)
+    if jid is None:
+        raise FileBackupError("INVALID_CONFIG", "job id required for restore drill")
+    target = base / f"devault-drill-{jid}"
+    if settings.allowed_prefix_list:
+        ok_base = any(str(base).startswith(prefix) for prefix in settings.allowed_prefix_list)
+        ok_target = any(str(target).startswith(prefix) for prefix in settings.allowed_prefix_list)
+        if not ok_base or not ok_target:
+            raise FileBackupError(
+                "PATH_NOT_ALLOWED",
+                f"drill_base_path {base} / target {target} not under allowed prefixes",
+            )
+    return aid, target
+
+
+def _require_restore_drill_workspace_clean(target: Path) -> None:
+    """Before starting a drill extract, ensure the per-job directory is missing or empty."""
+    if target.exists() and any(target.iterdir()):
+        raise FileBackupError(
+            "TARGET_NOT_EMPTY",
+            "restore drill target exists and is not empty (remove stale directory or retry)",
+        )
+
+
 def _restore_paths_and_target(job: Job, settings: Settings) -> tuple[uuid.UUID, Path, bool]:
     cfg = job.config_snapshot or {}
+    if _is_restore_drill_job(job):
+        aid, target = _resolve_restore_drill_paths(job, settings)
+        _require_restore_drill_workspace_clean(target)
+        return aid, target, True
+
     artifact_id = cfg.get("artifact_id") or str(job.restore_artifact_id or "")
     if not artifact_id:
         raise FileBackupError("INVALID_CONFIG", "artifact_id required for restore")
@@ -538,6 +594,37 @@ def _restore_paths_and_target(job: Job, settings: Settings) -> tuple[uuid.UUID, 
             "target_path exists and is not empty; pass confirm_overwrite_non_empty=true",
         )
     return aid, target, confirm
+
+
+def _maybe_write_restore_drill_report(
+    *,
+    job: Job,
+    settings: Settings,
+    plaintext_manifest_checksum_sha256: str | None,
+    agent_release: str,
+) -> dict | None:
+    cfg = job.config_snapshot or {}
+    kind = getattr(job, "kind", None)
+    if kind != JobKind.RESTORE_DRILL.value and not cfg.get("restore_drill"):
+        return None
+    rel = (agent_release or "").strip() or "unknown"
+    aid, target = _resolve_restore_drill_paths(job, settings)
+    jid = getattr(job, "id")
+    report = {
+        "schema": "devault-restore-drill-report-v1",
+        "job_id": str(jid),
+        "artifact_id": str(aid),
+        "finished_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "bundle_checksum_sha256_verified": True,
+        "plaintext_manifest_checksum_sha256": plaintext_manifest_checksum_sha256,
+        "extract_root": str(target),
+        "report_path": str(target / ".devault-drill-report.json"),
+        "agent_release": rel,
+    }
+    target.mkdir(parents=True, exist_ok=True)
+    path = target / ".devault-drill-report.json"
+    path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+    return report
 
 
 def run_file_restore(
@@ -617,7 +704,8 @@ def run_file_restore_with_presigned_bundle(
     bundle_get_url: str,
     expected_checksum_sha256: str,
     manifest_get_url: str | None = None,
-) -> None:
+    agent_release_for_drill: str | None = None,
+) -> dict | None:
     _, target, _confirm = _restore_paths_and_target(job, settings)
 
     manifest: dict | None = None
@@ -633,6 +721,7 @@ def run_file_restore_with_presigned_bundle(
     with tempfile.NamedTemporaryFile(suffix=".tar.gz", delete=False) as tmp:
         bundle_local = Path(tmp.name)
     try:
+        plaintext_chk: str | None = None
         digest = http_download_file_streaming_sha256(bundle_get_url, bundle_local)
         if digest.lower() != expected_checksum_sha256.lower():
             raise FileBackupError("CHECKSUM_MISMATCH", "Downloaded bundle checksum mismatch")
@@ -647,6 +736,7 @@ def run_file_restore_with_presigned_bundle(
             inner_expect = str(manifest.get("plaintext_checksum_sha256") or "")
             if not inner_expect:
                 raise FileBackupError("INVALID_MANIFEST", "manifest missing plaintext_checksum_sha256")
+            plaintext_chk = inner_expect
             plain_fd, plain_name = tempfile.mkstemp(suffix=".tar.gz", prefix="dv-plain-")
             os.close(plain_fd)
             plain_tmp = Path(plain_name)
@@ -663,6 +753,12 @@ def run_file_restore_with_presigned_bundle(
                     pass
         else:
             _extract_bundle(bundle_local, target, digest)
+        return _maybe_write_restore_drill_report(
+            job=job,
+            settings=settings,
+            plaintext_manifest_checksum_sha256=plaintext_chk,
+            agent_release=agent_release_for_drill or "",
+        )
     finally:
         try:
             bundle_local.unlink(missing_ok=True)

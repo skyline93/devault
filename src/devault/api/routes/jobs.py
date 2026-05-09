@@ -7,7 +7,13 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from devault.api.deps import get_db, get_effective_tenant, require_write
-from devault.api.schemas import CreateBackupJobBody, CreateRestoreJobBody, EnqueueResponse, JobOut
+from devault.api.schemas import (
+    CreateBackupJobBody,
+    CreateRestoreDrillJobBody,
+    CreateRestoreJobBody,
+    EnqueueResponse,
+    JobOut,
+)
 from devault.db.models import Job, Tenant
 from devault.security.auth_context import AuthContext
 from devault.services import control as control_svc
@@ -34,6 +40,17 @@ def create_restore_job(
     _w: AuthContext = Depends(require_write),
 ) -> EnqueueResponse:
     job = control_svc.create_restore_job(db, body, tenant_id=tenant.id)
+    return EnqueueResponse(job_id=job.id, status=job.status)
+
+
+@router.post("/restore-drill", response_model=EnqueueResponse, summary="Enqueue automated restore drill job")
+def create_restore_drill_job(
+    body: CreateRestoreDrillJobBody,
+    db: Session = Depends(get_db),
+    tenant: Tenant = Depends(get_effective_tenant),
+    _w: AuthContext = Depends(require_write),
+) -> EnqueueResponse:
+    job = control_svc.create_restore_drill_job(db, body, tenant_id=tenant.id)
     return EnqueueResponse(job_id=job.id, status=job.status)
 
 

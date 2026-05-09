@@ -106,6 +106,16 @@ class CreateRestoreJobBody(BaseModel):
     )
 
 
+class CreateRestoreDrillJobBody(BaseModel):
+    """Manual automated restore drill: extract artifact under drill_base_path/devault-drill-<job_id>/."""
+
+    artifact_id: uuid.UUID = Field(..., description="Artifact to verify by restoring on the Agent.")
+    drill_base_path: str = Field(
+        ...,
+        description="Absolute directory prefix on the Agent (each run uses a unique devault-drill-<job_id>/ subfolder).",
+    )
+
+
 class JobOut(BaseModel):
     """Job row returned by the API."""
 
@@ -125,6 +135,10 @@ class JobOut(BaseModel):
     error_code: str | None
     error_message: str | None
     trace_id: str | None
+    result_meta: dict[str, Any] | None = Field(
+        default=None,
+        description="On successful restore_drill: JSON report echoed from the Agent (also written under extract_root).",
+    )
 
     model_config = {"from_attributes": True}
 
@@ -204,6 +218,42 @@ class ScheduleOut(BaseModel):
     cron_expression: str
     timezone: str
     enabled: bool
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class RestoreDrillScheduleCreate(BaseModel):
+    artifact_id: uuid.UUID = Field(..., description="Artifact whose recoverability is verified each run.")
+    cron_expression: str = Field(
+        ...,
+        max_length=128,
+        description="Five-field cron for devault-scheduler (same as backup schedules).",
+    )
+    timezone: str = Field("UTC", description="IANA time zone name.")
+    enabled: bool = Field(True, description="Whether the scheduler should enqueue drills.")
+    drill_base_path: str = Field(
+        ...,
+        description="Absolute path prefix on the Agent (runs extract into devault-drill-<job_id>/ below this path).",
+    )
+
+
+class RestoreDrillSchedulePatch(BaseModel):
+    cron_expression: str | None = Field(None, max_length=128)
+    timezone: str | None = None
+    enabled: bool | None = None
+    drill_base_path: str | None = None
+    artifact_id: uuid.UUID | None = None
+
+
+class RestoreDrillScheduleOut(BaseModel):
+    id: uuid.UUID
+    tenant_id: uuid.UUID
+    artifact_id: uuid.UUID
+    cron_expression: str
+    timezone: str
+    enabled: bool
+    drill_base_path: str
     created_at: datetime
 
     model_config = {"from_attributes": True}

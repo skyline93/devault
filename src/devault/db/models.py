@@ -87,6 +87,35 @@ class Policy(Base):
     )
 
 
+class RestoreDrillSchedule(Base):
+    """Cron-driven automated restore drills (verify artifact recoverability on Agent disk)."""
+
+    __tablename__ = "restore_drill_schedules"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    artifact_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("artifacts.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    cron_expression: Mapped[str] = mapped_column(String(128), nullable=False)
+    timezone: Mapped[str] = mapped_column(String(64), nullable=False, default="UTC")
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    drill_base_path: Mapped[str] = mapped_column(Text(), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+
 class Schedule(Base):
     __tablename__ = "schedules"
 
@@ -147,6 +176,7 @@ class Job(Base):
     bundle_wip_multipart_upload_id: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     bundle_wip_content_length: Mapped[int | None] = mapped_column(BigInteger(), nullable=True)
     bundle_wip_part_size_bytes: Mapped[int | None] = mapped_column(BigInteger(), nullable=True)
+    result_meta: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
     tenant: Mapped["Tenant"] = relationship("Tenant", back_populates="jobs")
     artifact: Mapped["Artifact | None"] = relationship(

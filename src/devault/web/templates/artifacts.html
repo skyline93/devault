@@ -4,7 +4,8 @@
 <h1>Artifacts</h1>
 {% if flash %}<p class="flash ok">{{ flash }}</p>{% endif %}
 {% if error %}<p class="flash err">{{ error }}</p>{% endif %}
-<p class="muted">Restore target must be an <strong>absolute path</strong> (Compose example: <code>/restore/out</code>) and must match the Agent allowed path prefixes.</p>
+<p class="muted">Restores extract into an <strong>absolute</strong> directory on the Agent (for example <code>/restore/out</code>). The path must match the Agent&rsquo;s allowed path prefixes. Automated restore drills are under <strong>Restore drills</strong> in the nav.</p>
+
 <table>
   <thead>
     <tr>
@@ -13,7 +14,7 @@
       <th>Size</th>
       <th>SHA256</th>
       <th>Retain until (UTC)</th>
-      <th>Restore</th>
+      <th class="col-restore">Restore</th>
     </tr>
   </thead>
   <tbody>
@@ -24,18 +25,58 @@
       <td>{{ a.size_bytes }}</td>
       <td><code>{{ a.checksum_sha256[:20] }}…</code></td>
       <td>{% if a.retain_until %}{{ a.retain_until }}{% else %}<span class="muted">—</span>{% endif %}</td>
-      <td>
-        <form method="post" action="/ui/artifacts/restore" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;">
-          <input type="hidden" name="artifact_id" value="{{ a.id }}"/>
-          <input type="text" name="target_path" placeholder="/restore/out" size="28" required/>
-          <span class="muted">Overwrite non-empty</span>
-          <label><input type="radio" name="confirm_overwrite_non_empty" value="no" checked/> No</label>
-          <label><input type="radio" name="confirm_overwrite_non_empty" value="yes"/> Yes</label>
-          <button type="submit">Restore</button>
-        </form>
+      <td class="row-actions col-restore">
+        <button type="button" class="open-restore-dialog" data-artifact-id="{{ a.id }}">Restore</button>
       </td>
     </tr>
+    {% else %}
+    <tr><td colspan="6" class="muted">No artifacts yet. <a href="/ui/policies">Create a policy</a> and run a backup.</td></tr>
     {% endfor %}
   </tbody>
 </table>
+
+<dialog id="restore-dialog" class="restore-dialog">
+  <form id="restore-dialog-form" method="post" action="/ui/artifacts/restore">
+    <h2>Queue restore</h2>
+    <p class="muted" style="margin:0 0 8px;">Artifact <code id="restore-artifact-display"></code></p>
+    <input type="hidden" name="artifact_id" id="restore-artifact-id" value=""/>
+    <label for="restore-target-path">Target directory</label>
+    <input id="restore-target-path" type="text" name="target_path" placeholder="/restore/out" required autocomplete="off"/>
+    <fieldset class="restore-confirm">
+      <legend>Non-empty target</legend>
+      <label><input type="radio" name="confirm_overwrite_non_empty" value="no" checked/> Disallow</label>
+      <label><input type="radio" name="confirm_overwrite_non_empty" value="yes"/> Allow</label>
+    </fieldset>
+    <div class="dialog-actions">
+      <button type="submit">Queue restore</button>
+      <button type="button" id="restore-dialog-cancel">Cancel</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+(function () {
+  var dlg = document.getElementById("restore-dialog");
+  if (!dlg || !dlg.showModal) return;
+  var form = document.getElementById("restore-dialog-form");
+  var hiddenId = document.getElementById("restore-artifact-id");
+  var displayCode = document.getElementById("restore-artifact-display");
+  var targetInput = document.getElementById("restore-target-path");
+  document.querySelectorAll(".open-restore-dialog").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var aid = btn.getAttribute("data-artifact-id");
+      hiddenId.value = aid;
+      displayCode.textContent = aid;
+      targetInput.value = "";
+      var noRadio = form.querySelector('input[name="confirm_overwrite_non_empty"][value="no"]');
+      if (noRadio) noRadio.checked = true;
+      dlg.showModal();
+      targetInput.focus();
+    });
+  });
+  document.getElementById("restore-dialog-cancel").addEventListener("click", function () {
+    dlg.close();
+  });
+})();
+</script>
 {% endblock %}

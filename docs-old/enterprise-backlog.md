@@ -194,7 +194,7 @@
 
 | 状态 | 优先级 | 待办项 | 说明与验收要点 |
 |------|--------|--------|----------------|
-| [ ] | P1 | **自动恢复演练 Job** | 周期性从 artifact 恢复到隔离目录、校验 checksum、写报告（README 中「临时恢复演练」产品化）。 |
+| [x] | P1 | **自动恢复演练 Job** | **`restore_drill`** Job + **`restore_drill_schedules`** Cron；Agent 解压至 **`drill_base_path`/devault-drill-`<job_id>`/**，`.devault-drill-report.json` + **`CompleteJob.result_summary_json`** → **`jobs.result_meta`**；API **`POST /jobs/restore-drill`**、**`/restore-drill-schedules`**；**Web UI**：**`/ui/restore-drill-schedules`**、Jobs 列表演练路径摘要（Artifacts 仅手动恢复）；文档 **`website/docs/guides/restore-drill.md`**、**`guides/web-console.md`**。 |
 | [ ] | P1 | **备份完整性告警** | 连续失败、校验失败、超窗未完成。 |
 | [ ] | P2 | **增量与时间线（长期）** | WAL/binlog、PITR（`development-design.md` §3.4 非目标）；单独 Epic，依赖数据库插件成熟。 |
 
@@ -294,6 +294,8 @@
 | 2026-05-09 | **M1·六 P1**：**gRPC/API 多实例部署指南**（Redis 锁与 PG 租约、scheduler 单副本、进程内限流语义、Envoy ROUND_ROBIN、Compose 端口与 `--scale`）；**`deploy/docker-compose.grpc-ha-example.yml`**、**`deploy/scripts/compose-grpc-ha-demo.sh`**；**`docs-old/grpc-tls.md`** 增加 §9 互链。 |
 | 2026-05-09 | **M1·六 P1**：**Agent 批量管理**：迁移 **`edge_agents`**；Heartbeat/Register 写入；**`LeaseJobs`** 持久化版本门闸；**`GET /api/v1/agents`**、CLI **`devault agent list`**；**`website/docs/reference/agent-fleet.md`**、配置 **`DEVAULT_GRPC_ENFORCE_VERSION_ON_LEASE`**。 |
 | 2026-05-09 | **M1·六 P2**：**Agent 舰队 Web UI**：**`/ui/agents`**、**`agents.html`**、**`api/presenters.py`**（**`edge_agent_to_out`** 与 REST 共用）；待办清单与 **`guides/web-console.md`** 更新。 |
+| 2026-05-09 | **M1·七 P1**：**自动恢复演练**：**`JobKind.restore_drill`**、迁移 **`0008`**、**`CompleteJobRequest.result_summary_json`**；调度器 **`rd_*`** Cron；文档 **`guides/restore-drill.md`**。 |
+| 2026-05-09 | **M1·七**：恢复演练 **Web UI**（**`/ui/restore-drill-schedules`**、Jobs 演练摘要列；Artifacts 仅手动恢复）。 |
 
 ---
 
