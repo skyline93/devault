@@ -27,7 +27,8 @@
 | `DEVAULT_GRPC_RPS_PER_PEER` | 每 gRPC `peer()` 的令牌桶速率；`0` 关闭（默认）。 |
 | `DEVAULT_GRPC_RPS_BURST_PER_PEER` | 桶容量（默认 `40`）。 |
 | `DEVAULT_GRPC_AUDIT_LOG` | `true`/`false`：是否对每次 Agent RPC 打 JSON 审计行到 logger `devault.grpc.audit`。 |
-| `DEVAULT_GRPC_REGISTRATION_SECRET` | 若设置：开放 `Register` RPC，用该密钥换取 `DEVAULT_API_TOKEN`（见 §5）。需同时配置 `DEVAULT_API_TOKEN`。 |
+| `DEVAULT_GRPC_REGISTRATION_SECRET` | 若设置：开放 `Register` RPC；Agent 用该密钥换取 **Redis 绑定的每-Agent Bearer**（见 §5）。 |
+| `DEVAULT_GRPC_AGENT_SESSION_TTL_SECONDS` | `Register` 签发的 Agent gRPC Bearer 在 Redis 中的 TTL（秒）；每次带该 Bearer 的 RPC 会刷新过期时间（默认 7 天）。 |
 
 ---
 
@@ -52,17 +53,21 @@ docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.grpc-tls.ym
 
 证书输出目录：`deploy/tls/dev/`（已在 `.gitignore` 中忽略）。`grpc-gateway` 监听 **50052**（TLS），管理接口 **9901**。
 
+示例 Envoy 配置包含 **`envoy.filters.http.local_ratelimit`**（与进程内 **`DEVAULT_GRPC_RPS_PER_PEER`** 形成双层限流）；参数见文档站 [TLS 与网关](../website/docs/security/tls-and-gateway.md#envoy-边缘限流local_rate_limit)。
+
 `docker-compose.yml` 中 **`api` 配有 `healthcheck`**（轮询 `http://127.0.0.1:8000/healthz`，`start_period` 覆盖 alembic + 冷启动）；**`grpc-gateway` / `agent` / `scheduler`**（以及可选叠加的 **Prometheus**）对 `api` 使用 **`condition: service_healthy`**，避免 Envoy 连上游 `api:50051` 时出现 **connection refused**（容器已起但 gRPC 尚未监听）。
 
 Envoy 下行 TLS 必须在 `common_tls_context` 中声明 **`alpn_protocols`**（含 **`h2`**），否则 Python `grpc.secure_channel` 可能报错：`Cannot check peer: missing selected ALPN property`。仓库内 `deploy/envoy/envoy-grpc-tls.yaml` 已包含该配置。
 
 ---
 
-## 5. Register（引导令牌）
+## 5. Register（每 Agent Redis 会话）
 
-- 控制面必须同时配置 **`DEVAULT_GRPC_REGISTRATION_SECRET`** 与 **`DEVAULT_API_TOKEN`**，`Register` 才会返回有效 `bearer_token`。
-- Agent 可在 **不设置** `DEVAULT_API_TOKEN` 的情况下仅设置 `DEVAULT_GRPC_REGISTRATION_SECRET`，由进程启动时调用 `Register` 拉取 token（仅内存，不落盘）。
-- **安全**：`registration_secret` 与 `api_token` 同级敏感，应通过密钥管理注入并定期轮换。
+- 控制面配置 **`DEVAULT_GRPC_REGISTRATION_SECRET`** 且 **Redis 可达** 时，`Register` 成功后返回 **仅绑定该 `agent_id`** 的 **`bearer_token`**（存于 Redis，TTL **`DEVAULT_GRPC_AGENT_SESSION_TTL_SECONDS`**）；**`expires_in_seconds`** 与之一致。
+- Agent 可在 **不设置** `DEVAULT_API_TOKEN` 的情况下仅配置 **`DEVAULT_GRPC_REGISTRATION_SECRET`**，启动时调用 `Register` 将 token 保留在内存。
+- 运维仍可使用 **`DEVAULT_API_TOKEN`** 或 **HTTP API Key** 携带 Bearer 调用 Agent gRPC（不按 `agent_id` 绑定会话，用于排障）。
+- 管理员可 **`POST /api/v1/agents/{agent_id}/revoke-grpc-sessions`** 吊销某 Agent 全部 Register 会话。
+- **安全**：`registration_secret` 与 HTTP 侧 **`DEVAULT_API_TOKEN`** 同级敏感，应轮换；Redis 须受控访问。
 
 ---
 

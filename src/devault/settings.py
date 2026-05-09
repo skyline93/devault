@@ -137,7 +137,12 @@ class Settings(BaseSettings):
     # --- gRPC Register bootstrap (control plane + Agent) ---
     grpc_registration_secret: str | None = Field(
         default=None,
-        description="If set, Register RPC accepts this secret and returns DEVAULT_API_TOKEN",
+        description="If set, Register RPC accepts this secret and mints a per-Agent Redis bearer token",
+    )
+    grpc_agent_session_ttl_seconds: int = Field(
+        default=604800,
+        ge=120,
+        description="TTL for Register-minted Agent gRPC Bearer tokens (Redis); refreshed on each RPC",
     )
     grpc_min_supported_agent_version: str = Field(
         default="0.1.0",

@@ -16,6 +16,11 @@ from devault.core.enums import JobKind, JobStatus, PluginName
 from devault.core.locking import release_policy_job_lock, try_acquire_policy_job_lock
 from devault.db.models import Artifact, Job
 from devault.db.session import SessionLocal
+from devault.security.agent_grpc_session import (
+    mint_agent_session_token,
+    validate_and_refresh_agent_session,
+)
+from devault.security.auth_context import AuthContext, dev_open_auth_context
 from devault.security.oidc import try_decode_oidc_bearer
 from devault.security.policy import authentication_enabled
 from devault.security.token_resolve import resolve_bearer_token
@@ -65,11 +70,11 @@ _ACTIVE_JOB_STATUSES = (
 )
 
 
-def _auth(context: grpc.ServicerContext, settings: Settings) -> None:
+def _authenticate_grpc(context: grpc.ServicerContext, settings: Settings) -> AuthContext:
     db = SessionLocal()
     try:
         if not authentication_enabled(settings, db):
-            return
+            return dev_open_auth_context()
         meta = dict(context.invocation_metadata())
         auth = meta.get("authorization") or meta.get("Authorization")
         if not auth or not auth.startswith("Bearer "):
@@ -77,20 +82,61 @@ def _auth(context: grpc.ServicerContext, settings: Settings) -> None:
             raise RuntimeError("unreachable")
         raw = auth[7:].strip()
         ctx = try_decode_oidc_bearer(raw, settings)
-        if ctx is None:
-            try:
-                ctx = resolve_bearer_token(db, raw, legacy_api_token=settings.api_token)
-            except PermissionError:
-                context.abort(grpc.StatusCode.UNAUTHENTICATED, "invalid token")
-                raise RuntimeError("unreachable") from None
+        if ctx is not None:
+            if ctx.role == "auditor":
+                context.abort(
+                    grpc.StatusCode.PERMISSION_DENIED,
+                    "auditor role cannot access agent gRPC",
+                )
+                raise RuntimeError("unreachable")
+            return ctx
+        aid = validate_and_refresh_agent_session(
+            settings.redis_url,
+            raw,
+            ttl_seconds=int(settings.grpc_agent_session_ttl_seconds),
+        )
+        if aid is not None:
+            return AuthContext(
+                role="operator",
+                allowed_tenant_ids=None,
+                principal_label=f"agent-session:{aid}",
+            )
+        try:
+            ctx = resolve_bearer_token(db, raw, legacy_api_token=settings.api_token)
+        except PermissionError:
+            context.abort(grpc.StatusCode.UNAUTHENTICATED, "invalid token")
+            raise RuntimeError("unreachable") from None
         if ctx.role == "auditor":
             context.abort(
                 grpc.StatusCode.PERMISSION_DENIED,
                 "auditor role cannot access agent gRPC",
             )
             raise RuntimeError("unreachable")
+        return ctx
     finally:
         db.close()
+
+
+def _require_agent_bearer_matches(
+    auth_ctx: AuthContext,
+    agent_id: uuid.UUID,
+    context: grpc.ServicerContext,
+) -> None:
+    """Per-Agent Register tokens must match RPC ``agent_id``; shared API keys unchanged."""
+    label = auth_ctx.principal_label
+    prefix = "agent-session:"
+    if not label.startswith(prefix):
+        return
+    try:
+        bound = uuid.UUID(label[len(prefix) :])
+    except ValueError:
+        return
+    if bound != agent_id:
+        context.abort(
+            grpc.StatusCode.PERMISSION_DENIED,
+            "bearer token is bound to a different agent_id",
+        )
+        raise RuntimeError("unreachable")
 
 
 def reclaim_expired_job_leases(db: Session, settings: Settings) -> None:
@@ -213,17 +259,6 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
             except ValueError:
                 context.abort(grpc.StatusCode.INVALID_ARGUMENT, "agent_id must be a UUID")
                 raise
-            if not settings.api_token:
-                reply = agent_pb2.RegisterReply(
-                    ok=False,
-                    bearer_token="",
-                    message="DEVAULT_API_TOKEN not configured on control plane",
-                    expires_in_seconds=0,
-                    reason_code="CONTROL_PLANE_MISSING_API_TOKEN",
-                )
-                attach_control_plane_version_meta(reply, settings)
-                apply_server_capabilities(reply, settings)
-                return reply
             dep = evaluate_agent_version_gate(
                 agent_release=request.agent_release,
                 proto_package=request.proto_package,
@@ -244,10 +279,23 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
                 db_reg.commit()
             finally:
                 db_reg.close()
+            try:
+                token, ttl_sec = mint_agent_session_token(
+                    settings.redis_url,
+                    agent_id=agent_uuid,
+                    ttl_seconds=int(settings.grpc_agent_session_ttl_seconds),
+                )
+            except Exception:
+                logger.exception("Register: failed to mint Redis agent session")
+                context.abort(
+                    grpc.StatusCode.UNAVAILABLE,
+                    "agent session store unavailable (check Redis)",
+                )
+                raise RuntimeError("unreachable")
             reply = agent_pb2.RegisterReply(
                 ok=True,
-                bearer_token=settings.api_token,
-                expires_in_seconds=0,
+                bearer_token=token,
+                expires_in_seconds=ttl_sec,
                 message="ok",
                 deprecation_message=dep,
             )
@@ -268,12 +316,13 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
                 "agent_git_commit": request.git_commit or None,
             },
         ):
-            _auth(context, settings)
+            auth_ctx = _authenticate_grpc(context, settings)
             try:
                 hb_agent = uuid.UUID(request.agent_id)
             except ValueError:
                 context.abort(grpc.StatusCode.INVALID_ARGUMENT, "agent_id must be a UUID")
                 raise
+            _require_agent_bearer_matches(auth_ctx, hb_agent, context)
             dep = evaluate_agent_version_gate(
                 agent_release=request.agent_release,
                 proto_package=request.proto_package,
@@ -311,12 +360,13 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
             settings,
             audit_extra={"agent_id": request.agent_id},
         ):
-            _auth(context, settings)
+            auth_ctx = _authenticate_grpc(context, settings)
             try:
                 agent_uuid = uuid.UUID(request.agent_id)
             except ValueError:
                 context.abort(grpc.StatusCode.INVALID_ARGUMENT, "agent_id must be a UUID")
                 raise
+            _require_agent_bearer_matches(auth_ctx, agent_uuid, context)
 
             max_jobs = min(max(int(request.max_jobs or 1), 1), 10)
             db = SessionLocal()
@@ -363,7 +413,7 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
             settings,
             audit_extra={"agent_id": request.agent_id, "job_id": request.job_id},
         ):
-            _auth(context, settings)
+            auth_ctx = _authenticate_grpc(context, settings)
             if settings.storage_backend != "s3":
                 context.abort(
                     grpc.StatusCode.FAILED_PRECONDITION,
@@ -377,6 +427,7 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
             except ValueError:
                 context.abort(grpc.StatusCode.INVALID_ARGUMENT, "invalid UUID")
                 raise
+            _require_agent_bearer_matches(auth_ctx, agent_uuid, context)
 
             db = SessionLocal()
             try:
@@ -583,13 +634,14 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
             settings,
             audit_extra={"agent_id": request.agent_id, "job_id": request.job_id},
         ):
-            _auth(context, settings)
+            auth_ctx = _authenticate_grpc(context, settings)
             try:
                 agent_uuid = uuid.UUID(request.agent_id)
                 job_uuid = uuid.UUID(request.job_id)
             except ValueError:
                 context.abort(grpc.StatusCode.INVALID_ARGUMENT, "invalid UUID")
                 raise
+            _require_agent_bearer_matches(auth_ctx, agent_uuid, context)
 
             db = SessionLocal()
             try:
@@ -615,13 +667,14 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
             settings,
             audit_extra={"agent_id": request.agent_id, "job_id": request.job_id},
         ):
-            _auth(context, settings)
+            auth_ctx = _authenticate_grpc(context, settings)
             try:
                 agent_uuid = uuid.UUID(request.agent_id)
                 job_uuid = uuid.UUID(request.job_id)
             except ValueError:
                 context.abort(grpc.StatusCode.INVALID_ARGUMENT, "invalid UUID")
                 raise
+            _require_agent_bearer_matches(auth_ctx, agent_uuid, context)
 
             t_inner = time.monotonic()
             db = SessionLocal()

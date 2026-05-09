@@ -45,6 +45,7 @@ description: edge_agents 登记、HTTP 查询、强制升级与 LeaseJobs 校验
 |------|------|------|
 | **GET** | `/api/v1/agents` | 分页列出 Agent（默认按 **`last_seen_at`** 降序）；查询参数 **`limit`**（1–500）、**`offset`**。 |
 | **GET** | `/api/v1/agents/{agent_id}` | 按 UUID 返回单条记录。 |
+| **POST** | `/api/v1/agents/{agent_id}/revoke-grpc-sessions` | **admin**：吊销该 Agent 经 **Register** 获得的全部 **Redis** gRPC Bearer（递增会话世代，旧令牌立即失效）。 |
 
 响应模型 **`EdgeAgentOut`** 含 **`meets_min_supported_version`**、**`proto_matches_control_plane`**，便于仪表盘一眼识别不合规实例。
 

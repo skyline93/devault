@@ -43,7 +43,8 @@ description: 常用环境变量分组说明
 | `DEVAULT_GRPC_UPGRADE_URL` | （可选）随 gRPC 回复带给 Agent 的升级说明链接 |
 | `DEVAULT_GRPC_REQUIRE_AGENT_VERSION` | 设为 `true` 时，未带 `agent_release` 的 Agent 将被拒绝 |
 | `DEVAULT_GRPC_ENFORCE_VERSION_ON_LEASE` | 默认 `true`：**`LeaseJobs`** 根据 **`edge_agents`** 表（最近一次 Heartbeat 字段）再次执行版本/proto 校验；紧急绕过可设为 `false` |
-| `DEVAULT_GRPC_REGISTRATION_SECRET` | 若设置：开放 **Register**；Agent 可用该密钥换取控制面当前 **`DEVAULT_API_TOKEN`**（**`deploy/docker-compose.yml`** 开发默认与 Agent 侧同值；生产须轮换） |
+| `DEVAULT_GRPC_REGISTRATION_SECRET` | 若设置：开放 **Register**；Agent 用该密钥换取 **Redis 中按 `agent_id` 绑定的 gRPC Bearer**（**`deploy/docker-compose.yml`** 默认与 Agent 侧同值；生产须轮换） |
+| `DEVAULT_GRPC_AGENT_SESSION_TTL_SECONDS` | **Register** 签发令牌在 Redis 中的存活时间（秒）；带该 Bearer 的每个 Agent RPC 会刷新 TTL（默认 **604800** = 7 天） |
 
 ## 存储后端（S3）
 

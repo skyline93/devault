@@ -26,6 +26,10 @@ Agent 通过 gRPC 完成注册、租约拉取、进度上报等；具体 RPC 名
 
 标准 **gRPC Health** 与网关场景下的端口约定见 [Agent 连接](../security/agent-connectivity.md) 与 [端口速查](./ports-and-paths.md)。
 
+## Register 与会话令牌
+
+成功 **`Register`**（校验 **`registration_secret`**、版本门闸）后，控制面在 **Redis** 签发 **仅绑定该 `agent_id`** 的 **`bearer_token`**，**`expires_in_seconds`** 与 **`DEVAULT_GRPC_AGENT_SESSION_TTL_SECONDS`** 一致；后续 **`Heartbeat`**、**`LeaseJobs`** 等 RPC 须在 **`Authorization: Bearer`** 中携带该令牌（每次成功 RPC 会刷新 Redis TTL）。使用 **`DEVAULT_API_TOKEN`** 或 **API Key** 作为 Bearer 时仍可调 Agent RPC（不按 **`agent_id`** 绑定校验，用于运维）。管理员可通过 **`POST /api/v1/agents/{agent_id}/revoke-grpc-sessions`** 吊销某 Agent 的全部 Register 会话。
+
 ## 版本协商（Heartbeat / Register）
 
 Agent 在 **`Heartbeat`** 与 **`Register`** 请求中携带：

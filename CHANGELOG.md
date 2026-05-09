@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Envoy 边缘限流**：**`deploy/envoy/envoy-grpc-tls.yaml`** 增加 **`envoy.filters.http.local_ratelimit`**（约 40/s、burst 80），与 **`DEVAULT_GRPC_RPS_PER_PEER`** 双层限流；**`website/docs/security/tls-and-gateway.md`**、**`docs-old/grpc-tls.md`**。
+- **Register → Redis 每 Agent gRPC 会话**：**`mint_agent_session_token`** / **`validate_and_refresh_agent_session`**（**`src/devault/security/agent_grpc_session.py`**）；**`DEVAULT_GRPC_AGENT_SESSION_TTL_SECONDS`**；**`_authenticate_grpc`** 识别会话、**`_require_agent_bearer_matches`**；**`POST /api/v1/agents/{agent_id}/revoke-grpc-sessions`**（admin）；测试 **`tests/test_agent_grpc_session.py`**。
 - **发版脚本 ↔ `compatibility.json`**：**`scripts/bump_release.py`** 在 bump 后更新 **`docs/compatibility.json`** · **`current.control_plane_release`**（**`sync_compatibility_current_release`**）；**`--dry-run`** 提示将写入的版本；测试 **`tests/test_bump_release_compatibility.py`**。
 - **Agent：`server_capabilities` 降级**：**`AgentCapabilityState`** 从 **Register** / 成功 **Heartbeat** 刷新；无 **`multipart_resume`** 则丢弃本地 MPU checkpoint 续传；无 **`multipart_upload`** 则大 bundle 仍用单对象预签名 PUT；**`devault.agent.capabilities`**；文档 **`website/docs/reference/grpc-services.md`**、**`website/docs/development/compatibility.md`**；测试 **`tests/test_agent_capabilities.py`**。
 - **CI：多版本镜像 Compose + gRPC 冒烟矩阵**：**`.github/workflows/e2e-version-matrix.yml`**（手动触发 + 每周 schedule）；**`docs/compatibility.json`** 增加 **`ci_e2e`**（**`previous_minor_git_ref`**、与 **`matrices`** 互链的 **`matrix_definitions`**）；**`scripts/ci_e2e_matrix_plan.py`**、**`scripts/e2e_grpc_register_heartbeat.py`**、**`deploy/docker-compose.e2e-matrix.override.yml`**；**`verify_compatibility_matrix.py`** 校验 **`ci_e2e`**；文档 **`website/docs/development/compatibility.md`**。
@@ -34,9 +36,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **破坏性（Register）**：**`Register`** 不再返回共享 **`DEVAULT_API_TOKEN`**；成功时在 **Redis** 签发 **按 `agent_id` 绑定** 的 Bearer（需 Redis）。运维排障仍可使用 **`DEVAULT_API_TOKEN`** / API Key 调用 Agent gRPC。
 - **破坏性（指标）**：**`devault_jobs_total`** 的 Prometheus 标签集合已变更；既有仪表盘/告警需同步更新标签匹配。
 - **Artifacts Web UI**（`/ui/artifacts`）：English-only; **Restore** column is a single button per row; clicking opens a **`<dialog>`** modal with the restore form. Restore-drill actions stay off this page (use **Restore drills** or **`POST /api/v1/jobs/restore-drill`**).
-- **`deploy/docker-compose.yml`**：默认在 **api** 上开启 **`DEVAULT_GRPC_REGISTRATION_SECRET`**，**agent** 不再注入 **`DEVAULT_API_TOKEN`**，启动时经 **Register** 换取与 **`DEVAULT_API_TOKEN`** 相同的共享令牌（便于在开发环境验证 Register 与 **`/ui/agents`** 的 Registered 列）。若需恢复旧行为，为 **agent** 显式设置 **`DEVAULT_API_TOKEN`**。
+- **`deploy/docker-compose.yml`**：默认在 **api** 上开启 **`DEVAULT_GRPC_REGISTRATION_SECRET`**，**agent** 可不注入 **`DEVAULT_API_TOKEN`**，启动时经 **Register** 领取 **Redis 绑定的每-Agent** gRPC Bearer。若需不经 Register、固定共享令牌，为 **agent** 显式设置 **`DEVAULT_API_TOKEN`**。
 
 ### Deprecated
 

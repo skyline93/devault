@@ -58,7 +58,7 @@
 |------|------|------------------------|
 | **1** | M1 基础设施与运维闭环 | **已收敛**：Helm（`deploy/helm/devault`）+ **告警路由**（`deploy/alertmanager.yml`、`deploy/docker-compose.prometheus.yml`、`monitoring.enabled`、文档 **`website/docs/install/observability.md`**） |
 | **2** | 发布工程与数据面韧性 | **已收敛**：§二 Multipart×加密；§三 CI 多版本镜像 E2E；§三 **`bump_release` ↔ `compatibility.json`**；§三 Agent **`server_capabilities`** 降级 |
-| **3** | 网关与身份演进 | §一 Envoy local_rate_limit；§一 Register 每 Agent 令牌 / 吊销 / Redis |
+| **3** | 网关与身份演进 | **已收敛**：§一 Envoy **`local_rate_limit`**；§一 Register **每 Agent Redis 会话** + **`POST …/revoke-grpc-sessions`** |
 | **4** | 合规与统一存储扩展 | §五 KMS / 信封 / 租户 DEK；§五 默认或租户级强制加密；§五 WORM；§五 Legal Hold；§五 BYOB |
 | **5** | M2 数据库备份 MVP | §九 全部未完成项（建议在 **波次 1～2** 收敛后再启动） |
 | **6** | 长期（依赖 M2） | §七 增量与时间线 |
@@ -90,8 +90,8 @@
 | 一-05 | §一 | [x] | P1 | — | **Register / 令牌模型（相对共享 API Token）** |
 | 一-06 | §一 | [x] | P1 | — | **mTLS（可选但建议产品化）** |
 | 一-07 | §一 | [x] | P2 | — | **gRPC 健康检查与就绪探针** |
-| 一-08 | §一 | [ ] | P3 | 3 | **Envoy 网关 local_rate_limit（可增强）** |
-| 一-09 | §一 | [ ] | P3 | 3 | **Register 后续：每 Agent 令牌 / 吊销 / Redis 会话（可增强）** |
+| 一-08 | §一 | [x] | P3 | 3 | **Envoy 网关 local_rate_limit（可增强）** |
+| 一-09 | §一 | [x] | P3 | 3 | **Register 后续：每 Agent 令牌 / 吊销 / Redis 会话（可增强）** |
 | 二-01 | §二 | [x] | P0 | — | **S3 分块上传（Multipart）** |
 | 二-02 | §二 | [x] | P0 | — | **分片上传同进程重试** |
 | 二-03 | §二 | [x] | P1 | — | **Multipart 跨重启 / 跨进程断点续传** |
@@ -165,11 +165,11 @@
 | [x] | P0 | **独立 gRPC 网关或等价物** | **Envoy** 可复现示例：`deploy/envoy/envoy-grpc-tls.yaml`、`deploy/docker-compose.grpc-tls.yml`；文档区分内网明文与对外 TLS。 |
 | [x] | P0 | **网关层限流与连接治理** | 控制面 **每 peer 令牌桶**（`DEVAULT_GRPC_RPS_PER_PEER` / `DEVAULT_GRPC_RPS_BURST_PER_PEER`）；网关侧 Envoy 限流可在后续加 `local_rate_limit` filter。 |
 | [x] | P1 | **网关与审计日志** | 每 RPC 一行 JSON → logger **`devault.grpc.audit`**（`rpc`、`peer`、`grpc_code`、`elapsed_ms`、`extra`）；不含密钥。 |
-| [x] | P1 | **Register / 令牌模型（相对共享 API Token）** | **`Register` RPC**：`DEVAULT_GRPC_REGISTRATION_SECRET` 换取当前 `DEVAULT_API_TOKEN`（引导式）；**每 Agent 短期令牌 / 吊销列表 / Redis 会话**仍为后续增强。 |
+| [x] | P1 | **Register / 令牌模型（相对共享 API Token）** | **`Register` RPC**：引导式认证（现为 **Redis 每 Agent 会话**，见 **一-09**）；HTTP 侧仍可用 **`DEVAULT_API_TOKEN`** / API Key。 |
 | [x] | P1 | **mTLS（可选但建议产品化）** | 控制面 **`DEVAULT_GRPC_SERVER_TLS_CLIENT_CA_PATH`** 要求客户端证书；Agent **`DEVAULT_GRPC_TLS_CLIENT_*`**；Envoy 侧校验见 `docs/grpc-tls.md` 演进说明。 |
 | [x] | P2 | **gRPC 健康检查与就绪探针** | 注册 **`grpc.health.v1.Health`**（`""` 与 `devault.agent.v1.AgentControl` 均为 SERVING）；文档给出 `grpc_health_probe` 示例。 |
-| [ ] | P3 | **Envoy 网关 local_rate_limit（可增强）** | 在现有 Envoy 示例上增加 **`local_rate_limit`** filter（或等价），与控制面每 peer 令牌桶形成**双层**限流；矩阵与默认值文档化。 |
-| [ ] | P3 | **Register 后续：每 Agent 令牌 / 吊销 / Redis 会话（可增强）** | 当前 Register 仍换取**共享** `DEVAULT_API_TOKEN` 语义；后续可演进为**短期 Agent 令牌**、控制面**吊销列表**、Redis **会话绑定**，与审计字段对齐。 |
+| [x] | P3 | **Envoy 网关 local_rate_limit（可增强）** | **`deploy/envoy/envoy-grpc-tls.yaml`**：`envoy.filters.http.local_ratelimit`（token_bucket **40/s** 补充、burst **80**）；与 **`DEVAULT_GRPC_RPS_PER_PEER`** 双层限流；**`website/docs/security/tls-and-gateway.md`**、**`docs-old/grpc-tls.md`** §4。 |
+| [x] | P3 | **Register 后续：每 Agent 令牌 / 吊销 / Redis 会话（可增强）** | **`Register`** 经 **`mint_agent_session_token`** 签发 **Redis** 绑定 **`agent_id`** 的 Bearer（**`DEVAULT_GRPC_AGENT_SESSION_TTL_SECONDS`**）；**`_authenticate_grpc`** / **`_require_agent_bearer_matches`**；**`POST /api/v1/agents/{id}/revoke-grpc-sessions`**（admin）；仍可用 **`DEVAULT_API_TOKEN`** / API Key 作为运维令牌调 gRPC。 |
 
 **依赖**：无（可与数据面并行设计 `.proto` 扩展以承载 Register 响应字段）。
 
@@ -356,7 +356,7 @@
 | E-DOC-001 | 企业文档 | M1 | H |
 | E-DB-001 | 数据库备份 MVP | M2 | C |
 
-**Epic → 排期波次**（与 **[排期波次与全量待办索引](#排期波次与全量待办索引)** 一致）：**E-OPS-001** 中 **Helm / K8s** 与 **告警路由（Prometheus + Alertmanager）** 已交付；**`E-DATA-001` / `E-DATA-002`** 之 **§二 Multipart×加密** 已交付；**E-VER-001** 之 **§三** 可增强（**三-11～三-13**）已交付 → **波次 2** 版本与韧性主线已收敛；**E-ARCH-001** 之 **§一** 两项可增强 → **波次 3**；**E-GOV-001** 之 **KMS、强制加密、WORM、Legal Hold、BYOB** → **波次 4**；**E-DB-001** → **波次 5**；**E-TRUST-001** 之 **§七 增量与时间线** → **波次 6**。其余 Epic 主线条目在当前仓库已为 `[x]`。
+**Epic → 排期波次**（与 **[排期波次与全量待办索引](#排期波次与全量待办索引)** 一致）：**E-OPS-001** 中 **Helm / K8s** 与 **告警路由（Prometheus + Alertmanager）** 已交付；**`E-DATA-001` / `E-DATA-002`** 之 **§二 Multipart×加密** 已交付；**E-VER-001** 之 **§三** 可增强（**三-11～三-13**）已交付 → **波次 2** 版本与韧性主线已收敛；**E-ARCH-001** 之 **§一** 可增强（**一-08 Envoy `local_rate_limit`**、**一-09 Agent Redis 会话 / 吊销**）已交付 → **波次 3** 网关与身份演进主线已收敛；**E-GOV-001** 之 **KMS、强制加密、WORM、Legal Hold、BYOB** → **波次 4**；**E-DB-001** → **波次 5**；**E-TRUST-001** 之 **§七 增量与时间线** → **波次 6**。其余 Epic 主线条目在当前仓库已为 `[x]`。
 
 ---
 
@@ -411,6 +411,7 @@
 | 2026-05-09 | **M1·二 P3**：**Multipart×Artifact 加密** 联调落地（Agent **`multipart_resume`** 校验、checkpoint **`encrypt_artifacts`**、**`devault_multipart_encrypted_mpu_completes_total`**、文档与单测；**§二**、全量索引 **二-07**、**§十三**、**波次 2** 表更新）。 |
 | 2026-05-09 | **M1·三 P2**：**CI 多版本镜像 E2E 矩阵**（**`e2e-version-matrix.yml`**、**`ci_e2e`** / **`matrix_definitions`**、Compose override、gRPC 冒烟脚本、**`verify_compatibility_matrix`** 扩展、**`compatibility.md`**；全量索引 **三-11**、**§三.2**、**§十三**、**波次 2** 表更新）。 |
 | 2026-05-09 | **M1·三 P3**：**`bump_release` ↔ `compatibility.json`**（**`sync_compatibility_current_release`**、文档与单测）；**Agent `server_capabilities` 降级**（**`gate_multipart_*`**、**`AgentCapabilityState`**、全量索引 **三-12 / 三-13**、**§十三**、**波次 2** 收敛）。 |
+| 2026-05-09 | **M1·一 P3**：**Envoy `local_rate_limit`**（**`deploy/envoy/envoy-grpc-tls.yaml`**）；**Register → Redis 每 Agent 会话**（**`agent_grpc_session`**、**`revoke-grpc-sessions`**、**`_require_agent_bearer_matches`**）；全量索引 **一-08 / 一-09**、**§十三**、**波次 3** 收敛。 |
 
 ---
 
@@ -422,8 +423,8 @@
 
 | 状态 | 优先级 | 归属 | 待办项 | 说明与验收要点 |
 |------|--------|------|--------|----------------|
-| [ ] | P3 | §一 | **Envoy local_rate_limit** | 见 **§一** 表；网关侧补充限流 filter 与文档。 |
-| [ ] | P3 | §一 | **Register → 每 Agent 令牌 / 吊销 / Redis** | 见 **§一** 表；与 gRPC 审计、`reason_code` 一致。 |
+| [x] | P3 | §一 | **Envoy local_rate_limit** | 见 **§一** 表；**`envoy-grpc-tls.yaml`**。 |
+| [x] | P3 | §一 | **Register → 每 Agent 令牌 / 吊销 / Redis** | 见 **§一** 表；**`agent_grpc_session`**、撤销 API。 |
 | [x] | P3 | §二 | **Multipart × 加密联调** | 见 **§二** 表；已实现校验、指标与文档互链。 |
 | [x] | P2 | §三.2 | **CI 多版本镜像 E2E 矩阵** | **`.github/workflows/e2e-version-matrix.yml`**、`ci_e2e`、`e2e_grpc_register_heartbeat.py`；与 **`matrices`** 互链见 **`matrix_definitions`**。 |
 | [x] | P3 | §三.2 | **bump_release ↔ compatibility.json** | **`sync_compatibility_current_release`**；见 §三.2 表与 **`releasing.md`**。 |

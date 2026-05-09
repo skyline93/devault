@@ -49,7 +49,7 @@ docker compose -f docker-compose.yml -f docker-compose.prometheus.yml up -d
 
 ### Register 引导（默认开发行为）
 
-为便于在本地验证 **Register** 与 **简易 UI → Agents** 页中的 **Registered** 时间，默认 Compose 在 **api** 与 **agent** 上配置相同的 **`DEVAULT_GRPC_REGISTRATION_SECRET`**（可用环境变量覆盖，需两端一致）。HTTP Basic / 本机 CLI 仍使用控制面的 **`DEVAULT_API_TOKEN`**（默认 `changeme`）。
+为便于在本地验证 **Register** 与 **简易 UI → Agents** 页中的 **Registered** 时间，默认 Compose 在 **api** 与 **agent** 上配置相同的 **`DEVAULT_GRPC_REGISTRATION_SECRET`**（可用环境变量覆盖，需两端一致）。**Register** 成功后 Agent 使用 **Redis 签发的每实例 Bearer**（非共享 **`DEVAULT_API_TOKEN`**）。HTTP Basic / 本机 CLI 仍使用控制面的 **`DEVAULT_API_TOKEN`**（默认 `changeme`）。
 
 若希望 Agent **不经 Register**、固定使用环境变量中的 token，在 **agent** 服务上显式设置 **`DEVAULT_API_TOKEN`** 即可（与 [配置参考](./configuration.md) 中 gRPC 说明一致）。
 

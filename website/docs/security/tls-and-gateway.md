@@ -24,6 +24,10 @@ docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.grpc-tls.ym
 
 典型模式：**Agent 连接网关 TLS 端口**，网关将请求转发到内网 **`api:50051` 明文 gRPC**。
 
+## Envoy 边缘限流（`local_rate_limit`）
+
+示例 **`deploy/envoy/envoy-grpc-tls.yaml`** 在 **`envoy.filters.http.router`** 之前插入 **`envoy.filters.http.local_ratelimit`**：token bucket 约 **40 令牌/秒**、桶容量 **80**（可按集群入口并发调整）。这与控制面进程内 **每 peer** 令牌桶（**`DEVAULT_GRPC_RPS_PER_PEER`** / **`DEVAULT_GRPC_RPS_BURST_PER_PEER`**）形成**双层**限流：前者约束单 Envoy 实例上的连接/流突发，后者约束到达 **api** 后每个客户端 IP 的 RPC 速率。
+
 扩展多个 **`api` 副本**、Envoy **ROUND_ROBIN** 与 Compose 端口注意事项见 [gRPC 与 API 多实例部署](../install/grpc-multi-instance.md)。
 
 ## mTLS 与审计

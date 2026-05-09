@@ -25,6 +25,26 @@ static_resources:
                             max_stream_duration:
                               grpc_timeout_header_max: 0s
                 http_filters:
+                  # Edge L7 token bucket (per-connection stream limit semantics vary by Envoy version);
+                  # pairs with control-plane process token bucket: DEVAULT_GRPC_RPS_PER_PEER / BURST.
+                  - name: envoy.filters.http.local_ratelimit
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.local_ratelimit.v3.LocalRateLimit
+                      stat_prefix: grpc_local_rl
+                      token_bucket:
+                        max_tokens: 80
+                        tokens_per_fill: 40
+                        fill_interval: 1s
+                      filter_enabled:
+                        runtime_key: devault.envoy.grpc.local_rl_enabled
+                        default_value:
+                          numerator: 100
+                          denominator: HUNDRED
+                      filter_enforced:
+                        runtime_key: devault.envoy.grpc.local_rl_enforced
+                        default_value:
+                          numerator: 100
+                          denominator: HUNDRED
                   - name: envoy.filters.http.router
                     typed_config:
                       "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
