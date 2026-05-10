@@ -4,6 +4,7 @@
 <h1>{{ heading }}</h1>
 <p><a href="/ui/restore-drill-schedules">← Restore drill schedules</a></p>
 <form method="post" action="{% if schedule %}/ui/restore-drill-schedules/{{ schedule.id }}/edit{% else %}/ui/restore-drill-schedules/new{% endif %}">
+  <fieldset {% if not auth_ctx.can_write() %}disabled="disabled"{% endif %}>
   {% if artifacts %}
   <p>
     <label for="artifact_id">Artifact</label><br/>
@@ -41,5 +42,6 @@
     <label><input type="radio" name="enabled" value="no" {% if schedule and not schedule.enabled %}checked{% endif %}/> No</label>
   </p>
   <p>{% if artifacts %}<button type="submit">{% if schedule %}Save{% else %}Create{% endif %}</button>{% endif %}</p>
+  </fieldset>
 </form>
 {% endblock %}

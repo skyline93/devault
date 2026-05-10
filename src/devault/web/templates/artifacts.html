@@ -35,7 +35,11 @@
       <td>{% if a.legal_hold %}<strong>on</strong>{% else %}off{% endif %}</td>
       <td>{% if a.retain_until %}{{ a.retain_until }}{% else %}<span class="muted">—</span>{% endif %}</td>
       <td class="row-actions col-restore">
+        {% if auth_ctx.can_write() %}
         <button type="button" class="open-restore-dialog" data-artifact-id="{{ a.id }}">Restore</button>
+        {% else %}
+        <span class="muted">—</span>
+        {% endif %}
       </td>
       {% if auth_ctx.is_admin %}
       <td class="row-actions">
@@ -56,6 +60,7 @@
   </tbody>
 </table>
 
+{% if auth_ctx.can_write() %}
 <dialog id="restore-dialog" class="restore-dialog">
   <form id="restore-dialog-form" method="post" action="/ui/artifacts/restore">
     <h2>Queue restore</h2>
@@ -100,4 +105,5 @@
   });
 })();
 </script>
+{% endif %}
 {% endblock %}

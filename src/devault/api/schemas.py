@@ -35,6 +35,11 @@ class TenantOut(BaseModel):
     s3_bucket: str | None = None
     s3_assume_role_arn: str | None = None
     s3_assume_role_external_id: str | None = None
+    policy_paths_allowlist_mode: Literal["off", "enforce", "warn"] = Field(
+        "off",
+        description="When enforce/warn: file policy paths must fall under enrolled Agents' "
+        "Heartbeat-reported backup_path_allowlist union (empty union skips validation).",
+    )
 
     model_config = {"from_attributes": True}
 
@@ -46,6 +51,7 @@ class TenantPatch(BaseModel):
     s3_bucket: str | None = None
     s3_assume_role_arn: str | None = None
     s3_assume_role_external_id: str | None = None
+    policy_paths_allowlist_mode: Literal["off", "enforce", "warn"] | None = None
 
 
 class FileBackupConfigV1(BaseModel):
@@ -141,6 +147,12 @@ class CreateRestoreJobBody(BaseModel):
     )
 
 
+class CreatePathPrecheckJobBody(BaseModel):
+    """Agent-only job: verify saved file policy backup paths exist and are readable on the leased Agent."""
+
+    policy_id: uuid.UUID = Field(..., description="Tenant policy whose `paths` are checked (no backup upload).")
+
+
 class CreateRestoreDrillJobBody(BaseModel):
     """Manual automated restore drill: extract artifact under drill_base_path/devault-drill-<job_id>/."""
 
@@ -165,6 +177,14 @@ class JobOut(BaseModel):
     config_snapshot: dict[str, Any]
     restore_artifact_id: uuid.UUID | None
     lease_agent_id: uuid.UUID | None = None
+    lease_agent_hostname: str | None = Field(
+        None,
+        description="Hostname snapshot from edge_agents at LeaseJobs time (audit).",
+    )
+    completed_agent_hostname: str | None = Field(
+        None,
+        description="Hostname from CompleteJob.agent_hostname or edge_agents at completion (audit).",
+    )
     lease_expires_at: datetime | None = None
     started_at: datetime | None
     finished_at: datetime | None
@@ -173,7 +193,7 @@ class JobOut(BaseModel):
     trace_id: str | None
     result_meta: dict[str, Any] | None = Field(
         default=None,
-        description="On successful restore_drill: JSON report echoed from the Agent (also written under extract_root).",
+        description="restore_drill / path_precheck: structured report from the Agent (see `schema` in JSON).",
     )
 
     model_config = {"from_attributes": True}
@@ -215,12 +235,28 @@ class PolicyCreate(BaseModel):
     plugin: Literal["file"] = Field("file", description="Plugin; only `file` is supported.")
     config: FileBackupConfigV1 = Field(..., description="Paths and exclude patterns.")
     enabled: bool = Field(True, description="Whether schedules and manual runs may use this policy.")
+    bound_agent_id: uuid.UUID | None = Field(
+        default=None,
+        description="If set, only this Agent may LeaseJobs for backups of this policy.",
+    )
+    bound_agent_pool_id: uuid.UUID | None = Field(
+        default=None,
+        description="If set, only Agents in this pool may lease; mutually exclusive with bound_agent_id.",
+    )
+
+    @model_validator(mode="after")
+    def policy_binding_xor(self) -> PolicyCreate:
+        if self.bound_agent_id is not None and self.bound_agent_pool_id is not None:
+            raise ValueError("only one of bound_agent_id or bound_agent_pool_id may be set")
+        return self
 
 
 class PolicyPatch(BaseModel):
     name: str | None = Field(None, min_length=1, max_length=255)
     config: FileBackupConfigV1 | None = None
     enabled: bool | None = None
+    bound_agent_id: uuid.UUID | None = Field(default=None, description="Set/clear execution binding.")
+    bound_agent_pool_id: uuid.UUID | None = Field(default=None, description="Set/clear pool binding.")
 
 
 class PolicyOut(BaseModel):
@@ -231,8 +267,48 @@ class PolicyOut(BaseModel):
     config: dict[str, Any]
     enabled: bool
     created_at: datetime
+    updated_at: datetime | None = None
+    bound_agent_id: uuid.UUID | None = None
+    bound_agent_pool_id: uuid.UUID | None = None
 
     model_config = {"from_attributes": True}
+
+
+class AgentPoolCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=255)
+
+
+class AgentPoolOut(BaseModel):
+    id: uuid.UUID
+    tenant_id: uuid.UUID
+    name: str
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class AgentPoolMemberIn(BaseModel):
+    agent_id: uuid.UUID
+    weight: int = Field(100, ge=1, le=1_000_000)
+    sort_order: int = Field(0, ge=-1_000_000, le=1_000_000)
+
+
+class AgentPoolMembersPut(BaseModel):
+    members: list[AgentPoolMemberIn] = Field(default_factory=list)
+
+
+class AgentPoolMemberOut(BaseModel):
+    agent_id: uuid.UUID
+    weight: int
+    sort_order: int
+    last_seen_at: datetime | None = Field(
+        default=None,
+        description="From edge_agents.last_seen_at when the Agent has checked in.",
+    )
+
+
+class AgentPoolDetailOut(AgentPoolOut):
+    members: list[AgentPoolMemberOut]
 
 
 class ScheduleCreate(BaseModel):
@@ -300,6 +376,25 @@ class RestoreDrillScheduleOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class AgentEnrollmentPut(BaseModel):
+    """Replace authorized tenants for an Agent (admin); required before Register can mint a session token."""
+
+    allowed_tenant_ids: list[uuid.UUID] = Field(
+        ...,
+        min_length=1,
+        description="Job tenant_id values this Agent may lease and complete over gRPC.",
+    )
+
+
+class AgentEnrollmentOut(BaseModel):
+    agent_id: uuid.UUID
+    allowed_tenant_ids: list[uuid.UUID]
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 class EdgeAgentOut(BaseModel):
     """Registered edge Agent (from gRPC Heartbeat / Register)."""
 
@@ -318,3 +413,48 @@ class EdgeAgentOut(BaseModel):
         ...,
         description="True when proto_package is empty or equals the control plane expected package.",
     )
+    allowed_tenant_ids: list[uuid.UUID] | None = Field(
+        None,
+        description="From agent_enrollments; omitted when no enrollment row exists yet.",
+    )
+    hostname: str | None = Field(None, description="Last reported hostname (Heartbeat snapshot v1).")
+    os: str | None = Field(None, description="Last reported OS string (untrusted).")
+    region: str | None = Field(None, description="Optional region tag from Agent.")
+    env: str | None = Field(None, description="Optional environment tag from Agent.")
+    backup_path_allowlist: list[str] | None = Field(
+        None,
+        description="Absolute path prefixes this Agent reported as allowed for backups (Heartbeat).",
+    )
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class TenantScopedAgentOut(BaseModel):
+    """Agent enrolled for the requested tenant, with optional fleet snapshot from ``edge_agents``."""
+
+    id: uuid.UUID = Field(..., description="Agent UUID (same as DEVAULT_AGENT_ID).")
+    allowed_tenant_ids: list[uuid.UUID] = Field(
+        ...,
+        description="Full enrollment list for this Agent (includes the effective tenant).",
+    )
+    first_seen_at: datetime | None = Field(None, description="Set once the Agent has checked in over gRPC.")
+    last_seen_at: datetime | None = None
+    agent_release: str | None = None
+    proto_package: str | None = None
+    git_commit: str | None = None
+    last_register_at: datetime | None = None
+    meets_min_supported_version: bool = Field(
+        False,
+        description="False when unknown or below DEVAULT_GRPC_MIN_SUPPORTED_AGENT_VERSION.",
+    )
+    proto_matches_control_plane: bool = Field(
+        True,
+        description="True when proto unknown or matches control plane package.",
+    )
+    hostname: str | None = None
+    os: str | None = None
+    region: str | None = None
+    env: str | None = None
+    backup_path_allowlist: list[str] | None = None
+
+    model_config = ConfigDict(from_attributes=True)

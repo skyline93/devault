@@ -3,11 +3,30 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, String, Text, UniqueConstraint, func
+from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from devault.db.base import Base
+
+
+class AgentEnrollment(Base):
+    """Admin-provisioned binding: ``agent_id`` may only touch jobs/artifacts in ``allowed_tenant_ids`` over gRPC."""
+
+    __tablename__ = "agent_enrollments"
+
+    agent_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    allowed_tenant_ids: Mapped[list] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
 
 
 class EdgeAgent(Base):
@@ -22,6 +41,11 @@ class EdgeAgent(Base):
     proto_package: Mapped[str | None] = mapped_column(String(128), nullable=True)
     git_commit: Mapped[str | None] = mapped_column(String(64), nullable=True)
     last_register_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    hostname: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    host_os: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    region: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    agent_env: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    backup_path_allowlist: Mapped[list | None] = mapped_column(JSONB, nullable=True)
 
 
 class ControlPlaneApiKey(Base):
@@ -42,6 +66,49 @@ class ControlPlaneApiKey(Base):
     )
 
 
+class AgentPool(Base):
+    """Tenant-scoped pool of edge Agent UUIDs for policy execution binding (failover group)."""
+
+    __tablename__ = "agent_pools"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    members: Mapped[list["AgentPoolMember"]] = relationship(
+        "AgentPoolMember",
+        back_populates="pool",
+        cascade="all, delete-orphan",
+    )
+
+
+class AgentPoolMember(Base):
+    """Member of an :class:`AgentPool` with optional dispatch hints (weight / sort_order)."""
+
+    __tablename__ = "agent_pool_members"
+
+    pool_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("agent_pools.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    agent_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    weight: Mapped[int] = mapped_column(Integer(), nullable=False, default=100)
+    sort_order: Mapped[int] = mapped_column(Integer(), nullable=False, default=0)
+
+    pool: Mapped["AgentPool"] = relationship("AgentPool", back_populates="members")
+
+
 class Tenant(Base):
     __tablename__ = "tenants"
 
@@ -58,6 +125,7 @@ class Tenant(Base):
     s3_bucket: Mapped[str | None] = mapped_column(String(255), nullable=True)
     s3_assume_role_arn: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     s3_assume_role_external_id: Mapped[str | None] = mapped_column(String(1224), nullable=True)
+    policy_paths_allowlist_mode: Mapped[str] = mapped_column(String(16), nullable=False, default="off")
 
     policies: Mapped[list["Policy"]] = relationship("Policy", back_populates="tenant")
     jobs: Mapped[list["Job"]] = relationship("Job", back_populates="tenant")
@@ -83,6 +151,12 @@ class Policy(Base):
         nullable=False,
     )
     updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    bound_agent_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    bound_agent_pool_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("agent_pools.id", ondelete="SET NULL"),
+        nullable=True,
+    )
 
     tenant: Mapped["Tenant"] = relationship("Tenant", back_populates="policies")
     schedules: Mapped[list["Schedule"]] = relationship(
@@ -180,6 +254,8 @@ class Job(Base):
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     trace_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     lease_agent_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    lease_agent_hostname: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    completed_agent_hostname: Mapped[str | None] = mapped_column(String(255), nullable=True)
     lease_expires_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,

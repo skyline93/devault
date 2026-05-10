@@ -42,6 +42,9 @@ jobs:
       - name: Verify compatibility matrix JSON
         run: python scripts/verify_compatibility_matrix.py
 
+      - name: Verify UI ↔ OpenAPI template registry (§十四-17)
+        run: python scripts/verify_ui_openapi_registry.py
+
       - name: Pytest (full)
         if: matrix.suite == 'full'
         run: pytest -q

@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **十四-16 / 十四-17（Web UI 与 REST 闸门）**：**`PolicyOut.updated_at`** 与 **`/ui/policies`** 列表列对齐；**`auditor`**（及一切无写权限角色）在模板侧隐藏或禁用 **Cancel/Retry**、策略/调度/演练/池/Artifact 恢复等写入口（**`<fieldset disabled>`** 或占位符）；导航 **read-only** 提示；**`.github/workflows/ci.yml`** 运行 **`scripts/verify_ui_openapi_registry.py`**（模板子串 ↔ **`JobOut`/`PolicyOut`** 关键字段）。文档侧栏增加 **`guides/web-console`**、**`guides/iac-bootstrap`**。
+- **路径预检 Job、作业 hostname 快照、SLO 指标与 IaC 示例（§十四 11～14）**：**`JobKind.path_precheck`**；**`POST /api/v1/jobs/path-precheck`** + UI **Run path precheck**；**`jobs.lease_agent_hostname` / `completed_agent_hostname`**（迁移 **`0014`**）；**`CompleteJobRequest.agent_hostname`**（proto）；**`devault_edge_agents_stale_count`** 采集器、**`devault_policy_allowlist_enforce_rejects_total`**、**`deploy/prometheus/alerts.yml`** 新增告警；**`deploy/iac/`**（curl + Terraform minimal）与 **`website/docs/guides/iac-bootstrap.md`**。
+- **Heartbeat 快照与租户策略 allowlist（§十四 P2 · 十四-08～10）**：**`proto/agent.proto`** 扩展 **`HeartbeatRequest`**（**`hostname`/`os`/`region`/`env`/`backup_path_allowlist`/`snapshot_schema_version`**）；迁移 **`0013`** — **`edge_agents`** 快照列 + **`tenants.policy_paths_allowlist_mode`**（**`off`/`warn`/`enforce`**）；**`GET /api/v1/tenant-agents`** 与 **`/ui/tenant-agents`**；策略表单与 **`create_policy`/`patch_policy`** 按租户模式校验 **`paths`** ⊆ 已登记 Agent 上报前缀之并集；**`PATCH /api/v1/tenants/{id}`** 与租户编辑 UI 暴露 **`policy_paths_allowlist_mode`**。Agent 默认 **`snapshot_schema_version=1`** 并上报 **`DEVAULT_ALLOWED_PATH_PREFIXES`** 等。文档：**`website/docs/admin/agent-fleet.md`**、**`website/docs/reference/grpc-services.md`**、**`website/docs/user/quickstart.md`**。
+- **策略执行绑定与 Agent 池（§十四 P1 · 十四-05～07）**：迁移 **`0012`** — **`agent_pools`**、**`agent_pool_members`**（**`weight`/`sort_order`**）、**`policies.bound_agent_id` / `bound_agent_pool_id`**（互斥 CHECK）；**`LeaseJobs`** 候选作业 SQL 按绑定收窄；**`/api/v1/agent-pools`** 与 UI **`/ui/agent-pools`**、策略表单绑定模式；文档 **`website/docs/admin/agent-pools.md`**。
+- **Agent 租户登记（§十四 P0）**：表 **`agent_enrollments`**（迁移 **`0011`**）；**`PUT` / `GET /api/v1/agents/{agent_id}/enrollment`**（admin 写、任意已认证读）；**`Register`** 要求事先存在登记且 **`allowed_tenant_ids`** 非空；**`LeaseJobs`** 与 **`RequestStorageGrant` / `ReportProgress` / `CompleteJob`** 对 Register 会话及 **带租户限制的 API Key** 按 **`job.tenant_id`** 硬过滤；gRPC 审计 **`tenant_id`**（存储授权与完成路径）。Compose 默认 **`DEVAULT_AGENT_ID`** 与种子登记对齐；**`scripts/e2e_grpc_register_heartbeat.py`** 默认使用同一 UUID。文档：**`website/docs/admin/agent-fleet.md`**、**`website/docs/operations/agent-credential-lifecycle.md`**、**`website/docs/user/quickstart.md`**。
 - **企业 backlog：Web UI 与 REST 对等（规划）**：**`docs-old/enterprise-backlog.md`** 全量索引 **八-04～八-09**、**§八** 分节表、Epic **`E-UX-001`**；**`website/docs/guides/web-console.md`** 增加「企业级能力对齐」与索引互链。
 - **企业合规（§五）**：迁移 **`0010`** — 租户 **`require_encrypted_artifacts`**、**`kms_envelope_key_id`**、**`s3_bucket` / AssumeRole**；**`artifacts.legal_hold`**。**KMS 信封**：**`DEVAULT_KMS_ENVELOPE_KEY_ID`**、manifest **`encryption.key_wrap=kms`**；**Agent** 侧 **`kms:GenerateDataKey` / `kms:Decrypt`** 与恢复解密。**强制加密**：**`DEVAULT_REQUIRE_ENCRYPTED_ARTIFACTS`** 与租户开关；**`CompleteJob`** 校验 manifest。**Object Lock**：策略 **`object_lock_mode` / `object_lock_retain_days`**；预签名 PUT 与 **`create_multipart_upload`** 携带保留截止时间。**Legal hold**：**`PATCH /api/v1/artifacts/{id}/legal-hold`**（admin）；保留清理跳过 hold。**BYOB**：**`build_s3_client_for_tenant`** + **`effective_s3_bucket`**；**`PATCH /api/v1/tenants/{id}`**（admin）。见 **`docs-old/enterprise-backlog.md`** 五-03〜08。
 - **Envoy 边缘限流**：**`deploy/envoy/envoy-grpc-tls.yaml`** 增加 **`envoy.filters.http.local_ratelimit`**（约 40/s、burst 80），与 **`DEVAULT_GRPC_RPS_PER_PEER`** 双层限流；**`website/docs/security/tls-and-gateway.md`**、**`docs-old/grpc-tls.md`**。
@@ -38,6 +43,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **策略表单执行绑定**：单 Agent 由 **UUID 文本框** 改为 **下拉框**（选项为当前租户 **已登记** Agent，与 **`/ui/tenant-agents`** 同源）；若已绑定 Agent 不在列表中，编辑页保留 **「Current bind (not in enrolled list)」** 选项。见 **`policy_form.html`**、**`ui.py`**。
+- **破坏性（Register / 多租户）**：新部署必须先 **`PUT .../enrollment`** 再 **`Register`**；否则 **`FAILED_PRECONDITION`**。已签发的 Redis 会话在 **吊销** 或 **删除/替换登记** 后失效（见运维 Runbook）。**`EdgeAgentOut`** 增加 **`allowed_tenant_ids`**（无登记时为 `null`）。
 - **破坏性（Register）**：**`Register`** 不再返回共享 **`DEVAULT_API_TOKEN`**；成功时在 **Redis** 签发 **按 `agent_id` 绑定** 的 Bearer（需 Redis）。运维排障仍可使用 **`DEVAULT_API_TOKEN`** / API Key 调用 Agent gRPC。
 - **破坏性（指标）**：**`devault_jobs_total`** 的 Prometheus 标签集合已变更；既有仪表盘/告警需同步更新标签匹配。
 - **Artifacts Web UI**（`/ui/artifacts`）：English-only; **Restore** column is a single button per row; clicking opens a **`<dialog>`** modal with the restore form. Restore-drill actions stay off this page (use **Restore drills** or **`POST /api/v1/jobs/restore-drill`**).
@@ -49,6 +56,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`tenant_scoped_agents_for_tenant`**：在存在登记 Agent 时补 **`return out`**（此前函数末尾隐式 **`None`**，导致 **`GET /api/v1/tenant-agents`** 与 **`/ui/tenant-agents`** 传入模板的 **`agents`** 为 **`None`** 并触发 **`TypeError`**）。见 **`src/devault/api/presenters.py`**；回归测试 **`tests/test_presenters_tenant_agents.py`**。
 - **恢复演练**：写 **`.devault-drill-report.json`** 前不再重复执行「演练目录必须为空」校验（此前在解压成功后误报 **`TARGET_NOT_EMPTY`**）。实现上拆分为 **`_resolve_restore_drill_paths`**（路径 + 前缀）与 **`_require_restore_drill_workspace_clean`**（仅作业开始时调用）。见 **`src/devault/plugins/file/plugin.py`**。
 
 ### Security

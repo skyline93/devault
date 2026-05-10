@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from devault.api.deps import get_db, get_effective_tenant, require_write
 from devault.api.schemas import (
     CreateBackupJobBody,
+    CreatePathPrecheckJobBody,
     CreateRestoreDrillJobBody,
     CreateRestoreJobBody,
     EnqueueResponse,
@@ -40,6 +41,21 @@ def create_restore_job(
     _w: AuthContext = Depends(require_write),
 ) -> EnqueueResponse:
     job = control_svc.create_restore_job(db, body, tenant_id=tenant.id)
+    return EnqueueResponse(job_id=job.id, status=job.status)
+
+
+@router.post(
+    "/path-precheck",
+    response_model=EnqueueResponse,
+    summary="Enqueue backup path precheck job (Agent read-only)",
+)
+def create_path_precheck_job(
+    body: CreatePathPrecheckJobBody,
+    db: Session = Depends(get_db),
+    tenant: Tenant = Depends(get_effective_tenant),
+    _w: AuthContext = Depends(require_write),
+) -> EnqueueResponse:
+    job = control_svc.create_path_precheck_job(db, body, tenant_id=tenant.id)
     return EnqueueResponse(job_id=job.id, status=job.status)
 
 

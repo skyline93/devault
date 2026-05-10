@@ -8,13 +8,14 @@ from datetime import datetime, timedelta, timezone
 
 import grpc
 from botocore.exceptions import ClientError
-from sqlalchemy import exists, or_, select, update
+from sqlalchemy import and_, exists, or_, select, update
 from sqlalchemy.orm import Session, aliased
 
 from devault import __version__ as server_release_version
 from devault.core.enums import JobKind, JobStatus, PluginName
 from devault.core.locking import release_policy_job_lock, try_acquire_policy_job_lock
-from devault.db.models import Artifact, Job, Tenant
+from devault.db.models import AgentPoolMember, Artifact, EdgeAgent, Job, Policy, Tenant
+from devault.services.agent_enrollment import allowed_tenant_frozenset, get_enrollment
 from devault.db.session import SessionLocal
 from devault.security.agent_grpc_session import (
     mint_agent_session_token,
@@ -98,9 +99,23 @@ def _authenticate_grpc(context: grpc.ServicerContext, settings: Settings) -> Aut
             ttl_seconds=int(settings.grpc_agent_session_ttl_seconds),
         )
         if aid is not None:
+            enr_row = get_enrollment(db, aid)
+            if enr_row is None:
+                context.abort(
+                    grpc.StatusCode.UNAUTHENTICATED,
+                    "agent enrollment missing or revoked",
+                )
+                raise RuntimeError("unreachable")
+            allowed = allowed_tenant_frozenset(enr_row)
+            if not allowed:
+                context.abort(
+                    grpc.StatusCode.UNAUTHENTICATED,
+                    "agent enrollment has no allowed tenants",
+                )
+                raise RuntimeError("unreachable")
             return AuthContext(
                 role="operator",
-                allowed_tenant_ids=None,
+                allowed_tenant_ids=allowed,
                 principal_label=f"agent-session:{aid}",
             )
         try:
@@ -117,6 +132,22 @@ def _authenticate_grpc(context: grpc.ServicerContext, settings: Settings) -> Aut
         return ctx
     finally:
         db.close()
+
+
+def _grpc_ensure_job_tenant(
+    auth_ctx: AuthContext,
+    tenant_id: uuid.UUID,
+    context: grpc.ServicerContext,
+) -> None:
+    """Reject cross-tenant job access for scoped principals (Register token or scoped API key)."""
+    if auth_ctx.allowed_tenant_ids is None:
+        return
+    if tenant_id not in auth_ctx.allowed_tenant_ids:
+        context.abort(
+            grpc.StatusCode.PERMISSION_DENIED,
+            "principal is not allowed for this job's tenant",
+        )
+        raise RuntimeError("unreachable")
 
 
 def _require_agent_bearer_matches(
@@ -141,6 +172,21 @@ def _require_agent_bearer_matches(
         raise RuntimeError("unreachable")
 
 
+def _resolved_complete_agent_hostname(
+    db: Session,
+    agent_uuid: uuid.UUID,
+    request: agent_pb2.CompleteJobRequest,
+) -> str | None:
+    raw = (request.agent_hostname or "").strip()
+    if raw:
+        return raw[:255]
+    row = db.get(EdgeAgent, agent_uuid)
+    if row and row.hostname:
+        h = (row.hostname or "").strip()
+        return h[:255] if h else None
+    return None
+
+
 def reclaim_expired_job_leases(db: Session, settings: Settings) -> None:
     now = datetime.now(timezone.utc)
     stmt = select(Job).where(
@@ -158,16 +204,47 @@ def reclaim_expired_job_leases(db: Session, settings: Settings) -> None:
             )
         job.status = JobStatus.PENDING.value
         job.lease_agent_id = None
+        job.lease_agent_hostname = None
         job.lease_expires_at = None
         job.started_at = None
 
 
-def _pending_candidate_ids(db: Session) -> list[uuid.UUID]:
+def _pending_candidate_ids(
+    db: Session,
+    auth_allowed: frozenset[uuid.UUID] | None,
+    leasing_agent_id: uuid.UUID,
+) -> list[uuid.UUID]:
+    if auth_allowed is not None and len(auth_allowed) == 0:
+        return []
     j_active = aliased(Job)
+    policy_binding_ok = or_(
+        Job.policy_id.is_(None),
+        exists(
+            select(1).select_from(Policy).where(
+                Policy.id == Job.policy_id,
+                or_(
+                    and_(
+                        Policy.bound_agent_id.is_(None),
+                        Policy.bound_agent_pool_id.is_(None),
+                    ),
+                    Policy.bound_agent_id == leasing_agent_id,
+                    exists(
+                        select(1)
+                        .select_from(AgentPoolMember)
+                        .where(
+                            AgentPoolMember.pool_id == Policy.bound_agent_pool_id,
+                            AgentPoolMember.agent_id == leasing_agent_id,
+                        ),
+                    ),
+                ),
+            ),
+        ),
+    )
     stmt = (
         select(Job.id)
         .where(
             Job.status == JobStatus.PENDING.value,
+            policy_binding_ok,
             or_(
                 Job.policy_id.is_(None),
                 ~exists(
@@ -176,6 +253,7 @@ def _pending_candidate_ids(db: Session) -> list[uuid.UUID]:
                     .where(
                         j_active.policy_id == Job.policy_id,
                         j_active.status.in_(_ACTIVE_JOB_STATUSES),
+                        j_active.kind == JobKind.BACKUP.value,
                     )
                 ),
             ),
@@ -183,11 +261,18 @@ def _pending_candidate_ids(db: Session) -> list[uuid.UUID]:
         .order_by(Job.created_at.asc())
         .limit(50)
     )
+    if auth_allowed is not None:
+        stmt = stmt.where(Job.tenant_id.in_(auth_allowed))
     return list(db.scalars(stmt).all())
 
 
-def try_lease_next_job(db: Session, agent_id: uuid.UUID, settings: Settings) -> Job | None:
-    for jid in _pending_candidate_ids(db):
+def try_lease_next_job(
+    db: Session,
+    agent_id: uuid.UUID,
+    settings: Settings,
+    auth_allowed: frozenset[uuid.UUID] | None,
+) -> Job | None:
+    for jid in _pending_candidate_ids(db, auth_allowed, agent_id):
         job = db.get(Job, jid)
         if job is None or job.status != JobStatus.PENDING.value:
             continue
@@ -204,12 +289,17 @@ def try_lease_next_job(db: Session, agent_id: uuid.UUID, settings: Settings) -> 
 
         lease_ttl = timedelta(seconds=settings.job_lease_ttl_seconds)
         now = datetime.now(timezone.utc)
+        lease_host: str | None = None
+        edge_row = db.get(EdgeAgent, agent_id)
+        if edge_row and edge_row.hostname:
+            lease_host = (edge_row.hostname or "").strip()[:255] or None
         result = db.execute(
             update(Job)
             .where(Job.id == jid, Job.status == JobStatus.PENDING.value)
             .values(
                 status=JobStatus.RUNNING.value,
                 lease_agent_id=agent_id,
+                lease_agent_hostname=lease_host,
                 lease_expires_at=now + lease_ttl,
                 started_at=now,
             )
@@ -219,6 +309,7 @@ def try_lease_next_job(db: Session, agent_id: uuid.UUID, settings: Settings) -> 
         if row_id:
             leased_row = db.get(Job, row_id)
             if leased_row:
+                db.refresh(leased_row)
                 return leased_row
 
         if acquired_redis and job.policy_id:
@@ -244,16 +335,17 @@ def _lease_config_json(db: Session, job: Job) -> str:
 class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
     def Register(self, request: agent_pb2.RegisterRequest, context: grpc.ServicerContext):
         settings = get_settings()
+        register_audit: dict = {
+            "agent_id": request.agent_id,
+            "agent_release": request.agent_release or None,
+            "proto_package": request.proto_package or None,
+            "agent_git_commit": request.git_commit or None,
+        }
         with grpc_governance(
             "Register",
             context,
             settings,
-            audit_extra={
-                "agent_id": request.agent_id,
-                "agent_release": request.agent_release or None,
-                "proto_package": request.proto_package or None,
-                "agent_git_commit": request.git_commit or None,
-            },
+            audit_extra=register_audit,
         ):
             if not settings.grpc_registration_secret:
                 context.abort(grpc.StatusCode.FAILED_PRECONDITION, "registration disabled")
@@ -273,6 +365,21 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
             )
             db_reg = SessionLocal()
             try:
+                enr = get_enrollment(db_reg, agent_uuid)
+                if enr is None:
+                    context.abort(
+                        grpc.StatusCode.FAILED_PRECONDITION,
+                        "agent enrollment missing: use PUT /api/v1/agents/{agent_id}/enrollment "
+                        "before Register",
+                    )
+                    raise RuntimeError("unreachable")
+                if not (enr.allowed_tenant_ids or []):
+                    context.abort(
+                        grpc.StatusCode.FAILED_PRECONDITION,
+                        "agent enrollment has empty allowed_tenant_ids",
+                    )
+                    raise RuntimeError("unreachable")
+                register_audit["enrolled_tenant_count"] = len(enr.allowed_tenant_ids)
                 upsert_edge_agent(
                     db_reg,
                     agent_id=agent_uuid,
@@ -310,16 +417,25 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
 
     def Heartbeat(self, request: agent_pb2.HeartbeatRequest, context: grpc.ServicerContext):
         settings = get_settings()
+        snap_ver = int(request.snapshot_schema_version or 0)
+        hb_audit: dict = {
+            "agent_id": request.agent_id,
+            "agent_release": request.agent_release or None,
+            "proto_package": request.proto_package or None,
+            "agent_git_commit": request.git_commit or None,
+            "snapshot_schema_version": snap_ver,
+        }
+        if snap_ver >= 1:
+            hb_audit["hostname"] = request.hostname or None
+            hb_audit["os"] = request.os or None
+            hb_audit["region"] = request.region or None
+            hb_audit["env"] = request.env or None
+            hb_audit["backup_path_allowlist_count"] = len(request.backup_path_allowlist)
         with grpc_governance(
             "Heartbeat",
             context,
             settings,
-            audit_extra={
-                "agent_id": request.agent_id,
-                "agent_release": request.agent_release or None,
-                "proto_package": request.proto_package or None,
-                "agent_git_commit": request.git_commit or None,
-            },
+            audit_extra=hb_audit,
         ):
             auth_ctx = _authenticate_grpc(context, settings)
             try:
@@ -344,6 +460,12 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
                     proto_package=request.proto_package or None,
                     git_commit=request.git_commit or None,
                     touch_register=False,
+                    snapshot_schema_version=snap_ver,
+                    hostname=request.hostname or None,
+                    host_os=request.os or None,
+                    region=request.region or None,
+                    agent_env=request.env or None,
+                    backup_path_allowlist=list(request.backup_path_allowlist),
                 )
                 db_hb.commit()
             finally:
@@ -359,11 +481,12 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
         context: grpc.ServicerContext,
     ):
         settings = get_settings()
+        lease_audit: dict = {"agent_id": request.agent_id}
         with grpc_governance(
             "LeaseJobs",
             context,
             settings,
-            audit_extra={"agent_id": request.agent_id},
+            audit_extra=lease_audit,
         ):
             auth_ctx = _authenticate_grpc(context, settings)
             try:
@@ -372,6 +495,11 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
                 context.abort(grpc.StatusCode.INVALID_ARGUMENT, "agent_id must be a UUID")
                 raise
             _require_agent_bearer_matches(auth_ctx, agent_uuid, context)
+            if auth_ctx.allowed_tenant_ids is None:
+                lease_audit["tenant_scope"] = "all"
+            else:
+                lease_audit["tenant_scope"] = "restricted"
+                lease_audit["allowed_tenant_count"] = len(auth_ctx.allowed_tenant_ids)
 
             max_jobs = min(max(int(request.max_jobs or 1), 1), 10)
             db = SessionLocal()
@@ -386,7 +514,7 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
                     server_release=server_release_version,
                 )
                 for _ in range(max_jobs):
-                    job = try_lease_next_job(db, agent_uuid, settings)
+                    job = try_lease_next_job(db, agent_uuid, settings, auth_ctx.allowed_tenant_ids)
                     if job is None:
                         break
                     leases.append(
@@ -412,11 +540,12 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
         context: grpc.ServicerContext,
     ):
         settings = get_settings()
+        grant_audit: dict = {"agent_id": request.agent_id, "job_id": request.job_id}
         with grpc_governance(
             "RequestStorageGrant",
             context,
             settings,
-            audit_extra={"agent_id": request.agent_id, "job_id": request.job_id},
+            audit_extra=grant_audit,
         ):
             auth_ctx = _authenticate_grpc(context, settings)
             if settings.storage_backend != "s3":
@@ -440,6 +569,8 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
                 if job is None:
                     context.abort(grpc.StatusCode.NOT_FOUND, "job not found")
                     raise RuntimeError("unreachable")
+                grant_audit["tenant_id"] = str(job.tenant_id)
+                _grpc_ensure_job_tenant(auth_ctx, job.tenant_id, context)
                 if job.lease_agent_id != agent_uuid:
                     context.abort(grpc.StatusCode.PERMISSION_DENIED, "job not leased to this agent")
                     raise RuntimeError("unreachable")
@@ -622,6 +753,12 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
                     art = db.get(Artifact, aid)
                     if art is None:
                         context.abort(grpc.StatusCode.NOT_FOUND, "artifact not found")
+                    if art.tenant_id != job.tenant_id:
+                        context.abort(
+                            grpc.StatusCode.FAILED_PRECONDITION,
+                            "restore artifact tenant does not match job tenant",
+                        )
+                        raise RuntimeError("unreachable")
                     manifest_get_url = presign_get_object(
                         client, bucket=bucket, key=art.manifest_key, expires_in=ttl
                     )
@@ -649,11 +786,12 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
         context: grpc.ServicerContext,
     ):
         settings = get_settings()
+        progress_audit: dict = {"agent_id": request.agent_id, "job_id": request.job_id}
         with grpc_governance(
             "ReportProgress",
             context,
             settings,
-            audit_extra={"agent_id": request.agent_id, "job_id": request.job_id},
+            audit_extra=progress_audit,
         ):
             auth_ctx = _authenticate_grpc(context, settings)
             try:
@@ -667,6 +805,9 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
             db = SessionLocal()
             try:
                 job = db.get(Job, job_uuid)
+                if job is not None:
+                    progress_audit["tenant_id"] = str(job.tenant_id)
+                    _grpc_ensure_job_tenant(auth_ctx, job.tenant_id, context)
                 cancelled = bool(job and job.status == JobStatus.CANCELLED.value)
                 if job and job.lease_agent_id == agent_uuid and not cancelled:
                     if request.percent >= 90:
@@ -682,11 +823,12 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
         context: grpc.ServicerContext,
     ):
         settings = get_settings()
+        complete_audit: dict = {"agent_id": request.agent_id, "job_id": request.job_id}
         with grpc_governance(
             "CompleteJob",
             context,
             settings,
-            audit_extra={"agent_id": request.agent_id, "job_id": request.job_id},
+            audit_extra=complete_audit,
         ):
             auth_ctx = _authenticate_grpc(context, settings)
             try:
@@ -704,12 +846,29 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
                 if job is None:
                     context.abort(grpc.StatusCode.NOT_FOUND, "job not found")
                     raise RuntimeError("unreachable")
+                complete_audit["tenant_id"] = str(job.tenant_id)
+                _grpc_ensure_job_tenant(auth_ctx, job.tenant_id, context)
                 if job.lease_agent_id != agent_uuid:
                     context.abort(grpc.StatusCode.PERMISSION_DENIED, "job not leased to this agent")
                     raise RuntimeError("unreachable")
 
+                job.completed_agent_hostname = _resolved_complete_agent_hostname(db, agent_uuid, request)
+
                 if request.success:
-                    if job.kind == JobKind.BACKUP.value:
+                    if job.kind == JobKind.PATH_PRECHECK.value:
+                        raw = (request.result_summary_json or "").strip()
+                        if raw:
+                            try:
+                                parsed = json.loads(raw)
+                                job.result_meta = parsed if isinstance(parsed, dict) else {"value": parsed}
+                            except json.JSONDecodeError:
+                                job.result_meta = {"parse_error": "invalid result_summary_json"}
+                        job.status = JobStatus.SUCCESS.value
+                        job.finished_at = datetime.now(timezone.utc)
+                        JOB_TOTAL.labels(
+                            *job_terminal_label_values(job, status="success", error_class="none"),
+                        ).inc()
+                    elif job.kind == JobKind.BACKUP.value:
                         tenant_row = db.get(Tenant, job.tenant_id)
                         storage = get_storage_for_tenant(settings, tenant_row)
                         bundle_key = request.bundle_key or ""
@@ -898,6 +1057,14 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
                                 key=bk,
                                 upload_id=uid,
                             )
+                    if job.kind == JobKind.PATH_PRECHECK.value:
+                        raw = (request.result_summary_json or "").strip()
+                        if raw:
+                            try:
+                                parsed = json.loads(raw)
+                                job.result_meta = parsed if isinstance(parsed, dict) else {"value": parsed}
+                            except json.JSONDecodeError:
+                                job.result_meta = {"parse_error": "invalid result_summary_json"}
                     job.bundle_wip_multipart_upload_id = None
                     job.bundle_wip_content_length = None
                     job.bundle_wip_part_size_bytes = None
@@ -911,6 +1078,7 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
                     ).inc()
 
                 job.lease_agent_id = None
+                job.lease_agent_hostname = None
                 job.lease_expires_at = None
 
                 if job.policy_id:

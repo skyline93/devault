@@ -4,6 +4,7 @@
 <h1>{{ heading }}</h1>
 <p><a href="/ui/schedules">← Schedules</a></p>
 <form method="post" action="{% if schedule %}/ui/schedules/{{ schedule.id }}/edit{% else %}/ui/schedules/new{% endif %}">
+  <fieldset {% if not auth_ctx.can_write() %}disabled="disabled"{% endif %}>
   {% if not schedule %}
   {% if policies %}
   <p>
@@ -38,5 +39,6 @@
     <label><input type="radio" name="enabled" value="no" {% if schedule and not schedule.enabled %}checked{% endif %}/> No</label>
   </p>
   <p>{% if schedule or policies %}<button type="submit">{% if schedule %}Save{% else %}Create{% endif %}</button>{% endif %}</p>
+  </fieldset>
 </form>
 {% endblock %}

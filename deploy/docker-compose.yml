@@ -17,8 +17,6 @@ services:
       POSTGRES_DB: devault
     ports:
       - "5432:5432"
-    volumes:
-      - pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U devault -d devault"]
       interval: 3s
@@ -150,6 +148,8 @@ services:
     image: ${DEVAULT_IMAGE:-glf9832/devault:latest}
     command: devault-agent
     environment:
+      # Stable id so migration 0011 can seed agent_enrollments → default tenant before first Register.
+      DEVAULT_AGENT_ID: ${DEVAULT_AGENT_ID:-00000000-0000-4000-8000-000000000001}
       DEVAULT_GRPC_REGISTRATION_SECRET: ${DEVAULT_GRPC_REGISTRATION_SECRET:-devault-docker-register-secret}
       DEVAULT_GRPC_TARGET: api:50051
       DEVAULT_ALLOWED_PATH_PREFIXES: /data,/restore

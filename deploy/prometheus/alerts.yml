@@ -58,6 +58,33 @@ groups:
           summary: "DeVault：存在长期 pending、未被 Agent 租约拉起的作业"
           description: "检查是否有可用 Agent、策略锁、或 gRPC 注册/版本门闸。"
 
+      - alert: DeVaultPathPrecheckFailures
+        expr: sum(increase(devault_jobs_total{kind="path_precheck",status="failed"}[24h])) > 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "DeVault：24 小时内有路径预检失败（path_precheck）"
+          description: "核对策略 paths 与 Agent 挂载、权限；见 website/docs/admin/agent-fleet.md §路径预检。"
+
+      - alert: DeVaultFleetAgentsStale
+        expr: sum(devault_edge_agents_stale_count) > 0
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "DeVault：存在超过 DEVAULT_FLEET_AGENT_STALE_SECONDS 未 Heartbeat 的 Agent 登记行"
+          description: "检查 Agent 进程、网络、gRPC 与登记；指标为 edge_agents 表扫描（见 observability/edge_fleet_collector）。"
+
+      - alert: DeVaultPolicyAllowlistEnforceRejects
+        expr: sum(increase(devault_policy_allowlist_enforce_rejects_total[1h])) > 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "DeVault：租户 enforce 模式下策略路径与 allowlist 冲突被拒绝"
+          description: "调整策略 paths 或 Agent DEVAULT_ALLOWED_PATH_PREFIXES / Heartbeat；或临时改为 warn/off。"
+
   - name: devault-operations
     rules:
       - alert: DeVaultPolicyLockContentionBurst

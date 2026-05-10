@@ -27,6 +27,8 @@ Helm：**`monitoring.enabled=true`**（ClusterIP，`port-forward`），规则 **
 | **`devault_jobs_total`** | 终态计数；标签 **`kind`、`status`、`tenant_id`、`error_class`** 等 |
 | **`devault_backup_integrity_control_rejects_total`** | **`CompleteJob`** 成功路径上控制面完整性拒绝次数 |
 | **`devault_jobs_overdue_nonterminal`** | 超窗未结束作业（阈值见 [配置参考](./configuration.md)） |
+| **`devault_edge_agents_stale_count`** | **`last_seen_at`** 早于 **`DEVAULT_FLEET_AGENT_STALE_SECONDS`** 的 **`edge_agents`** 行数（§十四-13） |
+| **`devault_policy_allowlist_enforce_rejects_total`** | 租户 **`enforce`** 下策略路径与 allowlist 并集冲突被拒绝次数 |
 | **`devault_policy_lock_contention_total`** | 同策略 Redis 锁争用 |
 | **`devault_retention_purge_errors_total`** | 保留清理失败 |
 | **`devault_multipart_resume_grants_total`** | Multipart 续传授权次数 |

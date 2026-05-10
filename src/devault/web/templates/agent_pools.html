@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Agent pools · DeVault{% endblock %}
+{% block body %}
+<h1>Agent pools</h1>
+{% if flash %}<p class="flash ok">{{ flash }}</p>{% endif %}
+{% if error %}<p class="flash err">{{ error }}</p>{% endif %}
+<p class="muted">Tenant-scoped groups of <code>agent_id</code> for policy execution binding. Each member must have <strong>agent enrollment</strong> for this tenant.</p>
+<p>{% if auth_ctx.can_write() %}<a href="/ui/agent-pools/new" class="btn">＋ New pool</a> · {% endif %}<a href="/ui/policies">Policies</a></p>
+<table>
+  <thead>
+    <tr><th>Name</th><th>Pool ID</th><th>Created</th><th>Actions</th></tr>
+  </thead>
+  <tbody>
+    {% for p in pools %}
+    <tr>
+      <td><strong>{{ p.name }}</strong></td>
+      <td><code>{{ p.id }}</code></td>
+      <td>{{ p.created_at }}</td>
+      <td class="row-actions">
+        <a href="/ui/agent-pools/{{ p.id }}/members">Members</a>
+        {% if auth_ctx.can_write() %}
+        <form class="inline" method="post" action="/ui/agent-pools/{{ p.id }}/delete" style="margin-top:6px;"
+              onsubmit="return confirm('Delete pool {{ p.name }}? Policies bound to this pool will be unbound.');">
+          <button type="submit">Delete</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="4" class="muted">No pools. Create one to bind policies to multiple Agents (failover).</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

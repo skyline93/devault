@@ -7,10 +7,22 @@ from fastapi.responses import Response
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from devault import __version__
-from devault.api.routes import agents, artifacts, jobs, policies, restore_drill_schedules, schedules, tenants, ui
+from devault.api.routes import (
+    agent_pools,
+    agents,
+    artifacts,
+    jobs,
+    policies,
+    restore_drill_schedules,
+    schedules,
+    tenant_agents,
+    tenants,
+    ui,
+)
 from devault.grpc.server import start_grpc_server, stop_grpc_server
 from devault.release_meta import GRPC_API_PACKAGE
 from devault.observability.metrics import HTTP_REQUESTS_TOTAL
+from devault.observability.edge_fleet_collector import register_edge_fleet_health_collector
 from devault.observability.stuck_jobs_collector import register_stuck_jobs_collector
 from devault.settings import get_settings
 
@@ -23,7 +35,7 @@ object storage URLs (see project documentation).
 _OPENAPI_TAGS = [
     {
         "name": "jobs",
-        "description": "Create and query backup, restore, and restore-drill jobs; cancel or retry when supported.",
+        "description": "Create and query backup, restore, restore-drill, and **path_precheck** jobs; cancel or retry when supported.",
     },
     {
         "name": "artifacts",
@@ -31,7 +43,7 @@ _OPENAPI_TAGS = [
     },
     {
         "name": "policies",
-        "description": "CRUD for file backup policies (path lists, excludes, enabled flag).",
+        "description": "CRUD for file backup policies (paths, excludes, enabled); optional **execution binding** (`bound_agent_id` or `bound_agent_pool_id`) for LeaseJobs routing. When the tenant sets **`policy_paths_allowlist_mode`** to `enforce`/`warn` and enrolled Agents report **`backup_path_allowlist`** via Heartbeat, policy **`paths`** must fall under the union of those prefixes.",
     },
     {
         "name": "schedules",
@@ -51,7 +63,15 @@ _OPENAPI_TAGS = [
     },
     {
         "name": "agents",
-        "description": "Edge Agent fleet inventory (versions from gRPC Heartbeat / Register).",
+        "description": "Edge Agent fleet inventory (Heartbeat / Register) and **tenant enrollment** (`PUT /agents/{id}/enrollment`) required before Register can mint gRPC sessions.",
+    },
+    {
+        "name": "tenant-agents",
+        "description": "Agents **enrolled** for the effective tenant (`X-DeVault-Tenant-Id`), with optional **Heartbeat snapshot** fields (hostname, OS, backup path allowlist union for policy UX).",
+    },
+    {
+        "name": "agent-pools",
+        "description": "Tenant-scoped Agent pools (members + weights) for **policy execution binding** (`policies.bound_agent_pool_id`).",
     },
 ]
 
@@ -59,6 +79,7 @@ _OPENAPI_TAGS = [
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     register_stuck_jobs_collector()
+    register_edge_fleet_health_collector()
     start_grpc_server()
     yield
     stop_grpc_server()
@@ -73,6 +94,8 @@ app = FastAPI(
 )
 
 app.include_router(agents.router, prefix="/api/v1")
+app.include_router(tenant_agents.router, prefix="/api/v1")
+app.include_router(agent_pools.router, prefix="/api/v1")
 app.include_router(jobs.router, prefix="/api/v1")
 app.include_router(artifacts.router, prefix="/api/v1")
 app.include_router(policies.router, prefix="/api/v1")

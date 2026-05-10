@@ -60,6 +60,8 @@ const sidebars: SidebarsConfig = {
         'admin/index',
         'admin/tenants-and-rbac',
         'admin/agent-fleet',
+        'admin/agent-credential-lifecycle',
+        'admin/agent-pools',
       ],
     },
     {
@@ -170,6 +172,12 @@ const sidebars: SidebarsConfig = {
       label: '测试与发布',
       collapsed: true,
       items: ['engineering/testing', 'engineering/releasing'],
+    },
+    {
+      type: 'category',
+      label: '交付节奏与批量引导',
+      collapsed: true,
+      items: ['guides/web-console', 'guides/iac-bootstrap'],
     },
   ],
 };

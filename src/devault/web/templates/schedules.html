@@ -4,7 +4,7 @@
 <h1>Schedules</h1>
 {% if flash %}<p class="flash ok">{{ flash }}</p>{% endif %}
 {% if error %}<p class="flash err">{{ error }}</p>{% endif %}
-<p><a href="/ui/schedules/new">＋ New schedule</a></p>
+<p>{% if auth_ctx.can_write() %}<a href="/ui/schedules/new">＋ New schedule</a>{% else %}<span class="muted">Read-only — new schedule via REST with write role.</span>{% endif %}</p>
 <p class="muted">Loaded and fired by the <code>devault-scheduler</code> process; cron syntax matches APScheduler.</p>
 <table>
   <thead>
@@ -24,11 +24,15 @@
       <td>{{ s.timezone }}</td>
       <td>{{ s.enabled }}</td>
       <td class="row-actions">
+        {% if auth_ctx.can_write() %}
         <a href="/ui/schedules/{{ s.id }}/edit">Edit</a>
         <form method="post" action="/ui/schedules/{{ s.id }}/delete" class="inline" style="margin-top:6px;"
               onsubmit="return confirm('Delete this schedule?');">
           <button type="submit">Delete</button>
         </form>
+        {% else %}
+        <span class="muted">—</span>
+        {% endif %}
       </td>
     </tr>
     {% else %}

@@ -28,7 +28,12 @@ def main() -> int:
         print("error: DEVAULT_E2E_GRPC_TARGET and DEVAULT_E2E_REGISTRATION_SECRET required", file=sys.stderr)
         return 1
 
-    agent_id = str(uuid.uuid4())
+    # Must match a row in agent_enrollments (Compose / migration 0011 seeds the default below).
+    agent_id = (
+        os.environ.get("DEVAULT_E2E_AGENT_ID")
+        or os.environ.get("DEVAULT_AGENT_ID")
+        or "00000000-0000-4000-8000-000000000001"
+    ).strip()
     ch = grpc.insecure_channel(target)
     try:
         stub = agent_pb2_grpc.AgentControlStub(ch)

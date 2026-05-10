@@ -16,6 +16,20 @@ from devault.grpc.agent_version import (
 from devault.settings import Settings
 
 
+def _norm_snapshot_str(value: str | None) -> str | None:
+    if value is None:
+        return None
+    t = value.strip()
+    return t or None
+
+
+def _norm_allowlist(items: list[str] | None) -> list[str] | None:
+    if not items:
+        return None
+    xs = sorted({str(x).strip().rstrip("/") for x in items if str(x).strip()})
+    return xs or None
+
+
 def upsert_edge_agent(
     db: Session,
     *,
@@ -24,6 +38,12 @@ def upsert_edge_agent(
     proto_package: str | None,
     git_commit: str | None,
     touch_register: bool = False,
+    snapshot_schema_version: int = 0,
+    hostname: str | None = None,
+    host_os: str | None = None,
+    region: str | None = None,
+    agent_env: str | None = None,
+    backup_path_allowlist: list[str] | None = None,
 ) -> EdgeAgent:
     now = datetime.now(timezone.utc)
     rel = (agent_release or "").strip() or None
@@ -42,17 +62,24 @@ def upsert_edge_agent(
             last_register_at=now if touch_register else None,
         )
         db.add(row)
-        return row
+    else:
+        row.last_seen_at = now
+        if rel is not None:
+            row.agent_release = rel
+        if pkg is not None:
+            row.proto_package = pkg
+        if gc is not None:
+            row.git_commit = gc
+        if touch_register:
+            row.last_register_at = now
 
-    row.last_seen_at = now
-    if rel is not None:
-        row.agent_release = rel
-    if pkg is not None:
-        row.proto_package = pkg
-    if gc is not None:
-        row.git_commit = gc
-    if touch_register:
-        row.last_register_at = now
+    if int(snapshot_schema_version or 0) >= 1:
+        row.hostname = _norm_snapshot_str(hostname)
+        row.host_os = _norm_snapshot_str(host_os)
+        row.region = _norm_snapshot_str(region)
+        row.agent_env = _norm_snapshot_str(agent_env)
+        row.backup_path_allowlist = _norm_allowlist(backup_path_allowlist)
+
     return row
 
 

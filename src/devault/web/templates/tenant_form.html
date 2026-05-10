@@ -44,6 +44,15 @@
     <input type="text" id="s3_assume_role_external_id" name="s3_assume_role_external_id"
       style="width:100%;max-width:480px;" value="{{ row.s3_assume_role_external_id or '' }}"/>
   </p>
+  <p>
+    <label for="policy_paths_allowlist_mode">Policy paths vs Agent allowlist</label><br/>
+    <select id="policy_paths_allowlist_mode" name="policy_paths_allowlist_mode">
+      <option value="off" {% if (row.policy_paths_allowlist_mode or 'off') == 'off' %}selected{% endif %}>off — do not validate paths against Heartbeat allowlists</option>
+      <option value="warn" {% if row.policy_paths_allowlist_mode == 'warn' %}selected{% endif %}>warn — log when paths fall outside the union (still save)</option>
+      <option value="enforce" {% if row.policy_paths_allowlist_mode == 'enforce' %}selected{% endif %}>enforce — reject policy save when paths violate the union</option>
+    </select>
+    <span class="muted">Applies when enrolled Agents report <code>backup_path_allowlist</code>; empty union skips checks.</span>
+  </p>
   <p><button type="submit">Save</button></p>
 </form>
 {% else %}

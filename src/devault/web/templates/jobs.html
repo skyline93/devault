@@ -4,7 +4,7 @@
 <h1>Jobs</h1>
 {% if flash %}<p class="flash ok">{{ flash }}</p>{% endif %}
 {% if error %}<p class="flash err">{{ error }}</p>{% endif %}
-<p class="muted">Latest 100 jobs, newest first by <strong>Created</strong>. Running jobs can be cancelled; only <strong>failed backups</strong> can be retried.</p>
+<p class="muted">Latest 100 jobs, newest first by <strong>Created</strong>. Running jobs can be cancelled; only <strong>failed backups</strong> can be retried. Lease/completed hostnames are frozen snapshots for audit (§十四-12).</p>
 <table>
   <thead>
     <tr>
@@ -14,7 +14,10 @@
       <th>Status</th>
       <th>Trigger</th>
       <th>Policy</th>
-      <th>Error / drill report</th>
+      <th>Lease agent</th>
+      <th>Lease host</th>
+      <th>Done host</th>
+      <th>Error / report</th>
       <th>Actions</th>
     </tr>
   </thead>
@@ -27,13 +30,19 @@
       <td>{{ j.status }}</td>
       <td>{{ j.trigger }}</td>
       <td>{% if j.policy_id %}<code>{{ j.policy_id }}</code>{% else %}—{% endif %}</td>
+      <td>{% if j.lease_agent_id %}<code style="font-size:11px">{{ j.lease_agent_id }}</code>{% else %}—{% endif %}</td>
+      <td>{% if j.lease_agent_hostname %}{{ j.lease_agent_hostname }}{% else %}—{% endif %}</td>
+      <td>{% if j.completed_agent_hostname %}{{ j.completed_agent_hostname }}{% else %}—{% endif %}</td>
       <td>
         {% if j.error_code %}{{ j.error_code }}: {{ j.error_message[:80] }}
         {% elif j.kind == 'restore_drill' and j.result_meta %}
           <span class="muted">extract</span> <code style="font-size:11px">{{ j.result_meta.get('extract_root', '')[:72] }}{% if (j.result_meta.get('extract_root', '')|length) > 72 %}…{% endif %}</code>
+        {% elif j.kind == 'path_precheck' and j.result_meta and j.result_meta.get('schema') == 'devault-path-precheck-report-v1' %}
+          <span class="muted">paths checked</span> {{ (j.result_meta.get('paths') or [])|length }}
         {% else %}—{% endif %}
       </td>
       <td class="row-actions">
+        {% if auth_ctx.can_write() %}
         {% set terminal = (j.status == 'success' or j.status == 'failed' or j.status == 'cancelled') %}
         {% if not terminal %}
         <form method="post" action="/ui/jobs/{{ j.id }}/cancel" class="inline" onsubmit="return confirm('Cancel this job?');">
@@ -46,6 +55,9 @@
         </form>
         {% endif %}
         {% if terminal and not (j.status == 'failed' and j.kind == 'backup') %}—{% endif %}
+        {% else %}
+        <span class="muted">—</span>
+        {% endif %}
       </td>
     </tr>
     {% endfor %}

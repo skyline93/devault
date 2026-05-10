@@ -17,6 +17,8 @@ docker compose pull && docker compose up -d
 
 Compose 会拉起 PostgreSQL、Redis、MinIO、一次性 **minio-init** 建桶、**api**（含 HTTP 与 gRPC）、**scheduler**、**agent** 等；应用镜像为预构建 **`DEVAULT_IMAGE`**（默认见 `docker-compose.yml`）。`api` 启动时会执行 `alembic upgrade head`。
 
+**Agent 与多租户**：`Register` 前必须在控制面为 **`agent_id`** 配置 **`agent_enrollments`**（REST **`PUT /api/v1/agents/{agent_id}/enrollment`**）。演示栈中 **agent** 使用固定 **`DEVAULT_AGENT_ID`**，迁移 **`0011`** 已为其绑定 **default** 租户，开箱即可 **`Register`**。自建环境见 [Agent 舰队](../admin/agent-fleet.md)。**Heartbeat** 默认上报主机快照与可选 **`DEVAULT_ALLOWED_PATH_PREFIXES`**（逗号分隔路径前缀），供 **`GET /api/v1/tenant-agents`** 与租户级策略路径校验使用；详见 [gRPC（Agent）](../reference/grpc-services.md)。可在写入策略后用 **`POST /api/v1/jobs/path-precheck`**（或 Web UI 策略页的 **Run path precheck**）让 Agent 只读校验 **`paths`** 是否存在、可读，再上真实备份。
+
 默认将 `deploy/demo_data/` 挂载到 agent 容器的只读 **`/data`**，恢复卷挂载为 **`/restore`**。
 
 ## 2. 发起一次备份
@@ -66,5 +68,7 @@ curl -sS -H "Authorization: Bearer changeme" -H "Content-Type: application/json"
 | `http://127.0.0.1:8000/docs` | OpenAPI（Swagger） |
 | `http://127.0.0.1:8000/ui/jobs` | Web 控制台（Basic 密码为 `DEVAULT_API_TOKEN`） |
 | `http://127.0.0.1:8000/metrics` | Prometheus 指标 |
+
+多 Agent 时可为策略绑定 **单台 Agent** 或 **Agent 池**（控制 **LeaseJobs** 谁可领该策略作业），见 [Agent 池](../admin/agent-pools.md)。
 
 更多环境变量与生产拓扑见 [Docker Compose](../admin/docker-compose.md) 与 [配置参考](../admin/configuration.md)。

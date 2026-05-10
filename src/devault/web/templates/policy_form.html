@@ -3,7 +3,15 @@
 {% block body %}
 <h1>{{ heading }}</h1>
 <p><a href="/ui/policies">← Policies</a></p>
+<p class="muted">
+  Tenant <strong>{{ tenant.slug }}</strong>:
+  <code>policy_paths_allowlist_mode={{ tenant.policy_paths_allowlist_mode }}</code>
+  (edit under <a href="/ui/tenants/{{ tenant.id }}/edit">Tenants → this tenant</a>).
+  Enrolled Agents’ Heartbeat union of <code>backup_path_allowlist</code>:
+  {% if allowlist_union %}<code>{{ allowlist_union | join(', ') }}</code>{% else %}<em>empty</em> — validation is skipped until Agents report prefixes.{% endif %}
+</p>
 <form method="post" action="{% if policy %}/ui/policies/{{ policy.id }}/edit{% else %}/ui/policies/new{% endif %}">
+  <fieldset {% if not auth_ctx.can_write() %}disabled="disabled"{% endif %}>
   <p>
     <label for="name">Name</label><br/>
     <input type="text" id="name" name="name" required style="width:100%;max-width:480px;"
@@ -52,10 +60,47 @@
     <span class="muted">Empty = keep forever; scheduler deletes metadata + objects after <code>retain_until</code>.</span>
   </p>
   <p>
+    <span class="muted">Execution binding (optional): restrict which Agent(s) may <code>LeaseJobs</code> for this policy. Members must have <code>agent_enrollment</code> for this tenant. Create pools under <a href="/ui/agent-pools">Agent pools</a>.</span>
+  </p>
+  <p>
+    <span>Binding mode</span><br/>
+    <label><input type="radio" name="exec_bind" value="none" {% if not policy or (not policy.bound_agent_id and not policy.bound_agent_pool_id) %}checked{% endif %}/> None (any enrolled agent in tenant)</label><br/>
+    <label><input type="radio" name="exec_bind" value="agent" {% if policy and policy.bound_agent_id %}checked{% endif %}/> Single Agent (choose from enrolled list)</label><br/>
+    <label><input type="radio" name="exec_bind" value="pool" {% if policy and policy.bound_agent_pool_id %}checked{% endif %}/> Agent pool</label>
+  </p>
+  <p>
+    <label for="bound_agent_id">Bound Agent</label><br/>
+    <select id="bound_agent_id" name="bound_agent_id" style="width:100%;max-width:640px;">
+      <option value="">— None —</option>
+      {% for a in binding_agents %}
+      <option value="{{ a.id }}" {% if policy and policy.bound_agent_id == a.id %}selected{% endif %}>
+        {% if a.hostname %}{{ a.hostname }}{% else %}Agent{% endif %} · {{ a.id }}
+      </option>
+      {% endfor %}
+      {% if orphan_bound_agent_id %}
+      <option value="{{ orphan_bound_agent_id }}" selected>Current bind (not in enrolled list) · {{ orphan_bound_agent_id }}</option>
+      {% endif %}
+    </select>
+    <span class="muted">Only Agents with enrollment for this tenant appear here (same source as <a href="/ui/tenant-agents">Tenant agents</a>).</span>
+  </p>
+  <p>
+    <label for="bound_agent_pool_id">Bound pool</label><br/>
+    <select id="bound_agent_pool_id" name="bound_agent_pool_id">
+      <option value="">— None —</option>
+      {% for pl in agent_pools %}
+      <option value="{{ pl.id }}" {% if policy and policy.bound_agent_pool_id == pl.id %}selected{% endif %}>{{ pl.name }} ({{ pl.id }})</option>
+      {% endfor %}
+    </select>
+  </p>
+  <p>
     <span>Enabled</span><br/>
     <label><input type="radio" name="enabled" value="yes" {% if not policy or policy.enabled %}checked{% endif %}/> Yes</label>
     <label><input type="radio" name="enabled" value="no" {% if policy and not policy.enabled %}checked{% endif %}/> No</label>
   </p>
   <p><button type="submit">{% if policy %}Save{% else %}Create{% endif %}</button></p>
+  </fieldset>
 </form>
+{% if not auth_ctx.can_write() %}
+<p class="muted">Read-only role: form is disabled; use REST with an operator or admin key to change policies.</p>
+{% endif %}
 {% endblock %}

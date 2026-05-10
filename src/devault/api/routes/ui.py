@@ -1,14 +1,16 @@
 from __future__ import annotations
 
+import json
 import uuid
 from pathlib import Path
+from typing import Literal
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import ValidationError
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from devault.api.deps import (
@@ -21,7 +23,10 @@ from devault.api.deps import (
     verify_ui_basic_auth,
 )
 from devault.api.schemas import (
+    AgentPoolCreate,
+    AgentPoolMembersPut,
     CreateBackupJobBody,
+    CreatePathPrecheckJobBody,
     CreateRestoreDrillJobBody,
     CreateRestoreJobBody,
     FileBackupConfigV1,
@@ -34,12 +39,33 @@ from devault.api.schemas import (
     TenantCreate,
     TenantPatch,
 )
-from devault.api.presenters import edge_agent_to_out
-from devault.db.models import Artifact, EdgeAgent, Job, Policy, RestoreDrillSchedule, Schedule, Tenant
+from devault.api.presenters import edge_agent_to_out, tenant_scoped_agents_for_tenant
+from devault.db.models import (
+    AgentEnrollment,
+    AgentPool,
+    Artifact,
+    EdgeAgent,
+    Job,
+    Policy,
+    RestoreDrillSchedule,
+    Schedule,
+    Tenant,
+)
 from devault.security.agent_grpc_session import revoke_all_grpc_sessions_for_agent
 from devault.security.auth_context import AuthContext
 from devault.settings import get_settings
 from devault.services import control as control_svc
+from devault.services.tenant_backup_allowlist import union_backup_path_allowlist_for_tenant
+from devault.services.agent_enrollment import get_enrollment
+from devault.services.policy_execution_binding import replace_pool_members
+
+
+def _agent_pools_for_tenant(db: Session, tenant_id: uuid.UUID) -> list[AgentPool]:
+    return list(
+        db.scalars(
+            select(AgentPool).where(AgentPool.tenant_id == tenant_id).order_by(AgentPool.name.asc()),
+        ).all(),
+    )
 
 _PKG = Path(__file__).resolve().parent.parent.parent
 templates = Jinja2Templates(directory=str(_PKG / "web" / "templates"))
@@ -112,6 +138,7 @@ def _tpl(
 ) -> HTMLResponse:
     ctx = dict(request=request, **page)
     ctx.update(_base_nav_kwargs(tenant=tenant, db=db, auth=auth))
+    ctx["tenant"] = tenant  # same object as nav `current_tenant`; templates expect the name `tenant`
     return templates.TemplateResponse(request, name, ctx)
 
 
@@ -153,6 +180,29 @@ def _http_err_detail(exc: HTTPException) -> str:
     return str(d)
 
 
+@router.get("/tenant-agents", response_class=HTMLResponse, dependencies=_ui_dep)
+def ui_tenant_agents(
+    request: Request,
+    db: Session = Depends(get_db),
+    tenant: Tenant = Depends(get_effective_tenant_ui),
+    auth: AuthContext = Depends(verify_ui_basic_auth),
+) -> HTMLResponse:
+    """Agents enrolled for the current UI tenant (subset of fleet), with Heartbeat snapshot when known."""
+    rows = tenant_scoped_agents_for_tenant(db, tenant.id)
+    union_al = union_backup_path_allowlist_for_tenant(db, tenant.id)
+    return _tpl(
+        request,
+        "tenant_agents.html",
+        tenant=tenant,
+        db=db,
+        auth=auth,
+        agents=rows,
+        allowlist_union=union_al,
+        flash=request.query_params.get("flash"),
+        error=request.query_params.get("error"),
+    )
+
+
 @router.get("/agents", response_class=HTMLResponse, dependencies=_ui_dep)
 def ui_agents(
     request: Request,
@@ -164,7 +214,18 @@ def ui_agents(
     rows = list(
         db.scalars(select(EdgeAgent).order_by(EdgeAgent.last_seen_at.desc()).limit(200)).all()
     )
-    agents_out = [edge_agent_to_out(r) for r in rows]
+    ids = [r.id for r in rows]
+    enr_map: dict[uuid.UUID, AgentEnrollment] = {}
+    if ids:
+        enr_rows = list(db.scalars(select(AgentEnrollment).where(AgentEnrollment.agent_id.in_(ids))).all())
+        enr_map = {e.agent_id: e for e in enr_rows}
+
+    def _allowed(enr: AgentEnrollment | None) -> list[uuid.UUID] | None:
+        if enr is None:
+            return None
+        return [uuid.UUID(str(x)) for x in (enr.allowed_tenant_ids or [])]
+
+    agents_out = [edge_agent_to_out(r, allowed_tenant_ids=_allowed(enr_map.get(r.id))) for r in rows]
     return _tpl(
         request,
         "agents.html",
@@ -184,11 +245,147 @@ def ui_agent_revoke_grpc_sessions(
     _admin: AuthContext = Depends(require_admin_ui),
 ) -> RedirectResponse:
     del _admin
-    if db.get(EdgeAgent, agent_id) is None:
+    if db.get(EdgeAgent, agent_id) is None and get_enrollment(db, agent_id) is None:
         return _redirect("/ui/agents", error="agent not found")
     settings = get_settings()
     gen = revoke_all_grpc_sessions_for_agent(settings.redis_url, agent_id)
     return _redirect("/ui/agents", flash=f"gRPC sessions revoked (generation={gen}).")
+
+
+@router.get("/agent-pools", response_class=HTMLResponse, dependencies=_ui_dep)
+def ui_agent_pools_list(
+    request: Request,
+    db: Session = Depends(get_db),
+    tenant: Tenant = Depends(get_effective_tenant_ui),
+    auth: AuthContext = Depends(verify_ui_basic_auth),
+) -> HTMLResponse:
+    rows = _agent_pools_for_tenant(db, tenant.id)
+    return _tpl(
+        request,
+        "agent_pools.html",
+        tenant=tenant,
+        db=db,
+        auth=auth,
+        pools=rows,
+        flash=request.query_params.get("flash"),
+        error=request.query_params.get("error"),
+    )
+
+
+@router.get("/agent-pools/new", response_class=HTMLResponse, dependencies=_ui_dep)
+def ui_agent_pools_new_form(
+    request: Request,
+    db: Session = Depends(get_db),
+    tenant: Tenant = Depends(get_effective_tenant_ui),
+    auth: AuthContext = Depends(verify_ui_basic_auth),
+) -> HTMLResponse:
+    return _tpl(
+        request,
+        "agent_pool_new.html",
+        tenant=tenant,
+        db=db,
+        auth=auth,
+        flash=None,
+        error=None,
+    )
+
+
+@router.post("/agent-pools/new", dependencies=_ui_dep)
+def ui_agent_pools_create(
+    name: str = Form(...),
+    db: Session = Depends(get_db),
+    tenant: Tenant = Depends(get_effective_tenant_ui),
+    _w: AuthContext = Depends(require_write_ui),
+) -> RedirectResponse:
+    del _w
+    try:
+        body = AgentPoolCreate(name=name.strip())
+        pool = AgentPool(tenant_id=tenant.id, name=body.name)
+        db.add(pool)
+        db.commit()
+        db.refresh(pool)
+        return _redirect(f"/ui/agent-pools/{pool.id}/members", flash="Pool created. Add members below.")
+    except (ValidationError, ValueError) as e:
+        return _redirect("/ui/agent-pools/new", error=str(e)[:800])
+
+
+@router.get("/agent-pools/{pool_id}/members", response_class=HTMLResponse, dependencies=_ui_dep)
+def ui_agent_pool_members_form(
+    request: Request,
+    pool_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    tenant: Tenant = Depends(get_effective_tenant_ui),
+    auth: AuthContext = Depends(verify_ui_basic_auth),
+) -> HTMLResponse:
+    pool = db.get(AgentPool, pool_id)
+    if pool is None or pool.tenant_id != tenant.id:
+        raise HTTPException(404, detail="pool not found")
+    members = list(
+        db.scalars(select(AgentPoolMember).where(AgentPoolMember.pool_id == pool_id)).all(),
+    )
+    payload = [
+        {"agent_id": str(m.agent_id), "weight": m.weight, "sort_order": m.sort_order}
+        for m in sorted(members, key=lambda x: (x.sort_order, str(x.agent_id)))
+    ]
+    return _tpl(
+        request,
+        "agent_pool_members.html",
+        tenant=tenant,
+        db=db,
+        auth=auth,
+        pool=pool,
+        members_json=json.dumps(payload, indent=2),
+        flash=request.query_params.get("flash"),
+        error=request.query_params.get("error"),
+    )
+
+
+@router.post("/agent-pools/{pool_id}/members", dependencies=_ui_dep)
+def ui_agent_pool_members_save(
+    pool_id: uuid.UUID,
+    members_json: str = Form(...),
+    db: Session = Depends(get_db),
+    tenant: Tenant = Depends(get_effective_tenant_ui),
+    _w: AuthContext = Depends(require_write_ui),
+) -> RedirectResponse:
+    del _w
+    pool = db.get(AgentPool, pool_id)
+    if pool is None or pool.tenant_id != tenant.id:
+        return _redirect("/ui/agent-pools", error="pool not found")
+    try:
+        raw = json.loads(members_json or "[]")
+        if not isinstance(raw, list):
+            raise ValueError("members_json must be a JSON array")
+        body = AgentPoolMembersPut(members=raw)
+        tuples = [(m.agent_id, m.weight, m.sort_order) for m in body.members]
+        replace_pool_members(db, pool_id, tenant_id=tenant.id, members=tuples)
+        db.commit()
+        return _redirect(f"/ui/agent-pools/{pool_id}/members", flash="Members saved.")
+    except (json.JSONDecodeError, ValidationError, ValueError, HTTPException) as e:
+        detail = getattr(e, "detail", None) if isinstance(e, HTTPException) else str(e)
+        err = detail if isinstance(detail, str) else str(e)
+        return _redirect(f"/ui/agent-pools/{pool_id}/members", error=err[:800])
+
+
+@router.post("/agent-pools/{pool_id}/delete", dependencies=_ui_dep)
+def ui_agent_pool_delete(
+    pool_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    tenant: Tenant = Depends(get_effective_tenant_ui),
+    _w: AuthContext = Depends(require_write_ui),
+) -> RedirectResponse:
+    del _w
+    pool = db.get(AgentPool, pool_id)
+    if pool is None or pool.tenant_id != tenant.id:
+        return _redirect("/ui/agent-pools", error="pool not found")
+    db.execute(
+        update(Policy)
+        .where(Policy.tenant_id == tenant.id, Policy.bound_agent_pool_id == pool_id)
+        .values(bound_agent_pool_id=None),
+    )
+    db.delete(pool)
+    db.commit()
+    return _redirect("/ui/agent-pools", flash="Pool deleted.")
 
 
 @router.get("/jobs", response_class=HTMLResponse, dependencies=_ui_dep)
@@ -372,6 +569,7 @@ def ui_policies_new(
     tenant: Tenant = Depends(get_effective_tenant_ui),
     auth: AuthContext = Depends(verify_ui_basic_auth),
 ) -> HTMLResponse:
+    binding_agents = tenant_scoped_agents_for_tenant(db, tenant.id)
     return _tpl(
         request,
         "policy_form.html",
@@ -379,6 +577,10 @@ def ui_policies_new(
         db=db,
         auth=auth,
         policy=None,
+        agent_pools=_agent_pools_for_tenant(db, tenant.id),
+        binding_agents=binding_agents,
+        orphan_bound_agent_id=None,
+        allowlist_union=union_backup_path_allowlist_for_tenant(db, tenant.id),
         flash=None,
         error=None,
         heading="New policy",
@@ -396,6 +598,9 @@ def ui_policies_create(
     object_lock_retain_days: str = Form(""),
     retention_days: str = Form(""),
     enabled: str = Form("yes"),
+    exec_bind: str = Form("none"),
+    bound_agent_id: str = Form(""),
+    bound_agent_pool_id: str = Form(""),
     db: Session = Depends(get_db),
     tenant: Tenant = Depends(get_effective_tenant_ui),
     _w: AuthContext = Depends(require_write_ui),
@@ -410,11 +615,29 @@ def ui_policies_create(
             object_lock_mode=object_lock_mode,
             object_lock_retain_days_raw=object_lock_retain_days,
         )
+        ba: uuid.UUID | None = None
+        bp: uuid.UUID | None = None
+        mode = (exec_bind or "none").strip().lower()
+        if mode == "agent":
+            raw = (bound_agent_id or "").strip()
+            if not raw:
+                return _redirect(
+                    "/ui/policies/new",
+                    error="Select an enrolled agent when binding mode is Single Agent (PUT enrollment first if the list is empty).",
+                )
+            ba = uuid.UUID(raw)
+        elif mode == "pool":
+            raw = (bound_agent_pool_id or "").strip()
+            if not raw:
+                return _redirect("/ui/policies/new", error="Select a pool when binding mode is Agent pool.")
+            bp = uuid.UUID(raw)
         body = PolicyCreate(
             name=name.strip(),
             plugin="file",
             config=cfg,
             enabled=enabled == "yes",
+            bound_agent_id=ba,
+            bound_agent_pool_id=bp,
         )
         control_svc.create_policy(db, body, tenant_id=tenant.id)
         return _redirect("/ui/policies", flash="Policy created.")
@@ -435,6 +658,9 @@ def ui_policies_edit(
     p = db.get(Policy, policy_id)
     if p is None or p.tenant_id != tenant.id:
         raise HTTPException(404, detail="policy not found")
+    binding_agents = tenant_scoped_agents_for_tenant(db, tenant.id)
+    bound_ids = {a.id for a in binding_agents}
+    orphan_bound = p.bound_agent_id if p.bound_agent_id and p.bound_agent_id not in bound_ids else None
     return _tpl(
         request,
         "policy_form.html",
@@ -442,6 +668,10 @@ def ui_policies_edit(
         db=db,
         auth=auth,
         policy=p,
+        agent_pools=_agent_pools_for_tenant(db, tenant.id),
+        binding_agents=binding_agents,
+        orphan_bound_agent_id=orphan_bound,
+        allowlist_union=union_backup_path_allowlist_for_tenant(db, tenant.id),
         flash=None,
         error=None,
         heading=f"Edit policy — {p.name}",
@@ -460,6 +690,9 @@ def ui_policies_update(
     object_lock_retain_days: str = Form(""),
     retention_days: str = Form(""),
     enabled: str = Form("yes"),
+    exec_bind: str = Form("none"),
+    bound_agent_id: str = Form(""),
+    bound_agent_pool_id: str = Form(""),
     db: Session = Depends(get_db),
     tenant: Tenant = Depends(get_effective_tenant_ui),
     _w: AuthContext = Depends(require_write_ui),
@@ -474,7 +707,29 @@ def ui_policies_update(
             object_lock_mode=object_lock_mode,
             object_lock_retain_days_raw=object_lock_retain_days,
         )
-        patch = PolicyPatch(name=name.strip(), config=cfg, enabled=enabled == "yes")
+        ba: uuid.UUID | None = None
+        bp: uuid.UUID | None = None
+        mode = (exec_bind or "none").strip().lower()
+        if mode == "agent":
+            raw = (bound_agent_id or "").strip()
+            if not raw:
+                return _redirect(
+                    f"/ui/policies/{policy_id}/edit",
+                    error="Select an enrolled agent when binding mode is Single Agent (PUT enrollment first if the list is empty).",
+                )
+            ba = uuid.UUID(raw)
+        elif mode == "pool":
+            raw = (bound_agent_pool_id or "").strip()
+            if not raw:
+                return _redirect(f"/ui/policies/{policy_id}/edit", error="Select a pool for Agent pool mode.")
+            bp = uuid.UUID(raw)
+        patch = PolicyPatch(
+            name=name.strip(),
+            config=cfg,
+            enabled=enabled == "yes",
+            bound_agent_id=ba,
+            bound_agent_pool_id=bp,
+        )
         control_svc.patch_policy(db, policy_id, patch, tenant_id=tenant.id)
         return _redirect("/ui/policies", flash="Policy updated.")
     except HTTPException as e:
@@ -508,6 +763,23 @@ def ui_run_policy_backup(
         body = CreateBackupJobBody(plugin="file", policy_id=policy_id)
         job = control_svc.create_backup_job(db, body, tenant_id=tenant.id)
         return _redirect("/ui/jobs", flash=f"Backup queued: job {job.id}")
+    except HTTPException as e:
+        return _redirect("/ui/policies", error=_http_err_detail(e))
+    except ValidationError as e:
+        return _redirect("/ui/policies", error=str(e)[:800])
+
+
+@router.post("/policies/run-path-precheck", dependencies=_ui_dep)
+def ui_run_policy_path_precheck(
+    policy_id: uuid.UUID = Form(...),
+    db: Session = Depends(get_db),
+    tenant: Tenant = Depends(get_effective_tenant_ui),
+    _w: AuthContext = Depends(require_write_ui),
+) -> RedirectResponse:
+    try:
+        body = CreatePathPrecheckJobBody(policy_id=policy_id)
+        job = control_svc.create_path_precheck_job(db, body, tenant_id=tenant.id)
+        return _redirect("/ui/jobs", flash=f"Path precheck queued: job {job.id}")
     except HTTPException as e:
         return _redirect("/ui/policies", error=_http_err_detail(e))
     except ValidationError as e:
@@ -924,11 +1196,20 @@ def _patch_tenant_from_form(
     s3_bucket: str,
     s3_assume_role_arn: str,
     s3_assume_role_external_id: str,
+    policy_paths_allowlist_mode: str,
 ) -> TenantPatch:
     kms = (kms_envelope_key_id or "").strip()
     bkt = (s3_bucket or "").strip()
     arn = (s3_assume_role_arn or "").strip()
     ext = (s3_assume_role_external_id or "").strip()
+    mode_raw = (policy_paths_allowlist_mode or "off").strip().lower()
+    mode_lit: Literal["off", "enforce", "warn"]
+    if mode_raw == "enforce":
+        mode_lit = "enforce"
+    elif mode_raw == "warn":
+        mode_lit = "warn"
+    else:
+        mode_lit = "off"
     return TenantPatch(
         name=name.strip(),
         require_encrypted_artifacts=(require_encrypted_artifacts == "yes"),
@@ -936,6 +1217,7 @@ def _patch_tenant_from_form(
         s3_bucket=bkt if bkt else "",
         s3_assume_role_arn=arn if arn else "",
         s3_assume_role_external_id=ext if ext else "",
+        policy_paths_allowlist_mode=mode_lit,
     )
 
 
@@ -948,6 +1230,7 @@ def ui_tenants_update(
     s3_bucket: str = Form(""),
     s3_assume_role_arn: str = Form(""),
     s3_assume_role_external_id: str = Form(""),
+    policy_paths_allowlist_mode: str = Form("off"),
     db: Session = Depends(get_db),
     _admin: AuthContext = Depends(require_admin_ui),
 ) -> RedirectResponse:
@@ -960,6 +1243,7 @@ def ui_tenants_update(
             s3_bucket=s3_bucket,
             s3_assume_role_arn=s3_assume_role_arn,
             s3_assume_role_external_id=s3_assume_role_external_id,
+            policy_paths_allowlist_mode=policy_paths_allowlist_mode,
         )
         control_svc.patch_tenant(db, edited_id, patch)
         return _redirect("/ui/tenants", flash="Tenant updated.")

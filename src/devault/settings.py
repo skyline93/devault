@@ -192,6 +192,13 @@ class Settings(BaseSettings):
 
     job_lease_ttl_seconds: int = Field(default=1800, ge=60)
     presign_ttl_seconds: int = Field(default=3600, ge=60)
+    fleet_agent_stale_seconds: int = Field(
+        default=900,
+        ge=60,
+        le=86400 * 7,
+        description="edge_agents last_seen older than this are counted in devault_edge_agents_stale_count (metrics)",
+    )
+
     job_stuck_threshold_seconds: int = Field(
         default=86400,
         ge=300,

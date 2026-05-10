@@ -37,9 +37,11 @@
 <body>
   <nav>
     <a href="/ui/agents">Agents</a>
+    <a href="/ui/tenant-agents">Tenant agents</a>
     <a href="/ui/jobs">Jobs</a>
     <a href="/ui/artifacts">Artifacts</a>
     <a href="/ui/policies">Policies</a>
+    <a href="/ui/agent-pools">Agent pools</a>
     <a href="/ui/schedules">Schedules</a>
     <a href="/ui/restore-drill-schedules">Restore drills</a>
     {% if auth_ctx.is_admin %}
@@ -48,6 +50,7 @@
     <a href="/docs">Swagger UI</a>
     <a href="/metrics">Metrics</a>
     <span class="nav-right">
+      {% if not auth_ctx.can_write() %}<span class="muted" title="Operator read-only; write via REST with operator/admin key">read-only</span>{% endif %}
       <span class="muted" title="Current UI tenant context">
         {% if current_tenant %}<strong>{{ current_tenant.slug }}</strong>{% else %}<span>—</span>{% endif %}
       </span>

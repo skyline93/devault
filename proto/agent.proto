@@ -47,6 +47,14 @@ message HeartbeatRequest {
   string agent_release = 2;
   string proto_package = 3;
   string git_commit = 4;
+  // When snapshot_schema_version >= 1, control plane persists the following snapshot fields
+  // (empty strings / empty repeated clear to null where applicable). Version 0 = legacy Agent: do not touch snapshot columns.
+  string hostname = 5;
+  string os = 6;
+  string region = 7;
+  string env = 8;
+  repeated string backup_path_allowlist = 9;
+  int32 snapshot_schema_version = 10;
 }
 
 message HeartbeatReply {
@@ -147,6 +155,8 @@ message CompleteJobRequest {
   string bundle_multipart_parts_json = 11;
   // Restore-drill success: JSON object mirroring the on-disk `.devault-drill-report.json` (optional).
   string result_summary_json = 12;
+  // Optional host identity at CompleteJob time (audit); control plane may fall back to edge_agents snapshot.
+  string agent_hostname = 13;
 }
 
 message CompleteJobReply {

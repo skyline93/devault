@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import logging
 import os
+import platform
+import socket
 import shutil
 import sys
 import time
@@ -33,6 +35,7 @@ from devault.plugins.file.plugin import (
     upload_backup_via_storage_grant,
     write_multipart_checkpoint,
 )
+from devault.services.path_precheck import path_precheck_report
 from devault.settings import Settings, get_settings
 
 logger = logging.getLogger(__name__)
@@ -169,6 +172,7 @@ def _run_one_job(
     job_id = lease.job_id
     md = _metadata(bearer)
     cfg = json.loads(lease.config_json)
+    host_snapshot = socket.gethostname()
     try:
         if lease.kind == JobKind.BACKUP.value:
             job_stub = _job_view(job_id, lease, cfg)
@@ -311,6 +315,7 @@ def _run_one_job(
                         checksum_sha256=outcome.checksum_sha256,
                         bundle_multipart_upload_id=g.bundle_multipart_upload_id or "",
                         bundle_multipart_parts_json=parts_json or "",
+                        agent_hostname=host_snapshot,
                     ),
                     metadata=md,
                 )
@@ -353,6 +358,22 @@ def _run_one_job(
                     job_id=job_id,
                     success=True,
                     result_summary_json=json.dumps(rep) if rep else "",
+                    agent_hostname=host_snapshot,
+                ),
+                metadata=md,
+            )
+        elif lease.kind == JobKind.PATH_PRECHECK.value:
+            all_ok, report = path_precheck_report(list(cfg.get("paths") or []))
+            report["checked_at_agent_release"] = __version__
+            stub.CompleteJob(
+                agent_pb2.CompleteJobRequest(
+                    agent_id=agent_id,
+                    job_id=job_id,
+                    success=all_ok,
+                    error_code="" if all_ok else "PATH_PRECHECK_FAILED",
+                    error_message="" if all_ok else "one or more paths missing or not readable",
+                    result_summary_json=json.dumps(report),
+                    agent_hostname=host_snapshot,
                 ),
                 metadata=md,
             )
@@ -367,6 +388,7 @@ def _run_one_job(
                 success=False,
                 error_code=e.code,
                 error_message=e.message,
+                agent_hostname=host_snapshot,
             ),
             metadata=md,
         )
@@ -414,12 +436,21 @@ def run_forever() -> None:
         try:
             md = _metadata(bearer)
             rel, pkg, gc = _agent_identity_fields(s)
+            prefixes = s.allowed_prefix_list or []
+            region = (os.environ.get("DEVAULT_AGENT_REGION") or "").strip()
+            env_tag = (os.environ.get("DEVAULT_AGENT_ENV") or s.env_name or "").strip()
             hb = stub.Heartbeat(
                 agent_pb2.HeartbeatRequest(
                     agent_id=agent_id,
                     agent_release=rel,
                     proto_package=pkg,
                     git_commit=gc,
+                    hostname=socket.gethostname(),
+                    os=f"{platform.system()} {platform.release()}".strip(),
+                    region=region,
+                    env=env_tag,
+                    backup_path_allowlist=prefixes,
+                    snapshot_schema_version=1,
                 ),
                 metadata=md,
             )

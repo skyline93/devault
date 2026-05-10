@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from devault.api.cronutil import validate_cron_expression
 from devault.api.schemas import (
     CreateBackupJobBody,
+    CreatePathPrecheckJobBody,
     CreateRestoreDrillJobBody,
     CreateRestoreJobBody,
     FileBackupConfigV1,
@@ -28,6 +29,8 @@ from devault.core.enums import JobKind, JobStatus, JobTrigger, PluginName
 from devault.core.locking import release_policy_job_lock
 from devault.db.models import Artifact, Job, Policy, RestoreDrillSchedule, Schedule, Tenant
 from devault.plugins.file.encryption_policy import encryption_required
+from devault.services.policy_execution_binding import validate_policy_execution_binding
+from devault.services.tenant_backup_allowlist import validate_policy_paths_against_tenant_allowlist
 from devault.settings import get_settings
 
 
@@ -69,6 +72,8 @@ def patch_tenant(db: Session, tenant_id: uuid.UUID, body: TenantPatch) -> Tenant
         t.s3_assume_role_arn = body.s3_assume_role_arn.strip() or None
     if body.s3_assume_role_external_id is not None:
         t.s3_assume_role_external_id = body.s3_assume_role_external_id.strip() or None
+    if body.policy_paths_allowlist_mode is not None:
+        t.policy_paths_allowlist_mode = body.policy_paths_allowlist_mode
     db.commit()
     db.refresh(t)
     return t
@@ -78,12 +83,21 @@ def create_policy(db: Session, body: PolicyCreate, *, tenant_id: uuid.UUID) -> P
     if body.plugin != "file":
         raise HTTPException(400, detail="Only plugin=file is supported")
     validate_backup_config_for_tenant(db, tenant_id, body.config)
+    validate_policy_paths_against_tenant_allowlist(db, tenant_id, body.config.paths)
+    validate_policy_execution_binding(
+        db,
+        tenant_id=tenant_id,
+        bound_agent_id=body.bound_agent_id,
+        bound_agent_pool_id=body.bound_agent_pool_id,
+    )
     p = Policy(
         tenant_id=tenant_id,
         name=body.name,
         plugin=PluginName.FILE.value,
         config=body.config.model_dump(mode="json"),
         enabled=body.enabled,
+        bound_agent_id=body.bound_agent_id,
+        bound_agent_pool_id=body.bound_agent_pool_id,
     )
     db.add(p)
     db.commit()
@@ -99,9 +113,30 @@ def patch_policy(db: Session, policy_id: uuid.UUID, body: PolicyPatch, *, tenant
         p.name = body.name
     if body.config is not None:
         validate_backup_config_for_tenant(db, tenant_id, body.config)
+        validate_policy_paths_against_tenant_allowlist(db, tenant_id, body.config.paths)
         p.config = body.config.model_dump(mode="json")
     if body.enabled is not None:
         p.enabled = body.enabled
+    upd = body.model_dump(exclude_unset=True)
+    if "bound_agent_id" in upd or "bound_agent_pool_id" in upd:
+        ba = p.bound_agent_id
+        bp = p.bound_agent_pool_id
+        if "bound_agent_id" in upd:
+            ba = upd["bound_agent_id"]
+        if "bound_agent_pool_id" in upd:
+            bp = upd["bound_agent_pool_id"]
+        if ba is not None:
+            bp = None
+        elif bp is not None:
+            ba = None
+        validate_policy_execution_binding(
+            db,
+            tenant_id=tenant_id,
+            bound_agent_id=ba,
+            bound_agent_pool_id=bp,
+        )
+        p.bound_agent_id = ba
+        p.bound_agent_pool_id = bp
     p.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(p)
@@ -223,6 +258,40 @@ def create_backup_job(db: Session, body: CreateBackupJobBody, *, tenant_id: uuid
     return job
 
 
+def create_path_precheck_job(db: Session, body: CreatePathPrecheckJobBody, *, tenant_id: uuid.UUID) -> Job:
+    """Enqueue a read-only Agent job that checks policy backup paths exist and are readable."""
+    pol = db.get(Policy, body.policy_id)
+    if pol is None or pol.tenant_id != tenant_id:
+        raise HTTPException(status_code=404, detail="policy not found")
+    if not pol.enabled:
+        raise HTTPException(status_code=400, detail="policy is disabled")
+    if pol.plugin != PluginName.FILE.value:
+        raise HTTPException(status_code=400, detail="only file policy supported")
+    raw_cfg = dict(pol.config or {})
+    if "version" not in raw_cfg:
+        raw_cfg["version"] = 1
+    cfg = FileBackupConfigV1.model_validate(raw_cfg)
+    snap = {
+        "version": 1,
+        "path_precheck": True,
+        "paths": [str(p) for p in cfg.paths],
+        "tenant_id": str(tenant_id),
+    }
+    job = Job(
+        tenant_id=tenant_id,
+        kind=JobKind.PATH_PRECHECK.value,
+        plugin=PluginName.FILE.value,
+        status=JobStatus.PENDING.value,
+        trigger=JobTrigger.MANUAL.value,
+        config_snapshot=snap,
+        policy_id=pol.id,
+    )
+    db.add(job)
+    db.commit()
+    db.refresh(job)
+    return job
+
+
 def create_restore_drill_job(db: Session, body: CreateRestoreDrillJobBody, *, tenant_id: uuid.UUID) -> Job:
     art = db.get(Artifact, body.artifact_id)
     if art is None or art.tenant_id != tenant_id:
@@ -313,6 +382,7 @@ def cancel_job(db: Session, job_id: uuid.UUID, *, tenant_id: uuid.UUID) -> Job:
             redis_url=settings.redis_url,
         )
     job.lease_agent_id = None
+    job.lease_agent_hostname = None
     job.lease_expires_at = None
     job.status = JobStatus.CANCELLED.value
     job.error_code = "CANCELLED"

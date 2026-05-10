@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Tenant agents · DeVault{% endblock %}
+{% block body %}
+<h1>Tenant agents</h1>
+{% if flash %}<p class="flash ok">{{ flash }}</p>{% endif %}
+{% if error %}<p class="flash err">{{ error }}</p>{% endif %}
+<p class="muted">
+  Agents whose <strong>enrollment</strong> lists this tenant (<code>{{ tenant.slug }}</code>), with the latest
+  <strong>Heartbeat</strong> snapshot when the Agent has checked in. For the platform-wide fleet (all <code>edge_agents</code>),
+  use <a href="/ui/agents">Agents</a>. REST: <code>GET /api/v1/tenant-agents</code> with the same tenant context as other resources
+  (<code>X-DeVault-Tenant-Id</code> or default slug).
+</p>
+<p class="muted">
+  <strong>Union of reported backup path prefixes</strong> (for policy UX / validation):
+  {% if allowlist_union %}<code>{{ allowlist_union | join(', ') }}</code>{% else %}<em>none yet</em> — Agents must Heartbeat with <code>snapshot_schema_version=1</code> and optional <code>DEVAULT_ALLOWED_PATH_PREFIXES</code>.{% endif %}
+</p>
+<table>
+  <thead>
+    <tr>
+      <th>Agent ID</th>
+      <th>Hostname</th>
+      <th>OS</th>
+      <th>Region</th>
+      <th>Env</th>
+      <th>Allowlist</th>
+      <th>Release</th>
+      <th>Last seen</th>
+      <th>Allowed tenants</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for a in agents %}
+    <tr>
+      <td><code>{{ a.id }}</code></td>
+      <td>{% if a.hostname %}{{ a.hostname }}{% else %}—{% endif %}</td>
+      <td>{% if a.os %}{{ a.os }}{% else %}—{% endif %}</td>
+      <td>{% if a.region %}{{ a.region }}{% else %}—{% endif %}</td>
+      <td>{% if a.env %}{{ a.env }}{% else %}—{% endif %}</td>
+      <td>{% if a.backup_path_allowlist %}<code>{{ a.backup_path_allowlist | join(', ') }}</code>{% else %}—{% endif %}</td>
+      <td>{% if a.agent_release %}{{ a.agent_release }}{% else %}—{% endif %}</td>
+      <td>{% if a.last_seen_at %}{{ a.last_seen_at }}{% else %}<span class="muted">never</span>{% endif %}</td>
+      <td><code>{{ a.allowed_tenant_ids | join(', ') }}</code></td>
+    </tr>
+    {% else %}
+    <tr><td colspan="9" class="muted">No agents are enrolled for this tenant yet.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

@@ -20,6 +20,38 @@ def test_heartbeat_reply_capabilities_roundtrip() -> None:
     assert list(m2.server_capabilities) == ["backup_file_v1", "multipart_upload"]
 
 
+def test_heartbeat_request_snapshot_roundtrip() -> None:
+    m = agent_pb2.HeartbeatRequest(
+        agent_id="00000000-0000-4000-8000-000000000001",
+        agent_release="0.4.0",
+        proto_package="devault.agent.v1",
+        git_commit="abc",
+        hostname="edge-1",
+        os="Linux 6.1",
+        region="us-east-1",
+        env="prod",
+        backup_path_allowlist=["/data", "/var/backups"],
+        snapshot_schema_version=1,
+    )
+    m2 = agent_pb2.HeartbeatRequest()
+    m2.ParseFromString(m.SerializeToString())
+    assert m2.snapshot_schema_version == 1
+    assert m2.hostname == "edge-1"
+    assert list(m2.backup_path_allowlist) == ["/data", "/var/backups"]
+
+
+def test_complete_job_request_agent_hostname_roundtrip() -> None:
+    m = agent_pb2.CompleteJobRequest(
+        agent_id="00000000-0000-4000-8000-000000000001",
+        job_id="00000000-0000-4000-8000-000000000002",
+        success=True,
+        agent_hostname="edge-a.example",
+    )
+    m2 = agent_pb2.CompleteJobRequest()
+    m2.ParseFromString(m.SerializeToString())
+    assert m2.agent_hostname == "edge-a.example"
+
+
 def test_register_reply_capabilities_roundtrip() -> None:
     m = agent_pb2.RegisterReply(
         ok=True,

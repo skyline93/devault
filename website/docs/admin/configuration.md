@@ -19,6 +19,7 @@ description: 常用环境变量分组说明
 | `DEVAULT_ENV_NAME` | 环境标签（指标等） |
 | `DEVAULT_DEFAULT_TENANT_SLUG` | 未带 `X-DeVault-Tenant-Id` 时按 slug 解析租户 |
 | `DEVAULT_JOB_STUCK_THRESHOLD_SECONDS` | 非终态作业「超窗」秒数，驱动 **`devault_jobs_overdue_nonterminal`**（见 [可观测性](./observability.md)） |
+| `DEVAULT_FLEET_AGENT_STALE_SECONDS` | **`edge_agents`** 超过该秒数未 **`last_seen_at`** 更新则计入 **`devault_edge_agents_stale_count`**（Prometheus 自定义采集器；告警见 `deploy/prometheus/alerts.yml`） |
 
 ### OIDC（可选，Bearer JWT）
 

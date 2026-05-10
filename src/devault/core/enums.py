@@ -7,6 +7,8 @@ class JobKind(StrEnum):
     BACKUP = "backup"
     RESTORE = "restore"
     RESTORE_DRILL = "restore_drill"
+    # Agent-only: verify policy paths exist/readable; no artifact upload (§十四-11).
+    PATH_PRECHECK = "path_precheck"
 
 
 class JobStatus(StrEnum):

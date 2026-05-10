@@ -69,6 +69,12 @@ HTTP_REQUESTS_TOTAL = Counter(
     ["method", "path_template"],
 )
 
+POLICY_ALLOWLIST_ENFORCE_REJECTS_TOTAL = Counter(
+    "devault_policy_allowlist_enforce_rejects_total",
+    "Policy paths rejected in enforce mode (paths outside enrolled Agents' allowlist union)",
+    ["tenant_id"],
+)
+
 BILLING_COMMITTED_BYTES_TOTAL = Counter(
     "devault_billing_committed_backup_bytes_total",
     "Declared backup artifact bytes on successful CompleteJob (usage / chargeback signal)",

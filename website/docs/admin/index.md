@@ -41,4 +41,4 @@ description: 运维文档阅读路径与适用范围
 2. [可观测性](./observability.md) 告警与指标  
 3. [存储调优](../storage/tuning.md)、[大对象](../storage/large-objects.md)、[STS](../storage/sts-assume-role.md)
 
-**Agent 版本与会话**：运维入口 [Agent 舰队](./agent-fleet.md)。
+**Agent 版本、租户登记与会话**：运维入口 [Agent 舰队](./agent-fleet.md)、[凭据生命周期 Runbook](./agent-credential-lifecycle.md)、[Agent 池与策略绑定](./agent-pools.md)。
