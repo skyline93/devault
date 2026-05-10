@@ -24,7 +24,8 @@ const BackupRunPage: React.FC = () => {
   }
 
   const summary = () => {
-    const v = form.getFieldsValue();
+    // Steps 会卸载中间步骤的 Form.Item；用 true 取回含已卸载字段在内的整表 store（与 rc-field-form 行为一致）。
+    const v = form.getFieldsValue(true);
     if (mode === 'policy') {
       const p = policies.find((x) => x.id === v.policy_id);
       return { mode: '按策略', policy: p ? `${p.name} (${p.id})` : v.policy_id };
@@ -33,8 +34,15 @@ const BackupRunPage: React.FC = () => {
   };
 
   const submit = async () => {
-    const v = await form.validateFields();
+    // 第三步无 policy_id/configJson 的 Form.Item 挂载；无参 validateFields 返回 {}，会导致未带 policy_id/config。
+    const namePaths =
+      mode === 'policy' ? (['mode', 'policy_id', 'idempotency_key'] as const) : (['mode', 'configJson', 'idempotency_key'] as const);
+    const v = await form.validateFields([...namePaths]);
     if (mode === 'policy') {
+      if (!v.policy_id) {
+        message.error('缺少策略，请返回上一步选择策略');
+        return;
+      }
       await request('/api/v1/jobs/backup', {
         method: 'POST',
         data: {
@@ -44,6 +52,10 @@ const BackupRunPage: React.FC = () => {
         },
       });
     } else {
+      if (v.configJson == null || String(v.configJson).trim() === '') {
+        message.error('缺少内联配置，请返回上一步填写 JSON');
+        return;
+      }
       let config: Record<string, unknown>;
       try {
         config = JSON.parse(v.configJson as string) as Record<string, unknown>;
@@ -160,7 +172,7 @@ const BackupRunPage: React.FC = () => {
                   </Descriptions.Item>
                 )}
                 <Descriptions.Item label="幂等键">
-                  {(form.getFieldValue('idempotency_key') as string) || '—'}
+                  {(form.getFieldsValue(true).idempotency_key as string) || '—'}
                 </Descriptions.Item>
               </Descriptions>
               <Space>
