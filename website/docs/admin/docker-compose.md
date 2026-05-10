@@ -15,6 +15,14 @@ cd deploy
 docker compose pull && docker compose up -d
 ```
 
+## 控制台 + IAM（本地手测，接近生产链路）
+
+仓库根目录执行 **`make demo-stack-up`**（或 `cd deploy` 后设置 **`DEVAULT_IMAGE=devault:local`** 并 **`docker compose --profile with-console up -d --build`**）：会构建当前代码中的控制面镜像并拉起 **postgres-iam / redis-iam / iam**、**api**（`DEVAULT_IAM_JWKS_URL` 指向容器内 **iam**）、**console**（同源 **`/iam-api`** 反代）。环境变量示例：**`deploy/.env.stack.example`**（可复制为 **`deploy/.env`**）。
+
+- 控制台：<http://127.0.0.1:8080/>  
+- IAM OpenAPI：<http://127.0.0.1:8100/docs>  
+- 控制面 API：<http://127.0.0.1:8000/docs>  
+
 ## 可选：多实例 `api`（gRPC 负载均衡）
 
 见 [gRPC 与 API 多实例部署](./grpc-multi-instance.md)。可使用 **`deploy/docker-compose.grpc-ha-example.yml`** 叠加。

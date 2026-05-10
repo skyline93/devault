@@ -11,7 +11,8 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
 from devault.db.models import Tenant
-from devault.security.iam_jwt import auth_context_from_iam_payload, try_decode_iam_bearer
+from devault.security import iam_jwt as iam_jwt_mod
+from devault.security.iam_jwt import auth_context_from_iam_payload, invalidate_iam_jwks_cache, try_decode_iam_bearer
 from devault.services.auth_session_payload import build_auth_session_out
 from devault.settings import Settings
 
@@ -36,6 +37,14 @@ def _settings_iam(pub_pem: bytes) -> Settings:
         iam_jwt_issuer="http://iam.test",
         iam_jwt_audience="devault-api",
     )
+
+
+def test_invalidate_iam_jwks_cache_clears_singleton() -> None:
+    iam_jwt_mod._py_jwk_client = MagicMock()  # type: ignore[attr-defined]
+    iam_jwt_mod._py_jwk_client_url = "http://example/.well-known/jwks.json"  # type: ignore[attr-defined]
+    invalidate_iam_jwks_cache()
+    assert iam_jwt_mod._py_jwk_client is None  # type: ignore[attr-defined]
+    assert iam_jwt_mod._py_jwk_client_url is None  # type: ignore[attr-defined]
 
 
 def test_try_decode_iam_bearer_human_operator() -> None:

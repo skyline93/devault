@@ -15,7 +15,7 @@ docker compose pull && docker compose up -d
 
 Then open **Swagger** at <http://127.0.0.1:8000/docs>. In Compose, database migrations run on **api** startup (`alembic upgrade head`).
 
-`docker-compose.yml` uses **pre-built images only** (`image: ${DEVAULT_IMAGE:-glf9832/devault:latest}` for api, scheduler, and agent). Override **`DEVAULT_IMAGE`** for another registry or tag. Build the image separately (`make docker-build-push`, CI, etc.); Compose does not run `build`.
+For **api**, **scheduler**, and **agent**, `docker-compose.yml` sets both **`image`** (default **`glf9832/devault:latest`**) and **`build`** (`deploy/Dockerfile`). A plain **`pull` + `up`** uses the pulled image; use **`up --build`** or **`make demo-stack-up`** to build **`devault:local`** from the repo (includes the latest Alembic revisions, including IAM default-tenant UUID alignment). Copy **`deploy/.env.stack.example`** to **`deploy/.env`** when you want Compose to load stack variables automatically.
 
 ### Remote install (no `git clone`)
 

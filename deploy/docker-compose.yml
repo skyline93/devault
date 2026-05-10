@@ -1,8 +1,18 @@
-# Pre-built images only (no compose `build`). Default app image: Docker Hub glf9832/devault.
+# 默认控制面镜像：Docker Hub ``glf9832/devault``；本仓库在 ``api`` / ``scheduler`` / ``agent`` 上声明了 ``build``，
+# 使用 ``docker compose up --build`` 时会从 ``deploy/Dockerfile`` 构建并打上 ``DEVAULT_IMAGE`` 标签（含最新 Alembic）。
+#
+# 模拟生产 + Web 控制台（IAM JWT、同源 /iam-api、默认租户与 IAM uuid 对齐迁移 **0019**）推荐一条命令：
+#
+#   cd deploy && cp -n .env.stack.example .env 2>/dev/null; \\
+#     DOCKER_BUILDKIT=1 DEVAULT_IMAGE=devault:local docker compose --profile with-console up -d --build
+#
+# 浏览器：<http://127.0.0.1:8080/> 控制台；<http://127.0.0.1:8100/docs> IAM；<http://127.0.0.1:8000/docs> API。
+# 首次注册 IAM 的用户为 **platform_admin**，可在控制台创建租户；默认租户 slug ``default`` 与 JWT 内 tid 一致。
+#
+# 等价快捷方式（仓库根目录）：``make demo-stack-up``
+#
 # Override: DEVAULT_IMAGE=registry.example.com/acme/devault:tag
-# Run: cd deploy && docker compose pull && docker compose up -d
-# Optional SPA：`docker compose --profile with-console build console && docker compose --profile with-console up -d` → :8080（十五-21 多阶段镜像）
-# Playwright 专用栈（源码构建 API+console）：`docker compose -f deploy/docker-compose.console-e2e.yml up -d --build`（十五-22）
+# Playwright 专用栈：`docker compose -f deploy/docker-compose.console-e2e.yml up -d --build`
 #
 # Remote agents (outside this compose network) need presigned S3 URLs they can reach. By default
 # DEVAULT_S3_ENDPOINT is http://minio:9000 (in-stack only). Set in .env or the shell, e.g.:
@@ -121,6 +131,9 @@ services:
 
   api:
     image: ${DEVAULT_IMAGE:-glf9832/devault:latest}
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
     command: >
       sh -c "alembic upgrade head &&
              uvicorn devault.api.main:app --host 0.0.0.0 --port 8000"
@@ -168,6 +181,9 @@ services:
 
   scheduler:
     image: ${DEVAULT_IMAGE:-glf9832/devault:latest}
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
     # Do not run alembic here: api already runs `alembic upgrade head` on startup.
     # Concurrent migrations from multiple containers race on CREATE alembic_version.
     command: devault-scheduler
@@ -204,6 +220,9 @@ services:
   # Auth: the agent obtains a gRPC bearer via Register using DEVAULT_GRPC_REGISTRATION_SECRET (must match api).
   agent:
     image: ${DEVAULT_IMAGE:-glf9832/devault:latest}
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
     command: devault-agent
     environment:
       # Stable id so migration 0011 can seed agent_enrollments → default tenant before first Register.

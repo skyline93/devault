@@ -12,8 +12,22 @@ from devault.settings import Settings
 
 logger = logging.getLogger(__name__)
 
-_jwks_client: PyJWKClient | None = None
-_jwks_client_url: str | None = None
+# Must not share a name with the accessor function: assigning a ``PyJWKClient`` instance to the same
+# module attribute would replace the function object (``global _jwks_client = PyJWKClient(...)`` bug).
+_py_jwk_client: PyJWKClient | None = None
+_py_jwk_client_url: str | None = None
+
+
+def invalidate_iam_jwks_cache() -> None:
+    """Drop cached :class:`PyJWKClient` so the next decode refetches ``/.well-known/jwks.json``.
+
+    IAM ``development`` starts with an ephemeral RSA keypair on each process restart while keeping the
+    same ``kid`` (``iam-1``). PyJWT's client may otherwise keep verifying against the old public key.
+    """
+
+    global _py_jwk_client, _py_jwk_client_url
+    _py_jwk_client = None
+    _py_jwk_client_url = None
 
 
 def iam_jwt_configured(settings: Settings) -> bool:
@@ -25,12 +39,12 @@ def iam_jwt_configured(settings: Settings) -> bool:
     return bool((settings.iam_jwks_url or "").strip())
 
 
-def _jwks_client(url: str) -> PyJWKClient:
-    global _jwks_client, _jwks_client_url
-    if _jwks_client is None or _jwks_client_url != url:
-        _jwks_client = PyJWKClient(url)
-        _jwks_client_url = url
-    return _jwks_client
+def _get_py_jwk_client(url: str) -> PyJWKClient:
+    global _py_jwk_client, _py_jwk_client_url
+    if _py_jwk_client is None or _py_jwk_client_url != url:
+        _py_jwk_client = PyJWKClient(url)
+        _py_jwk_client_url = url
+    return _py_jwk_client
 
 
 def decode_iam_access_token(raw_token: str, settings: Settings) -> dict[str, Any]:
@@ -50,15 +64,27 @@ def decode_iam_access_token(raw_token: str, settings: Settings) -> dict[str, Any
     jwks_url = (settings.iam_jwks_url or "").strip()
     if not jwks_url:
         raise jwt.InvalidTokenError("IAM JWKS URL or public key PEM required")
-    signing_key = _jwks_client(jwks_url).get_signing_key_from_jwt(raw_token)
-    return jwt.decode(
-        raw_token,
-        signing_key.key,
-        algorithms=["RS256"],
-        audience=audience,
-        issuer=issuer,
-        options=opts,
-    )
+
+    def _decode_with_client(client: PyJWKClient) -> dict[str, Any]:
+        signing_key = client.get_signing_key_from_jwt(raw_token)
+        return jwt.decode(
+            raw_token,
+            signing_key.key,
+            algorithms=["RS256"],
+            audience=audience,
+            issuer=issuer,
+            options=opts,
+        )
+
+    client = _get_py_jwk_client(jwks_url)
+    try:
+        return _decode_with_client(client)
+    except (jwt.InvalidSignatureError, jwt.DecodeError) as e:
+        # IAM dev: new RSA key but same ``kid`` — PyJWKClient keeps a cached JWK set and will still
+        # "find" iam-1 without refreshing (see jwt.PyJWKClient.get_signing_key). Drop our client and retry.
+        logger.info("IAM JWT verify failed (%s); invalidating JWKS client cache and retrying once", type(e).__name__)
+        invalidate_iam_jwks_cache()
+        return _decode_with_client(_get_py_jwk_client(jwks_url))
 
 
 def _perm_list(payload: dict[str, Any]) -> list[str]:

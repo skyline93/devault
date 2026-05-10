@@ -20,7 +20,7 @@ PLATFORMS ?=
 # Used only by docker-buildx-push (manifest list).
 PLATFORMS_MULTI ?= linux/amd64,linux/arm64
 
-.PHONY: help docker-build docker-push docker-build-push docker-buildx-push py-dist py-dist-clean agent-dist
+.PHONY: help docker-build docker-push docker-build-push docker-buildx-push py-dist py-dist-clean agent-dist demo-stack-up demo-stack-down
 
 help:
 	@echo "DeVault — image targets (registry-agnostic; set IMAGE to your full ref)"
@@ -49,6 +49,13 @@ help:
 	@echo "  make agent-dist"
 	@echo "      Alias for make py-dist (same wheel ships devault-agent)."
 	@echo ""
+	@echo "  make demo-stack-up"
+	@echo "      Build devault:local + compose (profile with-console): Postgres/Redis/MinIO/IAM/API/"
+	@echo "      scheduler/agent/console. Open http://127.0.0.1:8080/ for the SPA."
+	@echo ""
+	@echo "  make demo-stack-down"
+	@echo "      docker compose -f deploy/docker-compose.yml --profile with-console down"
+	@echo ""
 	@echo "Current default IMAGE=$(IMAGE)"
 
 docker-build:
@@ -73,3 +80,12 @@ py-dist-clean:
 	rm -rf "$(DISTDIR)" "$(VENV_BUILD)" *.egg-info
 
 agent-dist: py-dist
+
+# Full local stack for manual UI verification (IAM + console + api from Dockerfile).
+demo-stack-up:
+	@test -f deploy/.env || cp deploy/.env.stack.example deploy/.env
+	DOCKER_BUILDKIT=1 docker build -f $(DOCKERFILE) -t devault:local $(CONTEXT)
+	cd deploy && DOCKER_BUILDKIT=1 DEVAULT_IMAGE=devault:local DEVAULT_CONSOLE_IMAGE=devault-console:local docker compose --profile with-console up -d --build
+
+demo-stack-down:
+	cd deploy && docker compose --profile with-console down

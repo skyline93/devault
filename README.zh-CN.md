@@ -15,7 +15,7 @@ docker compose pull && docker compose up -d
 
 启动后可在本机访问 **Swagger**：<http://127.0.0.1:8000/docs>。数据库迁移在 Compose 中由 **api** 服务在启动时执行（`alembic upgrade head`）。
 
-`docker-compose.yml` **仅使用预构建镜像**（api / scheduler / agent 的 **`image: ${DEVAULT_IMAGE:-glf9832/devault:latest}`**）。更换仓库或标签请设置 **`DEVAULT_IMAGE`**。镜像需用 **`Makefile`**、CI 或 `docker build` 单独构建；Compose 中**没有** `build` 段。
+`docker-compose.yml` 中 **api / scheduler / agent** 同时声明了 **`image`**（默认 **`glf9832/devault:latest`**）与 **`build`**（`deploy/Dockerfile`）。仅 **`docker compose pull && up -d`** 时使用预拉取镜像；加上 **`--build`** 或执行 **`make demo-stack-up`** 会从源码构建 **`devault:local`** 并带上当前仓库的 Alembic 迁移（含 IAM 默认租户 id 对齐）。环境变量模板见 **`deploy/.env.stack.example`**（可复制为 **`deploy/.env`**）。
 
 ### 远程一键安装（无需 `git clone`）
 
