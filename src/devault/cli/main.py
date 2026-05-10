@@ -28,7 +28,7 @@ app.add_typer(agent_app, name="agent")
 
 def _client() -> httpx.Client:
     base = os.environ.get("DEVAULT_API_BASE_URL", "http://127.0.0.1:8000")
-    token = os.environ.get("DEVAULT_API_TOKEN")
+    token = (os.environ.get("DEVAULT_ACCESS_TOKEN") or "").strip()
     headers: dict[str, str] = {}
     if token:
         headers["Authorization"] = f"Bearer {token}"

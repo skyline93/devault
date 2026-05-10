@@ -1,5 +1,5 @@
-# Static reference (defaults: api:8000, iam:8100). Docker image uses **console-spa.conf.template**
-# with envsubst — see **deploy/Dockerfile.console** and **DEVAULT_CONSOLE_*_UPSTREAM**.
+# Served by official nginx image: envsubst replaces ${DEVAULT_CONSOLE_*_UPSTREAM} at container start.
+# Defaults set in Dockerfile.console / compose environment.
 
 server {
     listen 80;
@@ -11,7 +11,7 @@ server {
     gzip_types text/css application/javascript application/json;
 
     location /api/ {
-        proxy_pass http://api:8000;
+        proxy_pass http://${DEVAULT_CONSOLE_API_UPSTREAM};
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
@@ -20,43 +20,44 @@ server {
     }
 
     location = /openapi.json {
-        proxy_pass http://api:8000/openapi.json;
+        proxy_pass http://${DEVAULT_CONSOLE_API_UPSTREAM}/openapi.json;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
     }
 
     location /docs {
-        proxy_pass http://api:8000;
+        proxy_pass http://${DEVAULT_CONSOLE_API_UPSTREAM};
         proxy_http_version 1.1;
         proxy_set_header Host $host;
     }
 
     location /redoc {
-        proxy_pass http://api:8000;
+        proxy_pass http://${DEVAULT_CONSOLE_API_UPSTREAM};
         proxy_http_version 1.1;
         proxy_set_header Host $host;
     }
 
     location = /metrics {
-        proxy_pass http://api:8000/metrics;
+        proxy_pass http://${DEVAULT_CONSOLE_API_UPSTREAM}/metrics;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
     }
 
     location = /version {
-        proxy_pass http://api:8000/version;
+        proxy_pass http://${DEVAULT_CONSOLE_API_UPSTREAM}/version;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
     }
 
     location = /healthz {
-        proxy_pass http://api:8000/healthz;
+        proxy_pass http://${DEVAULT_CONSOLE_API_UPSTREAM}/healthz;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
     }
 
+    # Same-origin IAM as dev ``/iam-api`` → strip prefix (matches Umi proxy pathRewrite).
     location /iam-api/ {
-        proxy_pass http://iam:8100/;
+        proxy_pass http://${DEVAULT_CONSOLE_IAM_UPSTREAM}/;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;

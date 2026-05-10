@@ -54,7 +54,7 @@ class TenantOut(BaseModel):
     )
     sso_jit_provisioning: bool = Field(
         False,
-        description="When true with OIDC issuer+audience, valid Bearer JWTs may upsert ConsoleUser + membership.",
+        description="Reserved / documentation field; tenant users and memberships are managed in IAM.",
     )
     sso_saml_entity_id: str | None = Field(None, description="SAML SP/IdP metadata hint; assertion consumption not implemented in control plane.")
     sso_saml_acs_url: str | None = Field(None, description="SAML ACS URL hint for external IdP wiring.")
@@ -82,7 +82,7 @@ class TenantPatch(BaseModel):
 
 
 class SessionTenantRow(BaseModel):
-    """Tenant visibility for a human console user (§十六-06)."""
+    """Tenant visibility for a human console user authenticated via IAM."""
 
     tenant_id: uuid.UUID
     slug: str
@@ -93,54 +93,16 @@ class SessionTenantRow(BaseModel):
     )
     require_mfa_for_admins: bool = Field(
         False,
-        description="Mirrors tenant policy (§十六-09): tenant_admin must use TOTP when true.",
+        description="Mirrors tenant policy: elevated roles may require MFA at the IdP.",
     )
     sso_password_login_disabled: bool = Field(
         False,
-        description="When true, members who belong only to SSO-only tenants cannot use email/password login (§十六-12).",
-    )
-
-
-class TenantInvitationCreate(BaseModel):
-    email: str = Field(..., min_length=3, max_length=255)
-    role: Literal["tenant_admin", "operator", "auditor"] = Field(
-        ...,
-        description="Membership role granted when the invite is accepted.",
-    )
-
-    @field_validator("email")
-    @classmethod
-    def normalize_invite_email(cls, v: str) -> str:
-        s = v.strip().lower()
-        if "@" not in s or "." not in s.split("@")[-1]:
-            raise ValueError("invalid email")
-        return s
-
-
-class TenantInvitationOut(BaseModel):
-    id: uuid.UUID
-    tenant_id: uuid.UUID
-    email: str
-    role: Literal["tenant_admin", "operator", "auditor"]
-    created_at: datetime
-    expires_at: datetime
-    accepted_at: datetime | None = None
-
-    model_config = {"from_attributes": True}
-
-
-class TenantInvitationAcceptIn(BaseModel):
-    token: str = Field(..., min_length=10, max_length=512)
-    password: str | None = Field(
-        None,
-        min_length=12,
-        max_length=512,
-        description="Required when creating a new console user; omit when already logged in as the invited email.",
+        description="Mirrors tenant metadata (primarily for UI hints).",
     )
 
 
 class AuthSessionOut(BaseModel):
-    """Resolved principal for Cookie session or Bearer (or dev-open when authentication is disabled)."""
+    """Resolved principal for IAM Bearer JWT (or dev-open when IAM is not configured)."""
 
     role: Literal["admin", "operator", "auditor"] = Field(
         ...,
@@ -148,7 +110,7 @@ class AuthSessionOut(BaseModel):
     )
     principal_label: str = Field(
         ...,
-        description="Stable display / audit label (e.g. api-key name, legacy token, oidc:sub, user:email).",
+        description="Stable display / audit label (e.g. `iam:user:…`, `iam:platform:…`).",
     )
     allowed_tenant_ids: list[uuid.UUID] | None = Field(
         ...,
@@ -159,71 +121,18 @@ class AuthSessionOut(BaseModel):
     )
     principal_kind: Literal["platform", "tenant_user"] = Field(
         "platform",
-        description="platform = API key / legacy / OIDC Bearer; tenant_user = HTTP-only session cookie.",
+        description="platform = IAM service accounts / platform admins; tenant_user = IAM human user (`sub` UUID).",
     )
-    user_id: uuid.UUID | None = Field(None, description="Console user id when principal_kind is tenant_user.")
-    email: str | None = Field(None, description="Login email when principal_kind is tenant_user.")
+    user_id: uuid.UUID | None = Field(None, description="IAM user id when principal_kind is tenant_user.")
+    email: str | None = Field(None, description="Reserved; IAM humans may not expose email in this payload.")
     tenants: list[SessionTenantRow] | None = Field(
         None,
-        description="Per-tenant membership rows for human users; null for platform principals.",
+        description="Per-tenant rows for human users; null for platform principals.",
     )
     needs_mfa: bool = Field(
         False,
-        description="True when cookie session exists but TOTP second factor is still required.",
+        description="True when the IAM token indicates MFA is required but not satisfied.",
     )
-
-
-class AuthLoginIn(BaseModel):
-    email: str = Field(..., min_length=3, max_length=255)
-    password: str = Field(..., min_length=1, max_length=512)
-
-    @field_validator("email")
-    @classmethod
-    def normalize_email(cls, v: str) -> str:
-        s = v.strip().lower()
-        if "@" not in s or "." not in s.split("@")[-1]:
-            raise ValueError("invalid email")
-        return s
-
-
-class AuthRegisterIn(BaseModel):
-    email: str = Field(..., min_length=3, max_length=255)
-    password: str = Field(..., min_length=12, max_length=512)
-
-    @field_validator("email")
-    @classmethod
-    def normalize_email_reg(cls, v: str) -> str:
-        s = v.strip().lower()
-        if "@" not in s or "." not in s.split("@")[-1]:
-            raise ValueError("invalid email")
-        return s
-
-
-class PasswordResetRequestIn(BaseModel):
-    email: str = Field(..., min_length=3, max_length=255)
-
-    @field_validator("email")
-    @classmethod
-    def normalize_email_pr(cls, v: str) -> str:
-        return v.strip().lower()
-
-
-class PasswordResetConfirmIn(BaseModel):
-    token: str = Field(..., min_length=10, max_length=512)
-    new_password: str = Field(..., min_length=12, max_length=512)
-
-
-class MfaVerifyIn(BaseModel):
-    code: str = Field(..., min_length=6, max_length=16)
-
-
-class MfaEnrollConfirmIn(BaseModel):
-    code: str = Field(..., min_length=6, max_length=16)
-
-
-class MfaEnrollStartOut(BaseModel):
-    secret: str = Field(..., description="Base32 TOTP secret; also stored server-side until confirm.")
-    otpauth_uri: str
 
 
 class FileBackupConfigV1(BaseModel):

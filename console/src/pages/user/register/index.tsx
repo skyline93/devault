@@ -16,7 +16,7 @@ type IamTokenOut = {
   permissions: string[];
 };
 
-/** §十六-08：自助注册（需控制面 `DEVAULT_CONSOLE_SELF_REGISTRATION_ENABLED=true`）。 */
+/** 自助注册：IAM 模式下走 IAM API；否则为历史占位（控制面不再提供 `/auth/register`）。 */
 const SelfRegister: React.FC = () => {
   const { token } = theme.useToken();
   const { setInitialState } = useModel('@@initialState');
@@ -40,7 +40,7 @@ const SelfRegister: React.FC = () => {
         </Typography.Title>
         <Typography.Paragraph type="secondary" style={{ textAlign: 'center' }}>
           {isIamConsoleEnabled() ? (
-            <>使用独立 IAM 注册后将直接进入控制台（需 DeVault 已配置 IAM JWT 校验，如 DEVAULT_AUTH_SOURCE=iam）。 </>
+            <>使用独立 IAM 注册后将直接进入控制台（需 DeVault 已配置 <code>DEVAULT_IAM_JWT_*</code>）。 </>
           ) : (
             <>成功后需平台管理员分配租户成员资格。 </>
           )}

@@ -60,19 +60,8 @@ export async function getInitialState(): Promise<{
         credentials: 'include',
       });
     } catch {
-      const token = localStorage.getItem(STORAGE_BEARER_KEY);
-      if (!token) return undefined;
-      try {
-        return await maxRequest<API.CurrentUser>('/api/v1/auth/session', {
-          method: 'GET',
-          skipErrorHandler: true,
-          credentials: 'include',
-          headers: { Authorization: `Bearer ${token}` },
-        });
-      } catch {
-        localStorage.removeItem(STORAGE_BEARER_KEY);
-        return undefined;
-      }
+      localStorage.removeItem(STORAGE_BEARER_KEY);
+      return undefined;
     }
   };
 

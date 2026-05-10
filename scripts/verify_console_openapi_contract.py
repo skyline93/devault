@@ -29,33 +29,9 @@ def main() -> int:
         print(f"unexpected /ui routes in OpenAPI (Jinja 已下线): {ui_paths[:20]}", file=sys.stderr)
         failed = True
 
-    for p in (
-        "/api/v1/auth/csrf",
-        "/api/v1/auth/login",
-        "/api/v1/auth/logout",
-        "/api/v1/auth/session",
-        "/api/v1/auth/session/refresh",
-        "/api/v1/auth/register",
-        "/api/v1/auth/password-reset/request",
-        "/api/v1/auth/password-reset/confirm",
-        "/api/v1/auth/mfa/verify",
-        "/api/v1/auth/mfa/enroll/start",
-        "/api/v1/auth/mfa/enroll/confirm",
-        "/api/v1/auth/invitations/accept",
-    ):
-        if p not in paths:
-            print(f"missing path {p} (§十六 P1)", file=sys.stderr)
-            failed = True
-
-    inv_path = "/api/v1/tenants/{tenant_id}/invitations"
-    if inv_path not in paths:
-        print(f"missing path {inv_path} (§十六-11)", file=sys.stderr)
+    if "/api/v1/auth/session" not in paths:
+        print("missing path /api/v1/auth/session", file=sys.stderr)
         failed = True
-    else:
-        inv = paths.get(inv_path) or {}
-        if "post" not in inv or "get" not in inv:
-            print(f"{inv_path} must expose GET and POST (§十六-11)", file=sys.stderr)
-            failed = True
 
     if "/api/v1/jobs" not in paths:
         print("missing path /api/v1/jobs", file=sys.stderr)

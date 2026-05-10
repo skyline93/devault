@@ -64,10 +64,5 @@ class AuthContext:
 
 
 def dev_open_auth_context() -> AuthContext:
-    """When DEVAULT_API_TOKEN is unset (local dev), allow full access without Bearer."""
+    """When IAM JWT validation is not configured (local dev), allow full access without Bearer."""
     return AuthContext(role="admin", allowed_tenant_ids=None, principal_label="dev-open")
-
-
-def legacy_token_context() -> AuthContext:
-    """Single DEVAULT_API_TOKEN (legacy) acts as platform admin for all tenants."""
-    return AuthContext(role="admin", allowed_tenant_ids=None, principal_label="legacy-api-token")

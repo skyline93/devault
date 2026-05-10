@@ -1,18 +1,17 @@
 /**
- * 十五-22：为「切租户」冒烟准备第二租户（admin legacy token）。
- * 依赖可从宿主机访问的 API（Compose 映射 **:8000**）。
+ * 十五-22：为「切租户」冒烟准备第二租户。
+ * 默认假定控制面 **dev-open**（未配置 IAM）；若配置了 IAM，请设置 **E2E_API_TOKEN** 为有效 JWT。
  */
 import type { FullConfig } from '@playwright/test';
 
 async function globalSetup(_config: FullConfig) {
   const api = process.env.E2E_API_ORIGIN || 'http://127.0.0.1:8000';
-  const token = process.env.E2E_API_TOKEN || 'changeme';
+  const token = (process.env.E2E_API_TOKEN || '').trim();
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) headers.Authorization = `Bearer ${token}`;
   const r = await fetch(`${api}/api/v1/tenants`, {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
+    headers,
     body: JSON.stringify({ name: 'E2E Second', slug: 'e2e-second' }),
   });
   if (r.status !== 201 && r.status !== 409) {

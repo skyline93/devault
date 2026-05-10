@@ -34,7 +34,6 @@ export const errorConfig: RequestConfig = {
         if (typeof window !== 'undefined') {
           const { pathname, search, hash } = window.location;
           localStorage.removeItem(STORAGE_BEARER_KEY);
-          void fetch('/api/v1/auth/logout', { method: 'POST', credentials: 'include' }).catch(() => {});
           if (pathname !== loginPath) {
             const redirect = encodeURIComponent(pathname + search + hash);
             window.location.href = `${loginPath}?redirect=${redirect}`;

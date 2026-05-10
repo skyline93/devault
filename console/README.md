@@ -20,15 +20,15 @@
 | `npm run codegen` | **`openapi-typescript`** → **`src/openapi/api-types.d.ts`**。 |
 | `npm run codegen:full` | 导出 + codegen（需 **`python3`**）。 |
 | `npm run preview` | 本地预览 **`dist/`**（默认端口 **8001**）。 |
-| `npm run test:e2e` | **Playwright** 冒烟（**十五-22**）；需已启动控制面 + 控制台（推荐 **`deploy/docker-compose.console-e2e.yml`**），默认 **`E2E_BASE_URL=http://127.0.0.1:8080`**、**`E2E_API_ORIGIN=http://127.0.0.1:8000`**、**`E2E_API_TOKEN`** 与 Compose **`DEVAULT_API_TOKEN`** 一致。首次需 **`npx playwright install chromium`**。 |
+| `npm run test:e2e` | **Playwright** 冒烟（**十五-22**）；需已启动控制面 + 控制台（推荐 **`deploy/docker-compose.console-e2e.yml`**），默认 **`E2E_BASE_URL=http://127.0.0.1:8080`**、**`E2E_API_ORIGIN=http://127.0.0.1:8000`**。未设置 **`E2E_API_TOKEN`** 时假定控制面 **dev-open**；若控制面已配置 IAM，请设置有效 JWT。首次需 **`npx playwright install chromium`**。 |
 
 首次 **`npm install`** 会执行 **`max setup`**（**`postinstall`**），生成 **`src/.umi`** 等本地文件（已 `.gitignore`）。
 
 ## 已实现能力摘要
 
-### 十五-01～06（基座）+ §十六 P0/P1/P2（人机身份）
+### 十五-01～06（基座）+ IAM 人机身份
 
-- 会话、OpenAPI 类型、**`/user/login`**（**邮箱 + 密码** + 可选 **TOTP 第二步**）、**`/user/integration`**（**Bearer**）、**`/user/register`**、**`/user/reset-password`**、**`/user/accept-invite`**（邀请 token）；**`/overview/team-invitations`**（**`canInviteMembers`**，`tenant_admin`）；**`request` 拦截器**（**`X-CSRF-Token`**、**`credentials: 'include'`**）；**`getInitialState` / `access.ts`**（**`needs_mfa`** 时关闭 **`canWrite`/`canAdmin`/`canInviteMembers`**）。
+- 会话、OpenAPI 类型、**`/user/login`**（**IAM** 或历史邮箱 UI）、**`/user/integration`**（**IAM access_token** 或 dev-open 留空）、**`/user/register`**（IAM 模式）；**`request` 拦截器**（可选 **`X-CSRF-Token`** 若浏览器仍有旧 Cookie、**`credentials: 'include'`**）；**`getInitialState` / `access.ts`**（**`needs_mfa`** 时关闭 **`canWrite`/`canAdmin`/`canInviteMembers`**）。
 
 ### 十五-07（租户）
 
@@ -39,7 +39,7 @@
 ### 十五-08（代理与部署）
 
 - **开发**：见 **`config/config.ts`** **`proxy`**。
-- **生产同域**：示例 **`deploy/nginx/console-spa.conf`**（静态根目录 + **`/api` 等**反代到控制面）。
+- **生产同域**：**`deploy/nginx/console-spa.conf.template`**（Docker 镜像用 **envsubst**：**`DEVAULT_CONSOLE_API_UPSTREAM`**、**`DEVAULT_CONSOLE_IAM_UPSTREAM`**）；静态参考 **`deploy/nginx/console-spa.conf`**。
 - **Compose（可选 · 十五-21）**：在 **`deploy/`** 执行 **`docker compose --profile with-console build console && docker compose --profile with-console up -d`**（多阶段 **`deploy/Dockerfile.console`**，无需主机预建 **`dist/`**），访问 **`http://127.0.0.1:8080/`**。
 - **Helm**：**`console.enabled: true`** 时安装控制台 Deployment/Service，Ingress 将 **`/api`**、**`/docs`** 等指向 API，**`/`** 指向控制台（见 **`deploy/helm/devault/values.yaml`**）。
 
@@ -71,17 +71,15 @@
 - **平台管理**（仅 **`access.canAdmin`** 见菜单）：**`/platform/tenants`**（**`TenantPatch`** 表单）。
 - **RBAC**：写操作依赖 **`canWrite`**；Legal hold、Enrollment、吊销、gRPC 吊销、租户 PATCH 依赖 **`canAdmin`**；**auditor** 与 **`isAuditor`** 对齐只读。
 
-## 会话 API（十五-01 / §十六-06）
+## 会话 API（十五-01）
 
-**`GET /api/v1/auth/session`** 返回 **`role`**、**`principal_label`**、**`allowed_tenant_ids`**，以及 **`principal_kind`**（**`platform` \| `tenant_user`**）、人机时的 **`user_id` / `email` / `tenants`**、**`needs_mfa`**（**§十六-09**）。平台 admin 全租户时 **`allowed_tenant_ids`** 为 **`null`**。
+**`GET /api/v1/auth/session`** 返回 **`role`**、**`principal_label`**、**`allowed_tenant_ids`**，以及 **`principal_kind`**（**`platform` \| `tenant_user`**）、IAM 人机时的 **`user_id` / `tenants`**、**`needs_mfa`**。平台 admin 全租户时 **`allowed_tenant_ids`** 为 **`null`**。控制面仅保留该认证相关 HTTP 路由；登录/注册/MFA/邀请等在 **IAM** 完成。
 
-其它认证相关端点：**`GET /api/v1/auth/csrf`**、**`POST /api/v1/auth/login`**、**`POST /api/v1/auth/logout`**、**`POST /api/v1/auth/session/refresh`**；自助注册 **`POST /api/v1/auth/register`**（**`DEVAULT_CONSOLE_SELF_REGISTRATION_ENABLED`**）；**`POST /api/v1/auth/password-reset/request|confirm`**；**`POST /api/v1/auth/mfa/verify`** 与 **`mfa/enroll/*`**（已登录用户绑定 TOTP）。
-
-**独立 IAM（P5）**：构建时设置 **`UMI_APP_IAM_PREFIX=/iam-api`**（与 `config/config.ts` 开发代理一致）后，登录/注册请求发往 IAM（**`/iam-api/v1/auth/*`**），成功后把 **`access_token`** 写入 **`devault_bearer_token`** 并调用 DeVault **`GET /api/v1/auth/session`**（需控制面 **`DEVAULT_AUTH_SOURCE=iam`** 且配置 **`DEVAULT_IAM_*`**，见 [`docs/iam-service-design.md`](../docs/iam-service-design.md)）。
+**IAM**：构建时设置 **`UMI_APP_IAM_PREFIX=/iam-api`**（与 `config/config.ts` 开发代理一致）后，登录/注册请求发往 IAM（**`/iam-api/v1/auth/*`**），成功后把 **`access_token`** 写入 **`devault_bearer_token`** 并调用 DeVault **`GET /api/v1/auth/session`**（需控制面配置 **`DEVAULT_IAM_JWT_ISSUER`**、**`DEVAULT_IAM_JWT_AUDIENCE`** 与 JWKS 或 PEM，见 [`docs/iam-service-design.md`](../docs/iam-service-design.md)）。
 
 ## 存储键
 
 | 键 | 用途 |
 |----|------|
-| **`devault_bearer_token`** | 可选：仅 **API Token** 登录时保存 Bearer；**密码登录**成功后会清除，避免人机长期依赖 localStorage。 |
+| **`devault_bearer_token`** | 可选：保存 IAM **`access_token`** 作为 Bearer；**密码登录**成功后会清除，避免人机长期依赖 localStorage。 |
 | **`devault_tenant_id`** | 当前租户 UUID（顶栏选择器写入 **`X-DeVault-Tenant-Id`**）。 |

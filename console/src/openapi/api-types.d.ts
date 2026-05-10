@@ -479,24 +479,6 @@ export interface paths {
         patch: operations["patch_tenant_api_v1_tenants__tenant_id__patch"];
         trace?: never;
     };
-    "/api/v1/tenants/{tenant_id}/invitations": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List pending invitations for a tenant */
-        get: operations["list_pending_invitations_api_v1_tenants__tenant_id__invitations_get"];
-        put?: never;
-        /** Invite a user to join a tenant by email (§十六-11) */
-        post: operations["create_tenant_invitation_api_v1_tenants__tenant_id__invitations_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/auth/session": {
         parameters: {
             query?: never;
@@ -506,201 +488,11 @@ export interface paths {
         };
         /**
          * Current session principal
-         * @description Returns the authenticated principal. Cookie session (human console) is evaluated before `Authorization: Bearer` (API key, legacy token, OIDC JWT). When authentication is disabled, returns the dev-open admin principal.
+         * @description Returns the authenticated principal from `Authorization: Bearer` when IAM JWT validation is configured (`DEVAULT_IAM_JWT_*` + JWKS or PEM). When IAM is not configured, returns the dev-open admin principal for local development.
          */
         get: operations["get_auth_session_api_v1_auth_session_get"];
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/auth/csrf": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Issue CSRF cookie
-         * @description Sets a readable CSRF cookie; send the same value as `X-CSRF-Token` on mutating requests when using a session cookie.
-         */
-        get: operations["get_csrf_cookie_api_v1_auth_csrf_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/auth/session/refresh": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Refresh HTTP session TTL (sliding window) */
-        post: operations["post_session_refresh_api_v1_auth_session_refresh_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/auth/login": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Console email + password login */
-        post: operations["post_login_api_v1_auth_login_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/auth/register": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Self-service console registration (optional) */
-        post: operations["post_register_api_v1_auth_register_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/auth/invitations/accept": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Accept a tenant invitation (creates membership + console session) */
-        post: operations["post_invitation_accept_api_v1_auth_invitations_accept_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/auth/password-reset/request": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Request password reset email (anti-enumeration) */
-        post: operations["post_password_reset_request_api_v1_auth_password_reset_request_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/auth/password-reset/confirm": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Complete password reset with one-time token */
-        post: operations["post_password_reset_confirm_api_v1_auth_password_reset_confirm_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/auth/mfa/verify": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Complete TOTP second factor after password login */
-        post: operations["post_mfa_verify_api_v1_auth_mfa_verify_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/auth/mfa/enroll/start": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Begin TOTP enrollment (authenticated) */
-        post: operations["post_mfa_enroll_start_api_v1_auth_mfa_enroll_start_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/auth/mfa/enroll/confirm": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Confirm TOTP enrollment with a valid code */
-        post: operations["post_mfa_enroll_confirm_api_v1_auth_mfa_enroll_confirm_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/auth/logout": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Invalidate server session and clear cookies */
-        post: operations["post_logout_api_v1_auth_logout_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -938,23 +730,9 @@ export interface components {
              */
             legal_hold: boolean;
         };
-        /** AuthLoginIn */
-        AuthLoginIn: {
-            /** Email */
-            email: string;
-            /** Password */
-            password: string;
-        };
-        /** AuthRegisterIn */
-        AuthRegisterIn: {
-            /** Email */
-            email: string;
-            /** Password */
-            password: string;
-        };
         /**
          * AuthSessionOut
-         * @description Resolved principal for Cookie session or Bearer (or dev-open when authentication is disabled).
+         * @description Resolved principal for IAM Bearer JWT (or dev-open when IAM is not configured).
          */
         AuthSessionOut: {
             /**
@@ -965,7 +743,7 @@ export interface components {
             role: "admin" | "operator" | "auditor";
             /**
              * Principal Label
-             * @description Stable display / audit label (e.g. api-key name, legacy token, oidc:sub, user:email).
+             * @description Stable display / audit label (e.g. `iam:user:…`, `iam:platform:…`).
              */
             principal_label: string;
             /**
@@ -975,29 +753,29 @@ export interface components {
             allowed_tenant_ids: string[] | null;
             /**
              * Principal Kind
-             * @description platform = API key / legacy / OIDC Bearer; tenant_user = HTTP-only session cookie.
+             * @description platform = IAM service accounts / platform admins; tenant_user = IAM human user (`sub` UUID).
              * @default platform
              * @enum {string}
              */
             principal_kind: "platform" | "tenant_user";
             /**
              * User Id
-             * @description Console user id when principal_kind is tenant_user.
+             * @description IAM user id when principal_kind is tenant_user.
              */
             user_id?: string | null;
             /**
              * Email
-             * @description Login email when principal_kind is tenant_user.
+             * @description Reserved; IAM humans may not expose email in this payload.
              */
             email?: string | null;
             /**
              * Tenants
-             * @description Per-tenant membership rows for human users; null for platform principals.
+             * @description Per-tenant rows for human users; null for platform principals.
              */
             tenants?: components["schemas"]["SessionTenantRow"][] | null;
             /**
              * Needs Mfa
-             * @description True when cookie session exists but TOTP second factor is still required.
+             * @description True when the IAM token indicates MFA is required but not satisfied.
              * @default false
              */
             needs_mfa: boolean;
@@ -1328,38 +1106,6 @@ export interface components {
          * @enum {string}
          */
         JobStatus: "pending" | "running" | "uploading" | "verifying" | "success" | "failed" | "retrying" | "cancelled";
-        /** MfaEnrollConfirmIn */
-        MfaEnrollConfirmIn: {
-            /** Code */
-            code: string;
-        };
-        /** MfaEnrollStartOut */
-        MfaEnrollStartOut: {
-            /**
-             * Secret
-             * @description Base32 TOTP secret; also stored server-side until confirm.
-             */
-            secret: string;
-            /** Otpauth Uri */
-            otpauth_uri: string;
-        };
-        /** MfaVerifyIn */
-        MfaVerifyIn: {
-            /** Code */
-            code: string;
-        };
-        /** PasswordResetConfirmIn */
-        PasswordResetConfirmIn: {
-            /** Token */
-            token: string;
-            /** New Password */
-            new_password: string;
-        };
-        /** PasswordResetRequestIn */
-        PasswordResetRequestIn: {
-            /** Email */
-            email: string;
-        };
         /** PolicyCreate */
         PolicyCreate: {
             /**
@@ -1586,7 +1332,7 @@ export interface components {
         };
         /**
          * SessionTenantRow
-         * @description Tenant visibility for a human console user (§十六-06).
+         * @description Tenant visibility for a human console user authenticated via IAM.
          */
         SessionTenantRow: {
             /**
@@ -1606,13 +1352,13 @@ export interface components {
             membership_role: "tenant_admin" | "operator" | "auditor";
             /**
              * Require Mfa For Admins
-             * @description Mirrors tenant policy (§十六-09): tenant_admin must use TOTP when true.
+             * @description Mirrors tenant policy: elevated roles may require MFA at the IdP.
              * @default false
              */
             require_mfa_for_admins: boolean;
             /**
              * Sso Password Login Disabled
-             * @description When true, members who belong only to SSO-only tenants cannot use email/password login (§十六-12).
+             * @description Mirrors tenant metadata (primarily for UI hints).
              * @default false
              */
             sso_password_login_disabled: boolean;
@@ -1626,59 +1372,6 @@ export interface components {
              * @description Lowercase URL-safe identifier (e.g. acme-corp).
              */
             slug: string;
-        };
-        /** TenantInvitationAcceptIn */
-        TenantInvitationAcceptIn: {
-            /** Token */
-            token: string;
-            /**
-             * Password
-             * @description Required when creating a new console user; omit when already logged in as the invited email.
-             */
-            password?: string | null;
-        };
-        /** TenantInvitationCreate */
-        TenantInvitationCreate: {
-            /** Email */
-            email: string;
-            /**
-             * Role
-             * @description Membership role granted when the invite is accepted.
-             * @enum {string}
-             */
-            role: "tenant_admin" | "operator" | "auditor";
-        };
-        /** TenantInvitationOut */
-        TenantInvitationOut: {
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /**
-             * Tenant Id
-             * Format: uuid
-             */
-            tenant_id: string;
-            /** Email */
-            email: string;
-            /**
-             * Role
-             * @enum {string}
-             */
-            role: "tenant_admin" | "operator" | "auditor";
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /**
-             * Expires At
-             * Format: date-time
-             */
-            expires_at: string;
-            /** Accepted At */
-            accepted_at?: string | null;
         };
         /** TenantOut */
         TenantOut: {
@@ -1746,7 +1439,7 @@ export interface components {
             sso_password_login_disabled: boolean;
             /**
              * Sso Jit Provisioning
-             * @description When true with OIDC issuer+audience, valid Bearer JWTs may upsert ConsoleUser + membership.
+             * @description Reserved / documentation field; tenant users and memberships are managed in IAM.
              * @default false
              */
             sso_jit_provisioning: boolean;
@@ -3283,78 +2976,6 @@ export interface operations {
             };
         };
     };
-    list_pending_invitations_api_v1_tenants__tenant_id__invitations_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "X-DeVault-Tenant-Id"?: string | null;
-            };
-            path: {
-                tenant_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TenantInvitationOut"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    create_tenant_invitation_api_v1_tenants__tenant_id__invitations_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "X-DeVault-Tenant-Id"?: string | null;
-            };
-            path: {
-                tenant_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["TenantInvitationCreate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TenantInvitationOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     get_auth_session_api_v1_auth_session_get: {
         parameters: {
             query?: never;
@@ -3383,358 +3004,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_csrf_cookie_api_v1_auth_csrf_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: boolean;
-                    };
-                };
-            };
-        };
-    };
-    post_session_refresh_api_v1_auth_session_refresh_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "X-DeVault-Tenant-Id"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: boolean;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    post_login_api_v1_auth_login_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AuthLoginIn"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AuthSessionOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    post_register_api_v1_auth_register_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AuthRegisterIn"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: string;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    post_invitation_accept_api_v1_auth_invitations_accept_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["TenantInvitationAcceptIn"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AuthSessionOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    post_password_reset_request_api_v1_auth_password_reset_request_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["PasswordResetRequestIn"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: string;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    post_password_reset_confirm_api_v1_auth_password_reset_confirm_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["PasswordResetConfirmIn"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: string;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    post_mfa_verify_api_v1_auth_mfa_verify_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["MfaVerifyIn"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AuthSessionOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    post_mfa_enroll_start_api_v1_auth_mfa_enroll_start_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "X-DeVault-Tenant-Id"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MfaEnrollStartOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    post_mfa_enroll_confirm_api_v1_auth_mfa_enroll_confirm_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "X-DeVault-Tenant-Id"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["MfaEnrollConfirmIn"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: boolean;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    post_logout_api_v1_auth_logout_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: boolean;
-                    };
                 };
             };
         };

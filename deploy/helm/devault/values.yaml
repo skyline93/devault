@@ -34,6 +34,8 @@ console:
     tag: latest
     pullPolicy: IfNotPresent
   resources: {}
+  # 可选：同源 ``/iam-api`` 反代到 IAM 的 ``host:port``（如集群内 ``{{ release }}-iam:8100``）。留空则不生成该 location。
+  iamUpstream: ""
 
 postgresql:
   enabled: true
@@ -61,7 +63,6 @@ minio:
 
 secrets:
   # Override in production (e.g. helm --set-file, SealedSecrets, ExternalSecrets).
-  apiToken: changeme
   grpcRegistrationSecret: devault-helm-register-secret
 
 devault:

@@ -9,8 +9,61 @@
 #   DEVAULT_S3_ENDPOINT=http://192.168.1.10:9000
 #   DEVAULT_S3_ENDPOINT=http://host.docker.internal:9000   # Docker Desktop: api reaches host-published :9000
 # Use the same host:port from api, scheduler, and every agent. Minio already publishes 9000:9000.
+#
+# IAM（可选内嵌）：本文件包含 **postgres-iam / redis-iam / iam**。`api` 默认配置 **DEVAULT_IAM_JWKS_URL=http://iam:8100/...**
+# 与 **DEVAULT_IAM_JWT_ISSUER/AUDIENCE**（与 IAM 默认 `IAM_JWT_*` 对齐），启动后 HTTP 走 IAM JWT 校验（非 dev-open）。
+# 浏览器访问 IAM：**http://127.0.0.1:8100**；issuer 仍为 **http://127.0.0.1:8100**，与令牌内 `iss` 一致。
 
 services:
+  postgres-iam:
+    image: postgres:14
+    environment:
+      POSTGRES_USER: iam
+      POSTGRES_PASSWORD: iam
+      POSTGRES_DB: iam
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U iam -d iam"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+
+  redis-iam:
+    image: redis:7
+    ports:
+      - "6380:6379"
+
+  iam:
+    build:
+      context: ../iam
+      dockerfile: Dockerfile
+    command: >
+      sh -c "alembic upgrade head &&
+             uvicorn devault_iam.api.main:app --host 0.0.0.0 --port 8100"
+    environment:
+      IAM_DATABASE_URL: postgresql+psycopg://iam:iam@postgres-iam:5432/iam
+      IAM_REDIS_URL: redis://redis-iam:6379/0
+      IAM_JWT_ISSUER: ${IAM_JWT_ISSUER:-http://127.0.0.1:8100}
+      IAM_JWT_AUDIENCE: ${IAM_JWT_AUDIENCE:-devault-api}
+    ports:
+      - "8100:8100"
+    depends_on:
+      postgres-iam:
+        condition: service_healthy
+      redis-iam:
+        condition: service_started
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          'python -c "import urllib.request; urllib.request.urlopen(''http://127.0.0.1:8100/health'', timeout=4).read()"',
+        ]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+      start_period: 90s
+
   postgres:
     image: postgres:14
     environment:
@@ -74,9 +127,10 @@ services:
     environment:
       DEVAULT_DATABASE_URL: postgresql+psycopg://devault:devault@postgres:5432/devault
       DEVAULT_REDIS_URL: redis://redis:6379/0
-      DEVAULT_API_TOKEN: ${DEVAULT_API_TOKEN:-changeme}
-      # §十六：演示栈默认开启控制台自助注册（/user/register）；生产可设 DEVAULT_CONSOLE_SELF_REGISTRATION_ENABLED=false
-      DEVAULT_CONSOLE_SELF_REGISTRATION_ENABLED: ${DEVAULT_CONSOLE_SELF_REGISTRATION_ENABLED:-true}
+      # IAM JWT（与内嵌 `iam` 服务一致；覆盖 issuer/audience 时请同步 IAM 环境变量）
+      DEVAULT_IAM_JWT_ISSUER: ${DEVAULT_IAM_JWT_ISSUER:-http://127.0.0.1:8100}
+      DEVAULT_IAM_JWT_AUDIENCE: ${DEVAULT_IAM_JWT_AUDIENCE:-devault-api}
+      DEVAULT_IAM_JWKS_URL: ${DEVAULT_IAM_JWKS_URL:-http://iam:8100/.well-known/jwks.json}
       # Enables Agent Register bootstrap; must match agent service below (dev-only default).
       DEVAULT_GRPC_REGISTRATION_SECRET: ${DEVAULT_GRPC_REGISTRATION_SECRET:-devault-docker-register-secret}
       DEVAULT_STORAGE_BACKEND: s3
@@ -98,6 +152,8 @@ services:
         condition: service_started
       minio-init:
         condition: service_completed_successfully
+      iam:
+        condition: service_healthy
     # Uvicorn lifespan starts gRPC on :50051; wait until HTTP is up so Envoy/agents do not hit connection refused.
     healthcheck:
       test:
@@ -145,9 +201,7 @@ services:
   #   export DEVAULT_ARTIFACT_ENCRYPTION_KEY="$(openssl rand -base64 32)"
   # Format: standard Base64 decoding to exactly 32 bytes (AES-256). See website/docs/security/artifact-encryption.md
   #
-  # Auth: by default this stack does NOT set DEVAULT_API_TOKEN on the agent — startup calls Register
-  # with DEVAULT_GRPC_REGISTRATION_SECRET (must match api) to obtain the shared API token in memory.
-  # To skip Register and pin a token, set DEVAULT_API_TOKEN on the agent explicitly.
+  # Auth: the agent obtains a gRPC bearer via Register using DEVAULT_GRPC_REGISTRATION_SECRET (must match api).
   agent:
     image: ${DEVAULT_IMAGE:-glf9832/devault:latest}
     command: devault-agent
@@ -169,19 +223,28 @@ services:
       minio-init:
         condition: service_completed_successfully
 
-  # Ant Design Pro 控制台（十五-08 / 十五-21）：多阶段镜像内置 `dist` + nginx 反代 `api:8000`。
+  # Ant Design Pro 控制台（十五-08 / 十五-21）：多阶段镜像内置 `dist` + nginx 模板反代 API / IAM。
   #   docker compose --profile with-console build console && docker compose --profile with-console up -d
-  # 访问 http://127.0.0.1:8080/
+  # 访问 http://127.0.0.1:8080/ ；运行时覆盖反代目标见 **DEVAULT_CONSOLE_*_UPSTREAM**，构建期 IAM 前缀见 **UMI_APP_IAM_PREFIX**。
   console:
     profiles: ["with-console"]
     build:
       context: ..
       dockerfile: deploy/Dockerfile.console
+      args:
+        UMI_APP_ENV_LABEL: ${UMI_APP_ENV_LABEL:-}
+        UMI_APP_GRAFANA_URL: ${UMI_APP_GRAFANA_URL:-}
+        UMI_APP_IAM_PREFIX: ${UMI_APP_IAM_PREFIX:-/iam-api}
     image: ${DEVAULT_CONSOLE_IMAGE:-devault-console:local}
+    environment:
+      DEVAULT_CONSOLE_API_UPSTREAM: ${DEVAULT_CONSOLE_API_UPSTREAM:-api:8000}
+      DEVAULT_CONSOLE_IAM_UPSTREAM: ${DEVAULT_CONSOLE_IAM_UPSTREAM:-iam:8100}
     ports:
       - "8080:80"
     depends_on:
       api:
+        condition: service_healthy
+      iam:
         condition: service_healthy
 
 volumes:

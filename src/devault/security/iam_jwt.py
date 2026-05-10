@@ -16,9 +16,8 @@ _jwks_client: PyJWKClient | None = None
 _jwks_client_url: str | None = None
 
 
-def iam_jwt_enabled(settings: Settings) -> bool:
-    if settings.auth_source != "iam":
-        return False
+def iam_jwt_configured(settings: Settings) -> bool:
+    """Whether DeVault should require a valid IAM-issued RS256 access JWT for HTTP/gRPC (except dev-open / Agent session)."""
     if not (settings.iam_jwt_issuer or "").strip() or not (settings.iam_jwt_audience or "").strip():
         return False
     if (settings.iam_jwt_public_key_pem or "").strip():
@@ -140,7 +139,7 @@ def auth_context_from_iam_payload(payload: dict[str, Any]) -> AuthContext:
 
 def try_decode_iam_bearer(raw_token: str, settings: Settings) -> AuthContext | None:
     """Validate IAM-issued access JWT and map to :class:`AuthContext` (P5 / external IAM)."""
-    if not iam_jwt_enabled(settings):
+    if not iam_jwt_configured(settings):
         return None
     if raw_token.count(".") != 2:
         return None

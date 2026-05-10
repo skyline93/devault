@@ -125,12 +125,9 @@ def _bootstrap_token_if_needed(
     if token.get("value"):
         return
     s = get_settings()
-    if s.api_token:
-        token["value"] = s.api_token
-        return
     if not s.grpc_registration_secret:
         logger.error(
-            "No DEVAULT_API_TOKEN and no DEVAULT_GRPC_REGISTRATION_SECRET; cannot authenticate",
+            "No DEVAULT_GRPC_REGISTRATION_SECRET; cannot authenticate (IAM tokens are not used for Agent bootstrap)",
         )
         raise SystemExit(2)
     rel, pkg, gc = _agent_identity_fields(s)

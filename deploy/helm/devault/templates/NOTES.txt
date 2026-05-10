@@ -13,7 +13,7 @@
 
    curl -sf http://127.0.0.1:8000/healthz
 
-5. API token (HTTP Bearer and static admin flows) is stored in secret {{ include "devault.fullname" . }}-app key DEVAULT_API_TOKEN (default from values unless overridden).
+5. HTTP access uses IAM-issued JWTs: configure DEVAULT_IAM_JWT_* on the API deployment (not set in this demo chart — API runs in dev-open mode until you add them).
 
 6. Agent gRPC (in-cluster): {{ include "devault.fullname" . }}-api:50051 — set DEVAULT_GRPC_REGISTRATION_SECRET to match the same secret key on agents outside the chart.
 

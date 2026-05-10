@@ -5,8 +5,8 @@ package devault.agent.v1;
 // Agent control plane: Pull lease + storage grants + completion.
 
 service AgentControl {
-  // Bootstrap: exchange a one-time registration secret for the same bearer token
-  // the HTTP API uses (DEVAULT_API_TOKEN). Disabled when DEVAULT_GRPC_REGISTRATION_SECRET is unset.
+  // Bootstrap: exchange a one-time registration secret for a Redis-scoped gRPC bearer
+  // (per agent_id). Disabled when DEVAULT_GRPC_REGISTRATION_SECRET is unset.
   rpc Register(RegisterRequest) returns (RegisterReply);
   rpc Heartbeat(HeartbeatRequest) returns (HeartbeatReply);
   rpc LeaseJobs(LeaseJobsRequest) returns (LeaseJobsReply);

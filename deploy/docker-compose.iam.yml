@@ -1,4 +1,5 @@
-# Optional stack: IAM only (separate Postgres DB). From repo root:
+# Optional stack: IAM only（独立 Postgres）。与主栈合并时见 **`deploy/docker-compose.yml`**（内嵌 `iam` + `api` 的 **DEVAULT_IAM_JWKS_URL**）。
+# From repo root:
 #   docker compose -f deploy/docker-compose.iam.yml up --build
 #
 # IAM API: http://127.0.0.1:8100/health  ·  DB: localhost:5433 (iam/iam)

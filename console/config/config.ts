@@ -3,12 +3,16 @@ import zhCN from 'antd/locale/zh_CN';
 
 import defaultSettings from './defaultSettings';
 
+/** Dev-only: Umi ``proxy`` targets (``npm run dev``). Production uses nginx ``console-spa.conf.template``. */
+const devApiOrigin = (process.env.UMI_DEV_API_ORIGIN || 'http://127.0.0.1:8000').replace(/\/$/, '');
+const devIamOrigin = (process.env.UMI_DEV_IAM_ORIGIN || 'http://127.0.0.1:8100').replace(/\/$/, '');
+
 export default defineConfig({
   define: {
     'process.env.UMI_APP_ENV_LABEL': JSON.stringify(process.env.UMI_APP_ENV_LABEL || ''),
     /** 可选：部署了 Grafana 时写入完整 URL，工作台显示跳转（十五-24） */
     'process.env.UMI_APP_GRAFANA_URL': JSON.stringify(process.env.UMI_APP_GRAFANA_URL || ''),
-    /** 非空时登录/注册走独立 IAM（P5）；开发默认 ``/iam-api`` 反代到 ``127.0.0.1:8100`` */
+    /** 非空时登录/注册走独立 IAM；开发用 ``UMI_DEV_IAM_ORIGIN`` 反代 ``/iam-api``，生产用 nginx ``/iam-api`` → ``DEVAULT_CONSOLE_IAM_UPSTREAM`` */
     'process.env.UMI_APP_IAM_PREFIX': JSON.stringify(process.env.UMI_APP_IAM_PREFIX || ''),
   },
   title: 'DeVault',
@@ -190,16 +194,16 @@ export default defineConfig({
    */
   proxy: {
     '/iam-api': {
-      target: 'http://127.0.0.1:8100',
+      target: devIamOrigin,
       changeOrigin: true,
       pathRewrite: { '^/iam-api': '' },
     },
-    '/api': { target: 'http://127.0.0.1:8000', changeOrigin: true },
-    '/openapi.json': { target: 'http://127.0.0.1:8000', changeOrigin: true },
-    '/docs': { target: 'http://127.0.0.1:8000', changeOrigin: true },
-    '/redoc': { target: 'http://127.0.0.1:8000', changeOrigin: true },
-    '/metrics': { target: 'http://127.0.0.1:8000', changeOrigin: true },
-    '/version': { target: 'http://127.0.0.1:8000', changeOrigin: true },
-    '/healthz': { target: 'http://127.0.0.1:8000', changeOrigin: true },
+    '/api': { target: devApiOrigin, changeOrigin: true },
+    '/openapi.json': { target: devApiOrigin, changeOrigin: true },
+    '/docs': { target: devApiOrigin, changeOrigin: true },
+    '/redoc': { target: devApiOrigin, changeOrigin: true },
+    '/metrics': { target: devApiOrigin, changeOrigin: true },
+    '/version': { target: devApiOrigin, changeOrigin: true },
+    '/healthz': { target: devApiOrigin, changeOrigin: true },
   },
 });

@@ -32,7 +32,6 @@ def _rsa_keypair() -> tuple[bytes, bytes]:
 
 def _settings_iam(pub_pem: bytes) -> Settings:
     return Settings(
-        auth_source="iam",
         iam_jwt_public_key_pem=pub_pem.decode(),
         iam_jwt_issuer="http://iam.test",
         iam_jwt_audience="devault-api",

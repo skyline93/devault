@@ -23,8 +23,18 @@ RUN npm ci
 COPY console/ ./
 COPY --from=openapi /tmp/openapi.json ./openapi.json
 ENV NODE_ENV=production
+# Build-time SPA flags（与 ``console/.env`` / compose build.args 一致）
+ARG UMI_APP_ENV_LABEL=
+ARG UMI_APP_GRAFANA_URL=
+ARG UMI_APP_IAM_PREFIX=
+ENV UMI_APP_ENV_LABEL=$UMI_APP_ENV_LABEL
+ENV UMI_APP_GRAFANA_URL=$UMI_APP_GRAFANA_URL
+ENV UMI_APP_IAM_PREFIX=$UMI_APP_IAM_PREFIX
 RUN npm run codegen && npm run build
 
 FROM nginx:1.27-alpine
-COPY deploy/nginx/console-spa.conf /etc/nginx/conf.d/default.conf
+# nginx 官方入口会对 ``/etc/nginx/templates/*.template`` 做 envsubst 后写入 ``conf.d/``
+ENV DEVAULT_CONSOLE_API_UPSTREAM=api:8000
+ENV DEVAULT_CONSOLE_IAM_UPSTREAM=iam:8100
+COPY deploy/nginx/console-spa.conf.template /etc/nginx/templates/default.conf.template
 COPY --from=assets /c/dist /usr/share/nginx/html

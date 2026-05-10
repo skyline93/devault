@@ -10,101 +10,6 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from devault.db.base import Base
 
 
-class ConsoleUser(Base):
-    """Human console operator (§十六): email login + Argon2id password hash; distinct from API keys."""
-
-    __tablename__ = "console_users"
-
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
-    password_hash: Mapped[str] = mapped_column(Text(), nullable=False)
-    disabled: Mapped[bool] = mapped_column(Boolean(), nullable=False, default=False)
-    totp_secret: Mapped[str | None] = mapped_column(Text(), nullable=True)
-    totp_confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        nullable=False,
-    )
-
-    memberships: Mapped[list["TenantMembership"]] = relationship(
-        "TenantMembership",
-        back_populates="user",
-        cascade="all, delete-orphan",
-    )
-
-
-class TenantMembership(Base):
-    """Links a console user to a tenant with a tenant-scoped RBAC role (§十六-05)."""
-
-    __tablename__ = "tenant_memberships"
-
-    user_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("console_users.id", ondelete="CASCADE"),
-        primary_key=True,
-    )
-    tenant_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("tenants.id", ondelete="CASCADE"),
-        primary_key=True,
-    )
-    role: Mapped[str] = mapped_column(String(32), nullable=False)
-
-    user: Mapped["ConsoleUser"] = relationship("ConsoleUser", back_populates="memberships")
-
-
-class PasswordResetToken(Base):
-    """One-time password reset token (hashed at rest)."""
-
-    __tablename__ = "password_reset_tokens"
-
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("console_users.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        nullable=False,
-    )
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-
-
-class TenantInvitation(Base):
-    """Email invitation to join a tenant with a tenant-scoped membership role (§十六-11)."""
-
-    __tablename__ = "tenant_invitations"
-
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("tenants.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    email: Mapped[str] = mapped_column(String(255), nullable=False)
-    role: Mapped[str] = mapped_column(String(32), nullable=False)
-    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
-    invited_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("console_users.id", ondelete="SET NULL"),
-        nullable=True,
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        nullable=False,
-    )
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-
-
 class AgentEnrollment(Base):
     """Admin-provisioned binding: ``agent_id`` may only touch jobs/artifacts in ``allowed_tenant_ids`` over gRPC."""
 
@@ -141,24 +46,6 @@ class EdgeAgent(Base):
     region: Mapped[str | None] = mapped_column(String(128), nullable=True)
     agent_env: Mapped[str | None] = mapped_column(String(128), nullable=True)
     backup_path_allowlist: Mapped[list | None] = mapped_column(JSONB, nullable=True)
-
-
-class ControlPlaneApiKey(Base):
-    """Hashed REST/gRPC Bearer tokens with RBAC role and optional tenant allow-list."""
-
-    __tablename__ = "control_plane_api_keys"
-
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
-    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
-    role: Mapped[str] = mapped_column(String(32), nullable=False)
-    allowed_tenant_ids: Mapped[list | None] = mapped_column(JSONB, nullable=True)
-    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        nullable=False,
-    )
 
 
 class AgentPool(Base):

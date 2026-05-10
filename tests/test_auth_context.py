@@ -6,7 +6,6 @@ import pytest
 from fastapi import HTTPException
 
 from devault.security.auth_context import AuthContext
-from devault.security.token_resolve import hash_api_token
 
 
 def test_auth_admin_all_tenants() -> None:
@@ -44,7 +43,3 @@ def test_auth_auditor_read_only() -> None:
     a.ensure_tenant_access(tid)
     with pytest.raises(HTTPException):
         a.ensure_can_write()
-
-
-def test_hash_api_token_stable() -> None:
-    assert len(hash_api_token("secret-token")) == 64

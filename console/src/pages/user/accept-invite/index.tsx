@@ -2,7 +2,7 @@ import { LockOutlined } from '@ant-design/icons';
 import { LoginForm, ProFormText } from '@ant-design/pro-components';
 import { history, Link, request, useModel } from '@umijs/max';
 import { Alert, Card, theme, Typography } from 'antd';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 
 /** §十六-11：接受租户邀请（邮件内 token），必要时设置密码并建立会话。 */
 const AcceptInvitePage: React.FC = () => {
@@ -10,10 +10,6 @@ const AcceptInvitePage: React.FC = () => {
   const { setInitialState } = useModel('@@initialState');
   const [err, setErr] = useState<string | null>(null);
   const urlToken = useMemo(() => new URLSearchParams(window.location.search).get('token') ?? '', []);
-
-  useEffect(() => {
-    void request('/api/v1/auth/csrf', { method: 'GET', skipErrorHandler: true });
-  }, []);
 
   return (
     <div

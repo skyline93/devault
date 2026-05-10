@@ -107,11 +107,6 @@ spec:
                 secretKeyRef:
                   name: {{ include "devault.fullname" . }}-app
                   key: DEVAULT_DATABASE_URL
-            - name: DEVAULT_API_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "devault.fullname" . }}-app
-                  key: DEVAULT_API_TOKEN
             - name: DEVAULT_GRPC_REGISTRATION_SECRET
               valueFrom:
                 secretKeyRef:

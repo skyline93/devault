@@ -2,11 +2,11 @@ import { test, expect } from '@playwright/test';
 
 test.describe('console smoke（十五-22）', () => {
   test('登录 → 作业中心 → 可选切租户 → 备份向导页', async ({ page }) => {
-    const token = process.env.E2E_API_TOKEN || 'changeme';
+    const token = (process.env.E2E_API_TOKEN || '').trim();
 
     await page.goto('/user/integration');
-    await page.getByPlaceholder(/Bearer Token/).fill(token);
-    await page.getByRole('button', { name: '登录' }).click();
+    await page.getByPlaceholder(/IAM access_token|dev-open/).fill(token);
+    await page.getByRole('button', { name: '验证并进入' }).click();
     await expect(page).toHaveURL(/\/overview\/welcome/);
 
     await page.goto('/backup/jobs');

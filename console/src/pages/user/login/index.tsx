@@ -2,7 +2,7 @@ import { LockOutlined, SafetyCertificateOutlined, UserOutlined } from '@ant-desi
 import { LoginForm, ProFormText } from '@ant-design/pro-components';
 import { history, Link, request, useModel } from '@umijs/max';
 import { Alert, Card, theme, Typography } from 'antd';
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 
 import { STORAGE_BEARER_KEY } from '@/constants/storage';
 import { IAM_API_PREFIX, isIamConsoleEnabled } from '@/config/iam';
@@ -22,10 +22,6 @@ const Login: React.FC = () => {
   const [err, setErr] = useState<string | null>(null);
   const [mfaStep, setMfaStep] = useState(false);
   const [pendingIam, setPendingIam] = useState<{ email: string; password: string } | null>(null);
-
-  useEffect(() => {
-    void request('/api/v1/auth/csrf', { method: 'GET', skipErrorHandler: true });
-  }, []);
 
   const finishLogin = async (currentUser: API.CurrentUser) => {
     const canWrite = !currentUser.needs_mfa && (currentUser.role === 'admin' || currentUser.role === 'operator');

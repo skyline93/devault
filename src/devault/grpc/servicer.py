@@ -23,9 +23,7 @@ from devault.security.agent_grpc_session import (
 )
 from devault.security.auth_context import AuthContext, dev_open_auth_context
 from devault.security.iam_jwt import try_decode_iam_bearer
-from devault.security.oidc import try_decode_oidc_bearer
 from devault.security.policy import authentication_enabled
-from devault.security.token_resolve import resolve_bearer_token
 from devault.grpc.agent_version import (
     attach_control_plane_version_meta,
     evaluate_agent_version_gate,
@@ -85,15 +83,6 @@ def _authenticate_grpc(context: grpc.ServicerContext, settings: Settings) -> Aut
             context.abort(grpc.StatusCode.UNAUTHENTICATED, "Bearer token required")
             raise RuntimeError("unreachable")
         raw = auth[7:].strip()
-        ctx = try_decode_oidc_bearer(raw, settings)
-        if ctx is not None:
-            if ctx.role == "auditor":
-                context.abort(
-                    grpc.StatusCode.PERMISSION_DENIED,
-                    "auditor role cannot access agent gRPC",
-                )
-                raise RuntimeError("unreachable")
-            return ctx
         ctx_iam = try_decode_iam_bearer(raw, settings)
         if ctx_iam is not None:
             if ctx_iam.role == "auditor":
@@ -128,18 +117,8 @@ def _authenticate_grpc(context: grpc.ServicerContext, settings: Settings) -> Aut
                 allowed_tenant_ids=allowed,
                 principal_label=f"agent-session:{aid}",
             )
-        try:
-            ctx = resolve_bearer_token(db, raw, legacy_api_token=settings.api_token)
-        except PermissionError:
-            context.abort(grpc.StatusCode.UNAUTHENTICATED, "invalid token")
-            raise RuntimeError("unreachable") from None
-        if ctx.role == "auditor":
-            context.abort(
-                grpc.StatusCode.PERMISSION_DENIED,
-                "auditor role cannot access agent gRPC",
-            )
-            raise RuntimeError("unreachable")
-        return ctx
+        context.abort(grpc.StatusCode.UNAUTHENTICATED, "invalid token")
+        raise RuntimeError("unreachable")
     finally:
         db.close()
 
