@@ -32,6 +32,22 @@
   },
   "matrices": [
     {
+      "id": "cp-0.5-agent-0.5-s3",
+      "control_plane": ">=0.5.0 <0.6.0",
+      "agent_release": ">=0.5.0",
+      "storage": "s3",
+      "grpc_package": "devault.agent.v1",
+      "notes": "Homogeneous 0.5.x pairing; see CHANGELOG 0.5.0 for enrollment, allowlist, and UI/REST parity."
+    },
+    {
+      "id": "cp-0.5-agent-0.1-legacy",
+      "control_plane": ">=0.5.0",
+      "agent_release": ">=0.1.0 <0.5.0",
+      "storage": "s3",
+      "grpc_package": "devault.agent.v1",
+      "notes": "0.5.x control plane with agents not yet on 0.5.x; follow CHANGELOG migration for Register, enrollment, and metrics label changes."
+    },
+    {
       "id": "cp-0.4-agent-0.4-s3",
       "control_plane": ">=0.4.0 <0.5.0",
       "agent_release": ">=0.4.0",
@@ -57,7 +73,7 @@
     }
   ],
   "current": {
-    "control_plane_release": "0.4.0",
+    "control_plane_release": "0.5.0",
     "default_min_agent": "0.1.0",
     "default_max_tested_agent": "same as control plane release when DEVAULT_GRPC_MAX_TESTED_AGENT_VERSION is unset"
   },
@@ -70,20 +86,27 @@
         "matrix_job_id": "homogeneous",
         "control_plane_git_ref": "_github_sha",
         "agent_git_ref": "_github_sha",
-        "maps_to_compatibility_rows": ["cp-0.4-agent-0.4-s3"]
+        "maps_to_compatibility_rows": [
+          "cp-0.5-agent-0.5-s3"
+        ]
       },
       {
         "matrix_job_id": "cp_current_agent_prev_minor",
         "control_plane_git_ref": "_github_sha",
         "agent_git_ref": "_previous_minor_git_ref",
-        "maps_to_compatibility_rows": ["cp-0.4-agent-0.4-s3", "cp-0.4-agent-0.1-legacy"],
+        "maps_to_compatibility_rows": [
+          "cp-0.5-agent-0.5-s3",
+          "cp-0.5-agent-0.1-legacy"
+        ],
         "requires_non_empty_previous_minor_git_ref": true
       },
       {
         "matrix_job_id": "cp_prev_minor_agent_current",
         "control_plane_git_ref": "_previous_minor_git_ref",
         "agent_git_ref": "_github_sha",
-        "maps_to_compatibility_rows": ["cp-0.3-agent-0.3-s3"],
+        "maps_to_compatibility_rows": [
+          "cp-0.4-agent-0.4-s3"
+        ],
         "requires_non_empty_previous_minor_git_ref": true
       }
     ]

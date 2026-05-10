@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
+
+---
+
+## [0.5.0] - 2026-05-10
+
+### Added
+
 - **十四-16 / 十四-17（Web UI 与 REST 闸门）**：**`PolicyOut.updated_at`** 与 **`/ui/policies`** 列表列对齐；**`auditor`**（及一切无写权限角色）在模板侧隐藏或禁用 **Cancel/Retry**、策略/调度/演练/池/Artifact 恢复等写入口（**`<fieldset disabled>`** 或占位符）；导航 **read-only** 提示；**`.github/workflows/ci.yml`** 运行 **`scripts/verify_ui_openapi_registry.py`**（模板子串 ↔ **`JobOut`/`PolicyOut`** 关键字段）。文档侧栏增加 **`guides/web-console`**、**`guides/iac-bootstrap`**。
 - **路径预检 Job、作业 hostname 快照、SLO 指标与 IaC 示例（§十四 11～14）**：**`JobKind.path_precheck`**；**`POST /api/v1/jobs/path-precheck`** + UI **Run path precheck**；**`jobs.lease_agent_hostname` / `completed_agent_hostname`**（迁移 **`0014`**）；**`CompleteJobRequest.agent_hostname`**（proto）；**`devault_edge_agents_stale_count`** 采集器、**`devault_policy_allowlist_enforce_rejects_total`**、**`deploy/prometheus/alerts.yml`** 新增告警；**`deploy/iac/`**（curl + Terraform minimal）与 **`website/docs/guides/iac-bootstrap.md`**。
 - **Heartbeat 快照与租户策略 allowlist（§十四 P2 · 十四-08～10）**：**`proto/agent.proto`** 扩展 **`HeartbeatRequest`**（**`hostname`/`os`/`region`/`env`/`backup_path_allowlist`/`snapshot_schema_version`**）；迁移 **`0013`** — **`edge_agents`** 快照列 + **`tenants.policy_paths_allowlist_mode`**（**`off`/`warn`/`enforce`**）；**`GET /api/v1/tenant-agents`** 与 **`/ui/tenant-agents`**；策略表单与 **`create_policy`/`patch_policy`** 按租户模式校验 **`paths`** ⊆ 已登记 Agent 上报前缀之并集；**`PATCH /api/v1/tenants/{id}`** 与租户编辑 UI 暴露 **`policy_paths_allowlist_mode`**。Agent 默认 **`snapshot_schema_version=1`** 并上报 **`DEVAULT_ALLOWED_PATH_PREFIXES`** 等。文档：**`website/docs/admin/agent-fleet.md`**、**`website/docs/reference/grpc-services.md`**、**`website/docs/user/quickstart.md`**。
