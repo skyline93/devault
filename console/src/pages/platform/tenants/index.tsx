@@ -1,15 +1,21 @@
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { PageContainer, ProTable } from '@ant-design/pro-components';
 import { request } from '@umijs/max';
-import { App, Button, Form, Input, Modal, Select, Switch, Typography } from 'antd';
+import { App, Button, Form, Input, Modal, Select, Switch, Typography, notification } from 'antd';
 import React, { useRef, useState } from 'react';
+
+import { detailFromError } from '@/requestErrorConfig';
+
+const slugPattern = /^[a-z0-9]+(?:[-_][a-z0-9]+)*$/;
 
 const TenantsAdminPage: React.FC = () => {
   const { message } = App.useApp();
   const actionRef = useRef<ActionType>();
   const [open, setOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
   const [row, setRow] = useState<API.TenantOut | null>(null);
   const [form] = Form.useForm();
+  const [createForm] = Form.useForm();
 
   const columns: ProColumns<API.TenantOut>[] = [
     { title: '名称', dataIndex: 'name' },
@@ -60,7 +66,22 @@ const TenantsAdminPage: React.FC = () => {
   ];
 
   return (
-    <PageContainer title="租户（管理员）">
+    <PageContainer
+      title="租户（平台管理员）"
+      subTitle="租户不是单独一套登录账号：用户仍使用全局登录页；加入该租户成员关系后，可在顶栏「租户」里切换到新租户。"
+    >
+      <div style={{ marginBottom: 16 }}>
+        <Button
+          type="primary"
+          onClick={() => {
+            createForm.resetFields();
+            setCreateOpen(true);
+          }}
+        >
+          新建租户
+        </Button>
+      </div>
+
       <ProTable<API.TenantOut>
         rowKey="id"
         actionRef={actionRef}
@@ -72,6 +93,72 @@ const TenantsAdminPage: React.FC = () => {
         }}
         pagination={{ pageSize: 20 }}
       />
+
+      <Modal
+        title="新建租户"
+        open={createOpen}
+        onCancel={() => setCreateOpen(false)}
+        destroyOnClose
+        okText="创建"
+        onOk={async () => {
+          const v = await createForm.validateFields();
+          const slug = String(v.slug ?? '')
+            .trim()
+            .toLowerCase();
+          try {
+            const created = await request<API.TenantOut>('/api/v1/tenants', {
+              method: 'POST',
+              data: { name: String(v.name ?? '').trim(), slug },
+              skipErrorHandler: true,
+            });
+            setCreateOpen(false);
+            await actionRef.current?.reload?.();
+            message.success('租户已创建');
+            notification.success({
+              message: '租户已创建',
+              duration: 14,
+              description: (
+                <div>
+                  <p style={{ marginBottom: 8 }}>
+                    <strong>如何「进入」该租户：</strong>DeVault 控制台是<strong>统一登录</strong>（同一邮箱/密码或
+                    SSO）。用户<strong>不会</strong>按租户单独登录；需要先具备该租户的<strong>成员关系</strong>，再用顶栏
+                    「租户」下拉框切换到「{created.name}」。
+                  </p>
+                  <p style={{ marginBottom: 8 }}>
+                    <strong>添加成员：</strong>新租户一般还没有任何成员——请先在可访问数据库的主机上执行{' '}
+                    <code>devault-admin create-console-user</code>，其中 <code>--tenant</code> 填下方复制的租户 ID，以绑定首名{' '}
+                    <code>tenant_admin</code>；之后该用户用常规方式登录，并在顶栏选择本租户，再在「概览 → 成员邀请」邀请其他人。
+                  </p>
+                  <Typography.Text type="secondary">租户 ID（可点击复制）：</Typography.Text>
+                  <Typography.Paragraph copyable style={{ marginBottom: 0 }} code>
+                    {created.id}
+                  </Typography.Paragraph>
+                </div>
+              ),
+            });
+          } catch (e) {
+            message.error(detailFromError(e));
+            throw e;
+          }
+        }}
+      >
+        <Form form={createForm} layout="vertical">
+          <Form.Item name="name" label="显示名称" rules={[{ required: true, message: '请输入名称' }]}>
+            <Input placeholder="例如 Acme Corp" />
+          </Form.Item>
+          <Form.Item
+            name="slug"
+            label="slug（唯一标识）"
+            rules={[
+              { required: true, message: '请输入 slug' },
+              { pattern: slugPattern, message: '仅小写字母、数字、连字符或下划线，且分隔处两侧须有字符' },
+            ]}
+            extra="提交时会转为小写；须全局唯一。"
+          >
+            <Input placeholder="例如 acme-corp" />
+          </Form.Item>
+        </Form>
+      </Modal>
 
       <Modal
         title={row ? `编辑租户 ${row.slug}` : ''}

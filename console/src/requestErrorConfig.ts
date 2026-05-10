@@ -12,7 +12,7 @@ function readCookie(name: string): string | null {
 
 const loginPath = '/user/login';
 
-function detailFromError(error: unknown): string {
+export function detailFromError(error: unknown): string {
   const body = (error as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
   if (typeof body === 'string') return body;
   if (Array.isArray(body)) {

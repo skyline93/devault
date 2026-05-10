@@ -2,6 +2,7 @@ import { LinkOutlined } from '@ant-design/icons';
 import type { ProLayoutProps } from '@ant-design/pro-components';
 import type { RequestConfig, RunTimeLayoutConfig } from '@umijs/max';
 import { history, Link, request as maxRequest } from '@umijs/max';
+import { App as AntdApp } from 'antd';
 import React from 'react';
 
 import { Footer, RightContent } from '@/components';
@@ -22,6 +23,11 @@ const authPublicPaths = new Set([
 ]);
 
 void openapiAuthSessionContract;
+
+/** Ant Design 5：`App.useApp()` 的 message/modal 等依赖此包裹，否则部分页成功提示不显示。 */
+export function rootContainer(container: React.ReactNode) {
+  return <AntdApp>{container}</AntdApp>;
+}
 
 async function ensureTenantSelection(user: API.CurrentUser): Promise<void> {
   try {
