@@ -8,6 +8,10 @@ declare namespace API {
     principal_kind?: 'platform' | 'tenant_user';
     user_id?: string | null;
     email?: string | null;
+    /** IAM `name` 或邮箱，用于顶栏展示；缺省时用 `principal_label`。 */
+    display_name?: string | null;
+    /** IAM access token 中的 `perm` 列表。 */
+    permissions?: string[] | null;
     tenants?: Array<{
       tenant_id: string;
       slug: string;

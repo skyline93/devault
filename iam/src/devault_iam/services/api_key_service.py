@@ -108,6 +108,8 @@ def issue_access_token_for_api_key(
         perm=scopes,
         pk="api_key",
         mfa=True,
+        email="",
+        name="",
     )
     return issue_access_token(
         private_key_pem=private_key_pem,

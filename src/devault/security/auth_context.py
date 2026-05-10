@@ -21,6 +21,8 @@ class AuthContext:
     user_id: uuid.UUID | None = None
     mfa_satisfied: bool = True
     iam_perm: frozenset[str] = field(default_factory=frozenset)
+    iam_email: str | None = None
+    iam_display_name: str | None = None
 
     @property
     def is_admin(self) -> bool:

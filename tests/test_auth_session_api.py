@@ -70,6 +70,8 @@ def test_auth_session_dev_open(
     assert data["principal_label"] == "dev-open"
     assert data["allowed_tenant_ids"] is None
     assert data.get("principal_kind") == "platform"
+    assert data.get("permissions") in (None, [])
+    assert data.get("display_name") in (None, "")
 
 
 def test_auth_session_iam_requires_bearer(
@@ -117,3 +119,4 @@ def test_auth_session_iam_bearer_ok(
     data = r.json()
     assert data["role"] == "admin"
     assert data.get("principal_kind") == "platform"
+    assert data.get("permissions") == ["devault.platform.admin"]

@@ -765,9 +765,19 @@ export interface components {
             user_id?: string | null;
             /**
              * Email
-             * @description Reserved; IAM humans may not expose email in this payload.
+             * @description IAM access token `email` claim when present (human users / some platform tokens).
              */
             email?: string | null;
+            /**
+             * Display Name
+             * @description Preferred UI label: IAM `name` claim if set, otherwise email, otherwise omitted.
+             */
+            display_name?: string | null;
+            /**
+             * Permissions
+             * @description IAM `perm` keys from the access token; null or empty when not applicable.
+             */
+            permissions?: string[] | null;
             /**
              * Tenants
              * @description Per-tenant rows for human users; null for platform principals.

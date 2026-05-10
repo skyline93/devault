@@ -117,6 +117,14 @@ def _tenant_ids_from_payload(payload: dict[str, Any]) -> frozenset[uuid.UUID]:
     return frozenset(ids)
 
 
+def _optional_str_claim(payload: dict[str, Any], key: str) -> str | None:
+    raw = payload.get(key)
+    if raw is None:
+        return None
+    s = str(raw).strip()
+    return s or None
+
+
 def auth_context_from_iam_payload(payload: dict[str, Any]) -> AuthContext:
     perm = _perm_list(payload)
     perm_f = frozenset(perm)
@@ -147,6 +155,8 @@ def auth_context_from_iam_payload(payload: dict[str, Any]) -> AuthContext:
             user_id=None,
             mfa_satisfied=mfa_ok,
             iam_perm=perm_f,
+            iam_email=_optional_str_claim(payload, "email"),
+            iam_display_name=_optional_str_claim(payload, "name"),
         )
 
     uid = uuid.UUID(sub)
@@ -160,6 +170,8 @@ def auth_context_from_iam_payload(payload: dict[str, Any]) -> AuthContext:
         user_id=uid,
         mfa_satisfied=mfa_ok,
         iam_perm=perm_f,
+        iam_email=_optional_str_claim(payload, "email"),
+        iam_display_name=_optional_str_claim(payload, "name"),
     )
 
 

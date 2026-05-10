@@ -37,13 +37,19 @@ def _iam_human_auth_session_out(auth: AuthContext, db: Session) -> AuthSessionOu
                 sso_password_login_disabled=bool(t.sso_password_login_disabled),
             )
         )
+    name_p = (auth.iam_display_name or "").strip() or None
+    email_p = (auth.iam_email or "").strip() or None
+    display = name_p or email_p
+    perms = sorted(auth.iam_perm) if auth.iam_perm else []
     return AuthSessionOut(
         role=auth.role,
         principal_label=auth.principal_label,
         allowed_tenant_ids=allowed_ids,
         principal_kind="tenant_user",
         user_id=auth.user_id,
-        email=None,
+        email=email_p,
+        display_name=display,
+        permissions=perms,
         tenants=tenants_out if tenants_out else None,
         needs_mfa=auth.principal_kind == "tenant_user" and not auth.mfa_satisfied,
     )
@@ -54,13 +60,19 @@ def build_auth_session_out(auth: AuthContext, db: Session) -> AuthSessionOut:
         ids: list[uuid.UUID] | None = None
         if auth.allowed_tenant_ids is not None:
             ids = sorted(auth.allowed_tenant_ids, key=lambda u: u.hex)
+        perm_out = sorted(auth.iam_perm) if auth.iam_perm else None
+        name_p = (auth.iam_display_name or "").strip() or None
+        email_p = (auth.iam_email or "").strip() or None
+        display = name_p or email_p
         return AuthSessionOut(
             role=auth.role,
             principal_label=auth.principal_label,
             allowed_tenant_ids=ids,
             principal_kind="platform",
             user_id=None,
-            email=None,
+            email=email_p,
+            display_name=display,
+            permissions=perm_out,
             tenants=None,
             needs_mfa=False,
         )

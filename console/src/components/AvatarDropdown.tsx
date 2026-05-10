@@ -1,8 +1,8 @@
 import { LogoutOutlined, UserOutlined } from '@ant-design/icons';
 import { history, useModel } from '@umijs/max';
-import { Avatar, Dropdown, Space, Typography } from 'antd';
+import { Avatar, Dropdown, Space, Tag, Typography } from 'antd';
 import type { MenuProps } from 'antd';
-import React from 'react';
+import React, { useMemo } from 'react';
 
 import HeaderDropdown from '@/components/HeaderDropdown';
 import { STORAGE_BEARER_KEY, STORAGE_TENANT_ID_KEY } from '@/constants/storage';
@@ -15,6 +15,27 @@ const loginPath = '/user/login';
 const AvatarDropdown: React.FC = () => {
   const { initialState, setInitialState } = useModel('@@initialState');
   const user = initialState?.currentUser;
+
+  const primaryLabel = useMemo(() => {
+    if (!user) return '';
+    const dn = (user.display_name || '').trim();
+    if (dn) return dn;
+    const em = (user.email || '').trim();
+    if (em) return em;
+    return user.principal_label;
+  }, [user]);
+
+  const currentTenantLabel = useMemo(() => {
+    if (!user?.tenants?.length) return null;
+    const tid = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_TENANT_ID_KEY) : null;
+    if (!tid) return null;
+    const row = user.tenants.find((t) => t.tenant_id === tid);
+    if (!row) return tid;
+    return `${row.name}（${row.slug}）`;
+  }, [user]);
+
+  const permList = useMemo(() => user?.permissions?.filter(Boolean) ?? [], [user?.permissions]);
+
   if (!user) return null;
 
   const onLogout = () => {
@@ -35,13 +56,41 @@ const AvatarDropdown: React.FC = () => {
       key: 'info',
       disabled: true,
       label: (
-        <div style={{ maxWidth: 240 }}>
-          <Typography.Text strong>{user.principal_label}</Typography.Text>
+        <div style={{ maxWidth: 280 }}>
+          <Typography.Text strong>{primaryLabel}</Typography.Text>
+          {primaryLabel !== user.principal_label ? (
+            <div>
+              <Typography.Text type="secondary" style={{ fontSize: 11 }} copyable>
+                {user.principal_label}
+              </Typography.Text>
+            </div>
+          ) : null}
           <div>
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
               角色：{user.role}
             </Typography.Text>
           </div>
+          {currentTenantLabel ? (
+            <div>
+              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                当前租户：{currentTenantLabel}
+              </Typography.Text>
+            </div>
+          ) : null}
+          {permList.length > 0 ? (
+            <div style={{ marginTop: 6 }}>
+              <Typography.Text type="secondary" style={{ fontSize: 11, display: 'block', marginBottom: 4 }}>
+                权限（IAM）
+              </Typography.Text>
+              <div style={{ maxHeight: 160, overflowY: 'auto' }}>
+                {permList.map((p) => (
+                  <Tag key={p} style={{ marginBottom: 4, fontSize: 11 }}>
+                    {p}
+                  </Tag>
+                ))}
+              </div>
+            </div>
+          ) : null}
         </div>
       ),
     },
@@ -59,8 +108,8 @@ const AvatarDropdown: React.FC = () => {
       <span className="ant-pro-global-header-index-action" style={{ cursor: 'pointer', display: 'inline-flex' }}>
         <Space size={8}>
           <Avatar size="small" icon={<UserOutlined />} style={{ backgroundColor: '#1890ff' }} />
-          <span style={{ maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {user.principal_label}
+          <span style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {primaryLabel}
           </span>
         </Space>
       </span>

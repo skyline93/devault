@@ -122,4 +122,40 @@ def test_build_session_iam_human_uses_tenant_rows() -> None:
     out = build_auth_session_out(auth, db)
     assert out.user_id == uid
     assert out.email is None
+    assert out.display_name is None
+    assert out.permissions == ["devault.console.read"]
     assert out.tenants and out.tenants[0].tenant_id == tid
+
+
+def test_build_session_iam_human_email_and_name() -> None:
+    tid = uuid.uuid4()
+    uid = uuid.uuid4()
+    auth = auth_context_from_iam_payload(
+        {
+            "sub": str(uid),
+            "perm": ["devault.console.read"],
+            "pk": "tenant_user",
+            "mfa": True,
+            "tid": str(tid),
+            "tids": [str(tid)],
+            "email": "alice@example.com",
+            "name": "Alice",
+        }
+    )
+    db = MagicMock()
+
+    def _get(model: type, pk: uuid.UUID) -> object | None:
+        if model is Tenant and pk == tid:
+            return SimpleNamespace(
+                id=tid,
+                name="IAM Sync",
+                slug="iam-sync",
+                require_mfa_for_admins=False,
+                sso_password_login_disabled=False,
+            )
+        return None
+
+    db.get.side_effect = _get
+    out = build_auth_session_out(auth, db)
+    assert out.email == "alice@example.com"
+    assert out.display_name == "Alice"

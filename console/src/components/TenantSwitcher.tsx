@@ -1,5 +1,5 @@
 import { request, useModel } from '@umijs/max';
-import { Select, message } from 'antd';
+import { Select, Space, Tooltip, Typography, message } from 'antd';
 import React, { useEffect, useMemo, useState } from 'react';
 
 import { STORAGE_TENANT_ID_KEY } from '@/constants/storage';
@@ -45,24 +45,35 @@ const TenantSwitcher: React.FC = () => {
 
   const value = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_TENANT_ID_KEY) ?? undefined : undefined;
 
+  const selectedLabel = useMemo(() => {
+    if (!value) return undefined;
+    return options.find((o) => o.value === value)?.label;
+  }, [options, value]);
+
   if (!user) return null;
 
   return (
-    <Select
-      className="ant-pro-global-header-index-action"
-      style={{ minWidth: 220, marginInline: 8 }}
-      loading={loading}
-      placeholder="租户"
-      value={options.some((o) => o.value === value) ? value : undefined}
-      options={options}
-      onChange={(id: string) => {
-        localStorage.setItem(STORAGE_TENANT_ID_KEY, id);
-        message.success('已切换租户');
-        window.location.reload();
-      }}
-      showSearch
-      optionFilterProp="label"
-    />
+    <Space size={6} align="center" className="ant-pro-global-header-index-action" style={{ marginInline: 8 }}>
+      <Typography.Text type="secondary" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
+        当前租户
+      </Typography.Text>
+      <Tooltip title={selectedLabel ? `已选：${selectedLabel}` : '请选择可访问的租户'}>
+        <Select
+          style={{ minWidth: 220 }}
+          loading={loading}
+          placeholder="选择租户…"
+          value={options.some((o) => o.value === value) ? value : undefined}
+          options={options}
+          onChange={(id: string) => {
+            localStorage.setItem(STORAGE_TENANT_ID_KEY, id);
+            message.success('已切换租户');
+            window.location.reload();
+          }}
+          showSearch
+          optionFilterProp="label"
+        />
+      </Tooltip>
+    </Space>
   );
 };
 

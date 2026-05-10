@@ -197,6 +197,8 @@ def build_access_claims(db: Session, user: User, effective_tenant_id: uuid.UUID)
         perm=perms,
         pk=pk,
         mfa=mfa_ok,
+        email=user.email,
+        name=(user.name or "").strip(),
     )
 
 

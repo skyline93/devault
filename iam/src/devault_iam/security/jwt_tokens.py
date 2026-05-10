@@ -23,6 +23,9 @@ class AccessTokenClaims:
     perm: list[str]
     pk: str  # tenant_user | platform | api_key
     mfa: bool
+    # Human-friendly claims for downstream UIs (DeVault console); api keys leave empty.
+    email: str = ""
+    name: str = ""
 
 
 def _utcnow() -> datetime:
@@ -52,6 +55,12 @@ def issue_access_token(
         payload["tid"] = str(claims.tid)
     if claims.tids:
         payload["tids"] = [str(x) for x in claims.tids]
+    em = (claims.email or "").strip()
+    if em:
+        payload["email"] = em
+    nm = (claims.name or "").strip()
+    if nm:
+        payload["name"] = nm
     return jwt.encode(
         payload,
         private_key_pem,

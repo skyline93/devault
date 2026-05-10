@@ -124,7 +124,18 @@ class AuthSessionOut(BaseModel):
         description="platform = IAM service accounts / platform admins; tenant_user = IAM human user (`sub` UUID).",
     )
     user_id: uuid.UUID | None = Field(None, description="IAM user id when principal_kind is tenant_user.")
-    email: str | None = Field(None, description="Reserved; IAM humans may not expose email in this payload.")
+    email: str | None = Field(
+        None,
+        description="IAM access token `email` claim when present (human users / some platform tokens).",
+    )
+    display_name: str | None = Field(
+        None,
+        description="Preferred UI label: IAM `name` claim if set, otherwise email, otherwise omitted.",
+    )
+    permissions: list[str] | None = Field(
+        None,
+        description="IAM `perm` keys from the access token; null or empty when not applicable.",
+    )
     tenants: list[SessionTenantRow] | None = Field(
         None,
         description="Per-tenant rows for human users; null for platform principals.",
