@@ -7,6 +7,40 @@ on:
     branches: [main, master]
 
 jobs:
+  iam-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_USER: iam
+          POSTGRES_PASSWORD: iam
+          POSTGRES_DB: iam
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U iam -d iam"
+          --health-interval 3s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install IAM package
+        run: pip install -e "./iam[dev]"
+      - name: Alembic upgrade (IAM)
+        working-directory: iam
+        env:
+          IAM_DATABASE_URL: postgresql+psycopg://iam:iam@127.0.0.1:5432/iam
+        run: alembic upgrade head
+      - name: Pytest (IAM)
+        working-directory: iam
+        env:
+          IAM_TEST_DATABASE_URL: postgresql+psycopg://iam:iam@127.0.0.1:5432/iam
+        run: pytest -q
+
   helm-lint:
     runs-on: ubuntu-latest
     steps:

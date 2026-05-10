@@ -12,6 +12,8 @@
 | [`docs-old/enterprise-backlog-completed-archive.md`](../docs-old/enterprise-backlog-completed-archive.md) | 企业待办 **Part 1**：索引 **`[x]`**；**Part 2**：已闭合分节正文、§十三、§十二 历史修订、Epic 长说明 |
 | [`docs/compatibility.json`](compatibility.json) | 控制面 / Agent 兼容矩阵（CI 校验） |
 | [`docs/RELEASE.md`](RELEASE.md) | 发版检查清单 |
+| [`docs/iam-service-design.md`](iam-service-design.md) | **独立 IAM 服务** 设计方案（人 + 控制面 API Key）；代码在仓库 **`iam/`** 目录 |
+| [`iam/docs/BACKLOG.md`](../iam/docs/BACKLOG.md) | IAM **按优先级的实现待办**（P0–P5，对齐 `iam-service-design` 与 `docs-old/iam.md`） |
 
 ## 愿景 vs 当前实现（差距表）
 

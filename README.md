@@ -45,6 +45,7 @@ make docker-buildx-push IMAGE=glf9832/devault:latest
 - **Full user and ops guides**: [documentation site source](website/), content in [`website/docs/`](website/docs/index.md). Local preview: `cd website && npm ci && npm start` → <http://localhost:3000>
 - **Control plane ↔ Agent compatibility matrix** (machine-readable): [`docs/compatibility.json`](docs/compatibility.json)
 - **Release notes**: [`docs/RELEASE.md`](docs/RELEASE.md)
+- **Standalone IAM service** (design + `iam/` package): [`docs/iam-service-design.md`](docs/iam-service-design.md)
 
 API surfaces, gRPC/TLS, S3, and Helm are covered in the doc site; this root README stays short.
 
@@ -57,6 +58,7 @@ API surfaces, gRPC/TLS, S3, and Helm are covered in the doc site; this root READ
 | `deploy/` | `docker-compose.yml`, `scripts/install.sh`, images, Helm chart, `demo_data/` sample for the agent bind mount |
 | `website/` | Docusaurus documentation site |
 | `console/` | Ant Design Pro（Umi 4）企业控制台：Bearer + 租户头；`npm run dev` / `npm run build` |
+| `iam/` | 独立 IAM 服务（自有 `pyproject.toml`、FastAPI、Alembic）；见 [`docs/iam-service-design.md`](docs/iam-service-design.md) |
 | `tests/` | pytest suite |
 
 ## Local development (summary)
