@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal
 
 from fastapi import HTTPException, status
@@ -20,6 +20,7 @@ class AuthContext:
     principal_kind: PrincipalKind = "platform"
     user_id: uuid.UUID | None = None
     mfa_satisfied: bool = True
+    iam_perm: frozenset[str] = field(default_factory=frozenset)
 
     @property
     def is_admin(self) -> bool:

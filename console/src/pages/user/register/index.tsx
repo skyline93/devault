@@ -1,12 +1,25 @@
 import { LockOutlined, UserOutlined } from '@ant-design/icons';
 import { LoginForm, ProFormText } from '@ant-design/pro-components';
-import { Link, request } from '@umijs/max';
+import { history, Link, request, useModel } from '@umijs/max';
 import { Alert, Card, theme, Typography } from 'antd';
 import React, { useState } from 'react';
+
+import { STORAGE_BEARER_KEY } from '@/constants/storage';
+import { IAM_API_PREFIX, isIamConsoleEnabled } from '@/config/iam';
+
+type IamTokenOut = {
+  access_token: string;
+  refresh_token: string;
+  token_type: string;
+  expires_in: number;
+  tenant_id: string;
+  permissions: string[];
+};
 
 /** §十六-08：自助注册（需控制面 `DEVAULT_CONSOLE_SELF_REGISTRATION_ENABLED=true`）。 */
 const SelfRegister: React.FC = () => {
   const { token } = theme.useToken();
+  const { setInitialState } = useModel('@@initialState');
   const [ok, setOk] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
@@ -26,7 +39,12 @@ const SelfRegister: React.FC = () => {
           注册控制台账号
         </Typography.Title>
         <Typography.Paragraph type="secondary" style={{ textAlign: 'center' }}>
-          成功后需平台管理员分配租户成员资格。返回 <Link to="/user/login">密码登录</Link>
+          {isIamConsoleEnabled() ? (
+            <>使用独立 IAM 注册后将直接进入控制台（需 DeVault 已配置 IAM JWT 校验，如 DEVAULT_AUTH_SOURCE=iam）。 </>
+          ) : (
+            <>成功后需平台管理员分配租户成员资格。 </>
+          )}
+          返回 <Link to="/user/login">密码登录</Link>
         </Typography.Paragraph>
         {ok ? <Alert type="success" message={ok} style={{ marginBottom: 16 }} /> : null}
         {err ? <Alert type="error" message={err} style={{ marginBottom: 16 }} /> : null}
@@ -35,12 +53,46 @@ const SelfRegister: React.FC = () => {
           onFinish={async (values) => {
             setErr(null);
             setOk(null);
+            const email = (values as { email?: string }).email?.trim();
+            const password = (values as { password?: string }).password;
+            if (!email || !password) {
+              setErr('请输入邮箱与密码');
+              return;
+            }
             try {
+              if (isIamConsoleEnabled()) {
+                const tok = await request<IamTokenOut>(`${IAM_API_PREFIX}/v1/auth/register`, {
+                  method: 'POST',
+                  data: {
+                    email,
+                    password,
+                    name: email.split('@')[0] || 'user',
+                  },
+                  skipErrorHandler: true,
+                });
+                localStorage.setItem(STORAGE_BEARER_KEY, tok.access_token);
+                const currentUser = await request<API.CurrentUser>('/api/v1/auth/session', {
+                  method: 'GET',
+                  skipErrorHandler: true,
+                });
+                const gated = Boolean(currentUser.needs_mfa);
+                await setInitialState((s) => ({
+                  ...s,
+                  currentUser,
+                  canAdmin: Boolean(!gated && currentUser.role === 'admin'),
+                  canWrite: Boolean(!gated && (currentUser.role === 'admin' || currentUser.role === 'operator')),
+                  canInviteMembers: Boolean(
+                    !gated && currentUser.tenants?.some((t) => t.membership_role === 'tenant_admin'),
+                  ),
+                }));
+                history.push('/overview/welcome');
+                return;
+              }
               await request('/api/v1/auth/register', {
                 method: 'POST',
                 data: {
-                  email: (values as { email?: string }).email?.trim(),
-                  password: (values as { password?: string }).password,
+                  email,
+                  password,
                 },
                 skipErrorHandler: true,
               });

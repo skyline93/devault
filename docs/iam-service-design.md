@@ -233,13 +233,24 @@ docker compose -f deploy/docker-compose.iam.yml up --build
 
 生产建议：IAM 管理 API 仅内网或零信任访问；JWKS 可对 DeVault 所在安全域开放。可选 **mTLS**（DeVault → `/authorize`）。
 
+### 10.4 DeVault 控制面（与 IAM 联调，前缀 **`DEVAULT_`**）
+
+首版实现见 `src/devault/security/iam_jwt.py` 与 `tests/test_iam_jwt_auth.py`：
+
+- **`DEVAULT_AUTH_SOURCE`**：`legacy`（默认，不校验 IAM JWT）| **`iam`**（在既有 Bearer 解析链中增加 IAM access JWT：`iss`/`aud` + RS256，**JWKS 或 PEM 公钥**）。
+- **`DEVAULT_IAM_JWKS_URL`**：IAM 的 **`/.well-known/jwks.json`** 绝对 URL（与 **`PyJWKClient`** 拉取）。
+- **`DEVAULT_IAM_JWT_PUBLIC_KEY_PEM`**：可选；非空时跳过 JWKS HTTP，直接用 PEM 验签（测试或单钥部署）。
+- **`DEVAULT_IAM_JWT_ISSUER`** / **`DEVAULT_IAM_JWT_AUDIENCE`**：须分别与 IAM 的 **`IAM_JWT_ISSUER`**、**`IAM_JWT_AUDIENCE`** 一致（例如 audience 默认 **`devault-api`**）。
+
+Console 可选 **`UMI_APP_IAM_PREFIX=/iam-api`**（开发代理到 IAM），登录/注册走 IAM，再以 IAM **`access_token`** 调用 DeVault **`GET /api/v1/auth/session`**。
+
 ---
 
 ## 11. 迁移阶段（DeVault 替换）
 
 1. **IAM MVP**：用户、租户、成员、RBAC 种子、登录、JWT、JWKS；Authorize 与缓存。  
 2. **数据迁移**：从现有 `console_users` / `tenant_memberships` 等导入 IAM（密码哈希兼容 Argon2 时可原样迁移）。  
-3. **DeVault 双模式**：`AUTH_SOURCE=legacy|iam`，灰度 JWT。  
+3. **DeVault 双模式**：**`DEVAULT_AUTH_SOURCE=legacy|iam`**，灰度 IAM JWT（见 §10.4）。  
 4. **Console 切换**：登录与租户管理指向 IAM。  
 5. **下线 Legacy**：移除 DeVault 内人类身份与控制面 API Key 表及相关路由；保留 Agent 与业务表。
 
@@ -253,6 +264,7 @@ docker compose -f deploy/docker-compose.iam.yml up --build
 | **P1**：注册/登录/刷新/登出、RS256 JWT + `/.well-known/jwks.json`、MFA TOTP、`/v1/me`、租户与成员 CRUD、`Principal` | **已完成** |
 | **P2**：控制面 API Key（平台/租户）、`POST /v1/auth/token`（`grant_type=api_key`）、`POST /v1/authorize`、权限 Redis 缓存与失效 | **已完成**（见 [`iam/docs/BACKLOG.md`](../iam/docs/BACKLOG.md)） |
 | **P3**：`audit_logs`、关键身份事件写入、`GET /v1/platform/audit-logs`、`/metrics`（Prometheus）、`X-Request-Id` 与访问日志 | **已完成**（见 [`iam/docs/BACKLOG.md`](../iam/docs/BACKLOG.md)） |
+| **P5（首版）**：DeVault 校验 IAM JWT（`DEVAULT_AUTH_SOURCE=iam` + JWKS 或 PEM）；Console 可选 `UMI_APP_IAM_PREFIX` 走 IAM 登录/注册 | **部分完成**：遗留表与租户镜像、Console API Key 管理仍待迭代（见 [`iam/docs/BACKLOG.md`](../iam/docs/BACKLOG.md)） |
 
 ---
 

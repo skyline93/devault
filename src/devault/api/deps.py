@@ -17,6 +17,7 @@ from devault.security.console_session_auth import (
     resolve_effective_tenant_id_for_console_user,
 )
 from devault.security.http_session_store import load_session
+from devault.security.iam_jwt import try_decode_iam_bearer
 from devault.security.oidc import try_decode_oidc_bearer
 from devault.security.tenant_oidc import try_decode_tenant_oidc_bearer
 from devault.security.policy import authentication_enabled
@@ -92,6 +93,9 @@ def get_auth_context(
     ctx_t = try_decode_tenant_oidc_bearer(db, raw)
     if ctx_t is not None:
         return ctx_t
+    ctx_iam = try_decode_iam_bearer(raw, settings)
+    if ctx_iam is not None:
+        return ctx_iam
     try:
         return resolve_bearer_token(db, raw, legacy_api_token=settings.api_token)
     except PermissionError as e:

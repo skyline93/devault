@@ -14,7 +14,7 @@
 
 | 命令 | 说明 |
 |------|------|
-| `npm run dev` | 本地开发（默认 **`http://localhost:8010`**；**`proxy`** 将 **`/api`**、**`/openapi.json`**、**`/docs`**、**`/redoc`**、**`/metrics`**、**`/version`**、**`/healthz`** 转到 **`http://127.0.0.1:8000`**）。 |
+| `npm run dev` | 本地开发（默认 **`http://localhost:8010`**；**`proxy`** 将 **`/api`**、**`/openapi.json`**、**`/docs`**、**`/redoc`**、**`/metrics`**、**`/version`**、**`/healthz`** 转到 **`http://127.0.0.1:8000`**；可选 **`/iam-api`** → **`http://127.0.0.1:8100`** 独立 IAM，见 **`.env.example`** 的 **`UMI_APP_IAM_PREFIX`**）。 |
 | `npm run build` | 生产静态资源输出到 **`dist/`**（CI 用其做类型与打包校验）。 |
 | `npm run export-openapi` | 写出 **`openapi.json`**（勿提交，已 `.gitignore`）。 |
 | `npm run codegen` | **`openapi-typescript`** → **`src/openapi/api-types.d.ts`**。 |
@@ -76,6 +76,8 @@
 **`GET /api/v1/auth/session`** 返回 **`role`**、**`principal_label`**、**`allowed_tenant_ids`**，以及 **`principal_kind`**（**`platform` \| `tenant_user`**）、人机时的 **`user_id` / `email` / `tenants`**、**`needs_mfa`**（**§十六-09**）。平台 admin 全租户时 **`allowed_tenant_ids`** 为 **`null`**。
 
 其它认证相关端点：**`GET /api/v1/auth/csrf`**、**`POST /api/v1/auth/login`**、**`POST /api/v1/auth/logout`**、**`POST /api/v1/auth/session/refresh`**；自助注册 **`POST /api/v1/auth/register`**（**`DEVAULT_CONSOLE_SELF_REGISTRATION_ENABLED`**）；**`POST /api/v1/auth/password-reset/request|confirm`**；**`POST /api/v1/auth/mfa/verify`** 与 **`mfa/enroll/*`**（已登录用户绑定 TOTP）。
+
+**独立 IAM（P5）**：构建时设置 **`UMI_APP_IAM_PREFIX=/iam-api`**（与 `config/config.ts` 开发代理一致）后，登录/注册请求发往 IAM（**`/iam-api/v1/auth/*`**），成功后把 **`access_token`** 写入 **`devault_bearer_token`** 并调用 DeVault **`GET /api/v1/auth/session`**（需控制面 **`DEVAULT_AUTH_SOURCE=iam`** 且配置 **`DEVAULT_IAM_*`**，见 [`docs/iam-service-design.md`](../docs/iam-service-design.md)）。
 
 ## 存储键
 

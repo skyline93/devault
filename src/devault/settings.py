@@ -23,6 +23,27 @@ class Settings(BaseSettings):
 
     api_token: str | None = Field(default=None, description="If set, require Authorization: Bearer")
 
+    auth_source: Literal["legacy", "iam"] = Field(
+        default="legacy",
+        description=(
+            "legacy=only DeVault console session, OIDC, and static API keys; "
+            "iam=also accept IAM-issued RS256 access JWT (configure JWKS or PEM + issuer + audience)"
+        ),
+    )
+    iam_jwks_url: str | None = Field(
+        default=None,
+        description="IAM ``/.well-known/jwks.json`` URL (e.g. http://127.0.0.1:8100/.well-known/jwks.json)",
+    )
+    iam_jwt_public_key_pem: str = Field(
+        default="",
+        description="Optional PEM public key for IAM JWTs (tests or single-key without JWKS HTTP)",
+    )
+    iam_jwt_issuer: str | None = Field(default=None, description="Expected JWT iss (must match IAM IAM_JWT_ISSUER)")
+    iam_jwt_audience: str | None = Field(
+        default=None,
+        description="Expected JWT aud (must match IAM IAM_JWT_AUDIENCE, e.g. devault-api)",
+    )
+
     # --- §十六: human console session (Cookie + Redis) + CSRF double-submit ---
     session_cookie_name: str = Field(default="devault_session", description="HttpOnly opaque session id")
     csrf_cookie_name: str = Field(

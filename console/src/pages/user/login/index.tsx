@@ -5,12 +5,23 @@ import { Alert, Card, theme, Typography } from 'antd';
 import React, { useEffect, useState } from 'react';
 
 import { STORAGE_BEARER_KEY } from '@/constants/storage';
+import { IAM_API_PREFIX, isIamConsoleEnabled } from '@/config/iam';
+
+type IamTokenOut = {
+  access_token: string;
+  refresh_token: string;
+  token_type: string;
+  expires_in: number;
+  tenant_id: string;
+  permissions: string[];
+};
 
 const Login: React.FC = () => {
   const { token } = theme.useToken();
   const { setInitialState } = useModel('@@initialState');
   const [err, setErr] = useState<string | null>(null);
   const [mfaStep, setMfaStep] = useState(false);
+  const [pendingIam, setPendingIam] = useState<{ email: string; password: string } | null>(null);
 
   useEffect(() => {
     void request('/api/v1/auth/csrf', { method: 'GET', skipErrorHandler: true });
@@ -35,6 +46,23 @@ const Login: React.FC = () => {
     history.push(safe ? redirect : '/overview/welcome');
   };
 
+  const loginViaIam = async (email: string, password: string, mfaCode?: string) => {
+    const data: Record<string, string> = { email, password };
+    if (mfaCode) data.mfa_code = mfaCode;
+    const tok = await request<IamTokenOut>(`${IAM_API_PREFIX}/v1/auth/login`, {
+      method: 'POST',
+      data,
+      skipErrorHandler: true,
+    });
+    localStorage.setItem(STORAGE_BEARER_KEY, tok.access_token);
+    const currentUser = await request<API.CurrentUser>('/api/v1/auth/session', {
+      method: 'GET',
+      skipErrorHandler: true,
+    });
+    setPendingIam(null);
+    await finishLogin(currentUser);
+  };
+
   return (
     <div
       style={{
@@ -50,7 +78,15 @@ const Login: React.FC = () => {
         <div style={{ marginBottom: 24, textAlign: 'center' }}>
           <h1 style={{ margin: 0, fontSize: 22 }}>DeVault</h1>
           <p style={{ marginTop: 8, color: token.colorTextSecondary, marginBottom: 0 }}>
-            人机主路径：<strong>邮箱 + 密码</strong>（Cookie 会话）
+            {isIamConsoleEnabled() ? (
+              <>
+                已通过 <strong>独立 IAM</strong> 登录（Bearer + DeVault 会话接口）
+              </>
+            ) : (
+              <>
+                人机主路径：<strong>邮箱 + 密码</strong>（Cookie 会话）
+              </>
+            )}
           </p>
           <Typography.Paragraph type="secondary" style={{ marginBottom: 0, marginTop: 8 }}>
             <Link to="/user/integration">API Token / 机器集成</Link>
@@ -80,6 +116,10 @@ const Login: React.FC = () => {
                 }
                 setErr(null);
                 try {
+                  if (isIamConsoleEnabled() && pendingIam) {
+                    await loginViaIam(pendingIam.email, pendingIam.password, code);
+                    return;
+                  }
                   const currentUser = await request<API.CurrentUser>('/api/v1/auth/mfa/verify', {
                     method: 'POST',
                     data: { code },
@@ -87,7 +127,7 @@ const Login: React.FC = () => {
                   });
                   await finishLogin(currentUser);
                 } catch (e) {
-                  const d = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+                  const d = (e as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
                   setErr(typeof d === 'string' ? d : '验证失败');
                 }
               }}
@@ -111,6 +151,32 @@ const Login: React.FC = () => {
                 return;
               }
               setErr(null);
+              if (isIamConsoleEnabled()) {
+                try {
+                  await loginViaIam(email, password);
+                } catch (e) {
+                  const status = (e as { response?: { status?: number; data?: { detail?: unknown } } })?.response
+                    ?.status;
+                  const detail = (e as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
+                  if (
+                    status === 403 &&
+                    detail &&
+                    typeof detail === 'object' &&
+                    'code' in detail &&
+                    (detail as { code?: string }).code === 'mfa_required'
+                  ) {
+                    setPendingIam({ email, password });
+                    setMfaStep(true);
+                    return;
+                  }
+                  if (status === 401 || status === 403) {
+                    setErr(typeof detail === 'string' ? detail : '邮箱或密码错误');
+                  } else {
+                    setErr('无法连接 IAM 或控制面，请确认 IAM / API 已启动且代理正确');
+                  }
+                }
+                return;
+              }
               try {
                 const currentUser = await request<API.CurrentUser>('/api/v1/auth/login', {
                   method: 'POST',

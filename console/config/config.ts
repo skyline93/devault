@@ -8,6 +8,8 @@ export default defineConfig({
     'process.env.UMI_APP_ENV_LABEL': JSON.stringify(process.env.UMI_APP_ENV_LABEL || ''),
     /** 可选：部署了 Grafana 时写入完整 URL，工作台显示跳转（十五-24） */
     'process.env.UMI_APP_GRAFANA_URL': JSON.stringify(process.env.UMI_APP_GRAFANA_URL || ''),
+    /** 非空时登录/注册走独立 IAM（P5）；开发默认 ``/iam-api`` 反代到 ``127.0.0.1:8100`` */
+    'process.env.UMI_APP_IAM_PREFIX': JSON.stringify(process.env.UMI_APP_IAM_PREFIX || ''),
   },
   title: 'DeVault',
   antd: {
@@ -187,6 +189,11 @@ export default defineConfig({
    * 开发联调：与生产「同域反代」一致，将控制面根路径与 `/api` 指到同一后端（十五-08）。
    */
   proxy: {
+    '/iam-api': {
+      target: 'http://127.0.0.1:8100',
+      changeOrigin: true,
+      pathRewrite: { '^/iam-api': '' },
+    },
     '/api': { target: 'http://127.0.0.1:8000', changeOrigin: true },
     '/openapi.json': { target: 'http://127.0.0.1:8000', changeOrigin: true },
     '/docs': { target: 'http://127.0.0.1:8000', changeOrigin: true },

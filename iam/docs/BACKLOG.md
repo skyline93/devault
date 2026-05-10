@@ -142,16 +142,18 @@
 
 ## P5 — DeVault / Console 侧（依赖 P1+，本仓库非 `iam/` 独占）
 
-21. **DeVault**  
-    - [ ] `IAM_JWKS_URL`、`IAM_ISSUER`、`IAM_AUDIENCE` 配置与 **PyJWKClient** 校验  
-    - [ ] `AUTH_SOURCE=legacy|iam` 双模式；JWT 解析构造 `AuthContext` 等价物  
-    - [ ] 移除（最终）`console_users`、`tenant_memberships`、`control_plane_api_key` 解析路径；**保留** Agent / enrollment  
+21. **DeVault**（首版灰度已实现；见 `src/devault/security/iam_jwt.py`、`tests/test_iam_jwt_auth.py`）  
+    - [x] **`DEVAULT_IAM_JWKS_URL`**（PyJWKClient）或 **`DEVAULT_IAM_JWT_PUBLIC_KEY_PEM`**（单钥免 HTTP）+ **`DEVAULT_IAM_JWT_ISSUER`** / **`DEVAULT_IAM_JWT_AUDIENCE`**（与 IAM 的 `iss`/`aud` 对齐）  
+    - [x] **`DEVAULT_AUTH_SOURCE`**：`legacy`（默认）| `iam`（启用 IAM access JWT 校验；仍保留 OIDC、Agent Redis session、**`control_plane_api_keys`** 与 **`DEVAULT_API_TOKEN`** 等既有路径，便于双跑）  
+    - [x] IAM JWT → **`AuthContext`**；**`GET /api/v1/auth/session`** 对 **`iam:user:`** 主体合成 **`AuthSessionOut`**（按 JWT `tids` 与 DeVault `tenants` 表 JOIN 展示租户行；无 `console_users` 行）  
+    - [ ] **最终**移除 `console_users` / `tenant_memberships` / `control_plane_api_key` 解析（需数据迁移与租户镜像完成后）  
     - [ ] 租户镜像消费（若 §9 采用事件同步）  
 
 22. **Console**  
-    - [ ] 登录/注册/MFA/API Key 管理 → IAM 基址；业务请求仍 DeVault + Bearer + `X-DeVault-Tenant-Id`  
+    - [x] **`UMI_APP_IAM_PREFIX`**（如 `/iam-api`）时：**登录 / 注册 / IAM 侧 MFA 第二步** 请求独立 IAM；业务 **`/api/*`** 仍为 DeVault + **`Authorization`**（IAM access JWT）+ **`X-DeVault-Tenant-Id`**（见 `console/config/config.ts` 代理与 `src/pages/user/login`）  
+    - [ ] Console 内 **API Key 生命周期管理** 全面切到 IAM（当前仍可用集成页的 DeVault 静态 Token / 或由运维使用 IAM OpenAPI）  
 
-**验收**：端到端：IAM 登录 → Console 调 DeVault 受保护 API 成功；Legacy 可关闭。
+**验收（首版）**：`DEVAULT_AUTH_SOURCE=iam` 且 JWKS/公钥与 iss/aud 配置正确时，Console 经 IAM 登录后 **`GET /api/v1/auth/session`** 返回与 IAM 权限一致的会话对象；`legacy` 行为不变。
 
 ---
 

@@ -22,6 +22,7 @@ from devault.security.agent_grpc_session import (
     validate_and_refresh_agent_session,
 )
 from devault.security.auth_context import AuthContext, dev_open_auth_context
+from devault.security.iam_jwt import try_decode_iam_bearer
 from devault.security.oidc import try_decode_oidc_bearer
 from devault.security.policy import authentication_enabled
 from devault.security.token_resolve import resolve_bearer_token
@@ -93,6 +94,15 @@ def _authenticate_grpc(context: grpc.ServicerContext, settings: Settings) -> Aut
                 )
                 raise RuntimeError("unreachable")
             return ctx
+        ctx_iam = try_decode_iam_bearer(raw, settings)
+        if ctx_iam is not None:
+            if ctx_iam.role == "auditor":
+                context.abort(
+                    grpc.StatusCode.PERMISSION_DENIED,
+                    "auditor role cannot access agent gRPC",
+                )
+                raise RuntimeError("unreachable")
+            return ctx_iam
         aid = validate_and_refresh_agent_session(
             settings.redis_url,
             raw,
