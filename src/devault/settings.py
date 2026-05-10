@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
-from typing import Self
+from typing import Literal, Self
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -22,6 +22,56 @@ class Settings(BaseSettings):
     redis_url: str = Field(default="redis://localhost:6379/0")
 
     api_token: str | None = Field(default=None, description="If set, require Authorization: Bearer")
+
+    # --- §十六: human console session (Cookie + Redis) + CSRF double-submit ---
+    session_cookie_name: str = Field(default="devault_session", description="HttpOnly opaque session id")
+    csrf_cookie_name: str = Field(
+        default="devault_csrf",
+        description="Readable CSRF token (not HttpOnly); paired with X-CSRF-Token on writes",
+    )
+    session_ttl_seconds: int = Field(default=604800, ge=300, le=86400 * 30, description="HTTP session TTL")
+    session_cookie_secure: bool = Field(
+        default=False,
+        description="Set Secure on session/csrf cookies (use true behind HTTPS)",
+    )
+    session_cookie_samesite: Literal["lax", "strict", "none"] = Field(
+        default="lax",
+        description="SameSite for session + CSRF cookies",
+    )
+    console_self_registration_enabled: bool = Field(
+        default=False,
+        description="If true, POST /api/v1/auth/register creates console users without tenant memberships",
+    )
+    auth_login_rate_limit_per_minute: int = Field(
+        default=30,
+        ge=0,
+        le=10_000,
+        description="Per client IP for login/register/password-reset-request; 0 disables",
+    )
+    auth_password_reset_ttl_minutes: int = Field(default=60, ge=5, le=24 * 60)
+    password_reset_link_base: str = Field(
+        default="",
+        description="Optional absolute base for password reset links in email (e.g. https://console.example.com)",
+    )
+    smtp_host: str = Field(default="", description="SMTP host; empty skips network send (body logged at INFO)")
+    smtp_port: int = Field(default=587, ge=1, le=65535)
+    smtp_user: str = Field(default="")
+    smtp_password: str = Field(default="")
+    smtp_from: str = Field(default="", description="RFC5322 From address")
+    smtp_use_tls: bool = Field(default=True)
+    invitation_ttl_hours: int = Field(
+        default=168,
+        ge=1,
+        le=24 * 60,
+        description="TTL for tenant email invitations (§十六-11); default 7 days",
+    )
+    invitation_link_base: str = Field(
+        default="",
+        description=(
+            "Optional absolute base for invitation accept links (e.g. https://console.example.com/user/accept-invite); "
+            "falls back to password_reset_link_base when empty"
+        ),
+    )
 
     storage_backend: str = Field(default="local", description="local | s3")
     local_storage_root: str = Field(default="./data/storage")
@@ -257,6 +307,12 @@ class Settings(BaseSettings):
         le=86400,
         description="Interval between retention purge runs in the scheduler process",
     )
+
+    @model_validator(mode="after")
+    def _csrf_samesite_none_requires_secure(self) -> Self:
+        if self.session_cookie_samesite == "none" and not self.session_cookie_secure:
+            raise ValueError("session_cookie_samesite=none requires session_cookie_secure=true")
+        return self
 
     @model_validator(mode="after")
     def _s3_key_pair_consistent(self) -> Self:

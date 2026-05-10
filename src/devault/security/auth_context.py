@@ -7,15 +7,19 @@ from typing import Literal
 from fastapi import HTTPException, status
 
 RoleName = Literal["admin", "operator", "auditor"]
+PrincipalKind = Literal["platform", "tenant_user"]
 
 
 @dataclass(frozen=True, slots=True)
 class AuthContext:
-    """Resolved HTTP/gRPC principal after Bearer validation."""
+    """Resolved HTTP/gRPC principal after session cookie or Bearer validation."""
 
     role: RoleName
     allowed_tenant_ids: frozenset[uuid.UUID] | None
     principal_label: str
+    principal_kind: PrincipalKind = "platform"
+    user_id: uuid.UUID | None = None
+    mfa_satisfied: bool = True
 
     @property
     def is_admin(self) -> bool:
@@ -34,6 +38,11 @@ class AuthContext:
             )
 
     def ensure_can_write(self) -> None:
+        if self.principal_kind == "tenant_user" and not self.mfa_satisfied:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="mfa_required",
+            )
         if not self.can_write():
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -41,6 +50,11 @@ class AuthContext:
             )
 
     def ensure_admin(self) -> None:
+        if self.principal_kind != "platform":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="platform administrator required",
+            )
         if self.role != "admin":
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,

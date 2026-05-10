@@ -10,6 +10,101 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from devault.db.base import Base
 
 
+class ConsoleUser(Base):
+    """Human console operator (§十六): email login + Argon2id password hash; distinct from API keys."""
+
+    __tablename__ = "console_users"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
+    password_hash: Mapped[str] = mapped_column(Text(), nullable=False)
+    disabled: Mapped[bool] = mapped_column(Boolean(), nullable=False, default=False)
+    totp_secret: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    totp_confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    memberships: Mapped[list["TenantMembership"]] = relationship(
+        "TenantMembership",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+
+
+class TenantMembership(Base):
+    """Links a console user to a tenant with a tenant-scoped RBAC role (§十六-05)."""
+
+    __tablename__ = "tenant_memberships"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("console_users.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    role: Mapped[str] = mapped_column(String(32), nullable=False)
+
+    user: Mapped["ConsoleUser"] = relationship("ConsoleUser", back_populates="memberships")
+
+
+class PasswordResetToken(Base):
+    """One-time password reset token (hashed at rest)."""
+
+    __tablename__ = "password_reset_tokens"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("console_users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class TenantInvitation(Base):
+    """Email invitation to join a tenant with a tenant-scoped membership role (§十六-11)."""
+
+    __tablename__ = "tenant_invitations"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    email: Mapped[str] = mapped_column(String(255), nullable=False)
+    role: Mapped[str] = mapped_column(String(32), nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    invited_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("console_users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class AgentEnrollment(Base):
     """Admin-provisioned binding: ``agent_id`` may only touch jobs/artifacts in ``allowed_tenant_ids`` over gRPC."""
 
@@ -126,6 +221,15 @@ class Tenant(Base):
     s3_assume_role_arn: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     s3_assume_role_external_id: Mapped[str | None] = mapped_column(String(1224), nullable=True)
     policy_paths_allowlist_mode: Mapped[str] = mapped_column(String(16), nullable=False, default="off")
+    require_mfa_for_admins: Mapped[bool] = mapped_column(Boolean(), nullable=False, default=False)
+    sso_oidc_issuer: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    sso_oidc_audience: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    sso_oidc_role_claim: Mapped[str] = mapped_column(String(64), nullable=False, default="devault_role")
+    sso_oidc_email_claim: Mapped[str] = mapped_column(String(64), nullable=False, default="email")
+    sso_password_login_disabled: Mapped[bool] = mapped_column(Boolean(), nullable=False, default=False)
+    sso_jit_provisioning: Mapped[bool] = mapped_column(Boolean(), nullable=False, default=False)
+    sso_saml_entity_id: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    sso_saml_acs_url: Mapped[str | None] = mapped_column(Text(), nullable=True)
 
     policies: Mapped[list["Policy"]] = relationship("Policy", back_populates="tenant")
     jobs: Mapped[list["Job"]] = relationship("Job", back_populates="tenant")

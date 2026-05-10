@@ -40,6 +40,24 @@ class TenantOut(BaseModel):
         description="When enforce/warn: file policy paths must fall under enrolled Agents' "
         "Heartbeat-reported backup_path_allowlist union (empty union skips validation).",
     )
+    require_mfa_for_admins: bool = Field(
+        False,
+        description="When true, tenant_admin members must enroll TOTP before console login.",
+    )
+    sso_oidc_issuer: str | None = None
+    sso_oidc_audience: str | None = None
+    sso_oidc_role_claim: str = Field(default="devault_role", description="JWT claim for REST role / tenant membership role.")
+    sso_oidc_email_claim: str = Field(default="email", description="JWT claim used for JIT email (when enabled).")
+    sso_password_login_disabled: bool = Field(
+        False,
+        description="When true for all of a user's memberships, email/password console login is rejected (§十六-12).",
+    )
+    sso_jit_provisioning: bool = Field(
+        False,
+        description="When true with OIDC issuer+audience, valid Bearer JWTs may upsert ConsoleUser + membership.",
+    )
+    sso_saml_entity_id: str | None = Field(None, description="SAML SP/IdP metadata hint; assertion consumption not implemented in control plane.")
+    sso_saml_acs_url: str | None = Field(None, description="SAML ACS URL hint for external IdP wiring.")
 
     model_config = {"from_attributes": True}
 
@@ -52,23 +70,160 @@ class TenantPatch(BaseModel):
     s3_assume_role_arn: str | None = None
     s3_assume_role_external_id: str | None = None
     policy_paths_allowlist_mode: Literal["off", "enforce", "warn"] | None = None
+    require_mfa_for_admins: bool | None = None
+    sso_oidc_issuer: str | None = None
+    sso_oidc_audience: str | None = None
+    sso_oidc_role_claim: str | None = Field(None, max_length=64)
+    sso_oidc_email_claim: str | None = Field(None, max_length=64)
+    sso_password_login_disabled: bool | None = None
+    sso_jit_provisioning: bool | None = None
+    sso_saml_entity_id: str | None = None
+    sso_saml_acs_url: str | None = None
+
+
+class SessionTenantRow(BaseModel):
+    """Tenant visibility for a human console user (§十六-06)."""
+
+    tenant_id: uuid.UUID
+    slug: str
+    name: str
+    membership_role: Literal["tenant_admin", "operator", "auditor"] = Field(
+        ...,
+        description="Tenant-scoped role before mapping to REST `admin`/`operator`/`auditor`.",
+    )
+    require_mfa_for_admins: bool = Field(
+        False,
+        description="Mirrors tenant policy (§十六-09): tenant_admin must use TOTP when true.",
+    )
+    sso_password_login_disabled: bool = Field(
+        False,
+        description="When true, members who belong only to SSO-only tenants cannot use email/password login (§十六-12).",
+    )
+
+
+class TenantInvitationCreate(BaseModel):
+    email: str = Field(..., min_length=3, max_length=255)
+    role: Literal["tenant_admin", "operator", "auditor"] = Field(
+        ...,
+        description="Membership role granted when the invite is accepted.",
+    )
+
+    @field_validator("email")
+    @classmethod
+    def normalize_invite_email(cls, v: str) -> str:
+        s = v.strip().lower()
+        if "@" not in s or "." not in s.split("@")[-1]:
+            raise ValueError("invalid email")
+        return s
+
+
+class TenantInvitationOut(BaseModel):
+    id: uuid.UUID
+    tenant_id: uuid.UUID
+    email: str
+    role: Literal["tenant_admin", "operator", "auditor"]
+    created_at: datetime
+    expires_at: datetime
+    accepted_at: datetime | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class TenantInvitationAcceptIn(BaseModel):
+    token: str = Field(..., min_length=10, max_length=512)
+    password: str | None = Field(
+        None,
+        min_length=12,
+        max_length=512,
+        description="Required when creating a new console user; omit when already logged in as the invited email.",
+    )
 
 
 class AuthSessionOut(BaseModel):
-    """Resolved principal for Bearer (or dev-open when authentication is disabled)."""
+    """Resolved principal for Cookie session or Bearer (or dev-open when authentication is disabled)."""
 
     role: Literal["admin", "operator", "auditor"] = Field(
         ...,
-        description="RBAC role for REST and future Ant Design Pro `access.ts` routing.",
+        description="Effective RBAC role for the current `X-DeVault-Tenant-Id` / default tenant context.",
     )
     principal_label: str = Field(
         ...,
-        description="Stable display / audit label (e.g. api-key name, legacy token, oidc:sub).",
+        description="Stable display / audit label (e.g. api-key name, legacy token, oidc:sub, user:email).",
     )
     allowed_tenant_ids: list[uuid.UUID] | None = Field(
         ...,
-        description="Tenants this principal may use with `X-DeVault-Tenant-Id`; null means all tenants (admin scope).",
+        description=(
+            "Tenants this principal may use with `X-DeVault-Tenant-Id`; null means all tenants "
+            "(platform admin scope). For human users this is the explicit membership list."
+        ),
     )
+    principal_kind: Literal["platform", "tenant_user"] = Field(
+        "platform",
+        description="platform = API key / legacy / OIDC Bearer; tenant_user = HTTP-only session cookie.",
+    )
+    user_id: uuid.UUID | None = Field(None, description="Console user id when principal_kind is tenant_user.")
+    email: str | None = Field(None, description="Login email when principal_kind is tenant_user.")
+    tenants: list[SessionTenantRow] | None = Field(
+        None,
+        description="Per-tenant membership rows for human users; null for platform principals.",
+    )
+    needs_mfa: bool = Field(
+        False,
+        description="True when cookie session exists but TOTP second factor is still required.",
+    )
+
+
+class AuthLoginIn(BaseModel):
+    email: str = Field(..., min_length=3, max_length=255)
+    password: str = Field(..., min_length=1, max_length=512)
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, v: str) -> str:
+        s = v.strip().lower()
+        if "@" not in s or "." not in s.split("@")[-1]:
+            raise ValueError("invalid email")
+        return s
+
+
+class AuthRegisterIn(BaseModel):
+    email: str = Field(..., min_length=3, max_length=255)
+    password: str = Field(..., min_length=12, max_length=512)
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email_reg(cls, v: str) -> str:
+        s = v.strip().lower()
+        if "@" not in s or "." not in s.split("@")[-1]:
+            raise ValueError("invalid email")
+        return s
+
+
+class PasswordResetRequestIn(BaseModel):
+    email: str = Field(..., min_length=3, max_length=255)
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email_pr(cls, v: str) -> str:
+        return v.strip().lower()
+
+
+class PasswordResetConfirmIn(BaseModel):
+    token: str = Field(..., min_length=10, max_length=512)
+    new_password: str = Field(..., min_length=12, max_length=512)
+
+
+class MfaVerifyIn(BaseModel):
+    code: str = Field(..., min_length=6, max_length=16)
+
+
+class MfaEnrollConfirmIn(BaseModel):
+    code: str = Field(..., min_length=6, max_length=16)
+
+
+class MfaEnrollStartOut(BaseModel):
+    secret: str = Field(..., description="Base32 TOTP secret; also stored server-side until confirm.")
+    otpauth_uri: str
 
 
 class FileBackupConfigV1(BaseModel):

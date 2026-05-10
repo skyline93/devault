@@ -98,6 +98,18 @@
 | 十五-22 | §十五 | [x] | P3 | 4 | **Playwright E2E** 冒烟（登录 → 作业中心 → 可选切租户 → 备份向导页；**`deploy/docker-compose.console-e2e.yml`** + **`.github/workflows/console-e2e.yml`**） |
 | 十五-23 | §十五 | [x] | P3 | 4 | **列表 API query**：**`GET /api/v1/jobs?kind=&status=`**（枚举校验）；控制台 **ProTable** 传参 |
 | 十五-24 | §十五 | [x] | P3 | 4 | **备份向导 Steps**；工作台 **/metrics** 与可选 **`UMI_APP_GRAFANA_URL`** 外链 |
+| 十六-01 | §十六 | [x] | P0 | 8 | **`console_users` / Argon2id**；**`devault-admin create-console-user`**；迁移 **0015** |
+| 十六-02 | §十六 | [x] | P0 | 8 | **Redis HTTP 会话 + httpOnly Cookie + TTL**；**`POST /api/v1/auth/logout`** |
+| 十六-03 | §十六 | [x] | P0 | 8 | **`get_auth_context` Cookie 优先**，否则 **Bearer** |
+| 十六-04 | §十六 | [x] | P0 | 8 | **CSRF 中间件** + **`GET /api/v1/auth/csrf`** + **`X-CSRF-Token`** |
+| 十六-05 | §十六 | [x] | P0 | 8 | **`tenant_memberships`**；**`ensure_admin`** 仅 platform；租户 **PATCH / legal-hold** 放行 **tenant_admin** |
+| 十六-06 | §十六 | [x] | P0 | 8 | **`AuthSessionOut`** 扩展；**`console/`** 同步；**`verify_console_openapi_contract`** |
+| 十六-07 | §十六 | [x] | P1 | 8 | **`/user/login`** 密码 + **TOTP 第二步**；**`/user/integration`** Bearer；**`credentials: 'include'`**；**`needs_mfa`** 时 **`canWrite`/`canAdmin` false** |
+| 十六-08 | §十六 | [x] | P1 | 8 | **`POST …/auth/login|register|session/refresh`**；**`auth_login_rate_limit_per_minute`**；**`auth_audit`** |
+| 十六-09 | §十六 | [x] | P1 | 8 | **TOTP** + **`tenants.require_mfa_for_admins`**；**`POST …/mfa/verify|enroll/*`**；会话 **`mfa_verified`** |
+| 十六-10 | §十六 | [x] | P1 | 8 | **`password_reset_tokens`**；**`password-reset/request|confirm`**；**`DEVAULT_SMTP_*`** / 空 host 日志；防枚举 |
+| 十六-11 | §十六 | [x] | P2 | 8 | **`tenant_invitations`**；**`POST/GET …/tenants/{id}/invitations`**；**`POST …/auth/invitations/accept`**；邮件；控制台 **`/overview/team-invitations`**、**`/user/accept-invite`** |
+| 十六-12 | §十六 | [x] | P2 | 8 | **租户 OIDC Bearer**（**`iss`/`aud`**）；**`sso_jit_provisioning`**；**`sso_password_login_disabled`**；**SAML 登记列**；**`tenant_oidc`** + **`sso_policy`** |
 
 ---
 

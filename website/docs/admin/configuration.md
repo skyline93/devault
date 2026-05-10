@@ -21,6 +21,23 @@ description: 常用环境变量分组说明
 | `DEVAULT_JOB_STUCK_THRESHOLD_SECONDS` | 非终态作业「超窗」秒数，驱动 **`devault_jobs_overdue_nonterminal`**（见 [可观测性](./observability.md)） |
 | `DEVAULT_FLEET_AGENT_STALE_SECONDS` | **`edge_agents`** 超过该秒数未 **`last_seen_at`** 更新则计入 **`devault_edge_agents_stale_count`**（Prometheus 自定义采集器；告警见 `deploy/prometheus/alerts.yml`） |
 
+### §十六 P1：控制台自助注册、限流、密码重置与邮件
+
+与 **`console/`** 人机路径、**`POST /api/v1/auth/register`**、**`password-reset/*`**、**TOTP** 对齐。完整语义见 **`src/devault/settings.py`** 与 [Web 控制台（用户向）](../user/web-console.md)。
+
+| 变量 | 说明 |
+|------|------|
+| `DEVAULT_CONSOLE_SELF_REGISTRATION_ENABLED` | 为 **`true`** 时开放 **`POST /api/v1/auth/register`**（无租户成员关系；须后续 **`tenant_memberships`** 分配） |
+| `DEVAULT_AUTH_LOGIN_RATE_LIMIT_PER_MINUTE` | 每客户端 IP：**登录 / 注册 / 密码重置请求** 的滑动窗口上限（**`0`** 关闭） |
+| `DEVAULT_AUTH_PASSWORD_RESET_TTL_MINUTES` | 重置 token 有效期 |
+| `DEVAULT_PASSWORD_RESET_LINK_BASE` | 邮件中重置链接的绝对前缀（如 **`https://console.example.com/user/reset-password`**，实现会拼接 **`?token=`**） |
+| `DEVAULT_SMTP_HOST` | 为空时不连网外发，重置邮件正文在日志 **INFO** 占位（开发友好） |
+| `DEVAULT_SMTP_PORT` / `DEVAULT_SMTP_USER` / `DEVAULT_SMTP_PASSWORD` | SMTP 认证（可选） |
+| `DEVAULT_SMTP_FROM` | **From** 头 |
+| `DEVAULT_SMTP_USE_TLS` | 默认 **`true`**（STARTTLS） |
+| `DEVAULT_INVITATION_TTL_HOURS` | 租户邮件邀请链接有效期（默认 **168** 小时，即 7 天；§十六-11） |
+| `DEVAULT_INVITATION_LINK_BASE` | 邀请邮件内链接前缀（如 **`https://console.example.com`**，实现会追加 **`/user/accept-invite?token=`**）；为空时回退 **`DEVAULT_PASSWORD_RESET_LINK_BASE`** |
+
 ### OIDC（可选，Bearer JWT）
 
 与静态令牌、**`control_plane_api_keys`** 并存。详见 [租户与访问控制](./tenants-and-rbac.md)。

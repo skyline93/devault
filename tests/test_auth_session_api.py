@@ -47,6 +47,7 @@ def test_auth_session_dev_open(
     assert data["role"] == "admin"
     assert data["principal_label"] == "dev-open"
     assert data["allowed_tenant_ids"] is None
+    assert data.get("principal_kind") == "platform"
 
 
 def test_auth_session_legacy_bearer(
@@ -67,6 +68,7 @@ def test_auth_session_legacy_bearer(
     assert data["role"] == "admin"
     assert data["principal_label"] == "legacy-api-token"
     assert data["allowed_tenant_ids"] is None
+    assert data.get("principal_kind") == "platform"
 
 
 def test_auth_session_invalid_bearer_forbidden(

@@ -2,11 +2,16 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from devault.api.deps import get_auth_context, get_db, require_admin
+from devault.api.deps import (
+    ensure_platform_or_tenant_admin_for_tenant,
+    get_auth_context,
+    get_db,
+    require_admin,
+)
 from devault.api.schemas import TenantCreate, TenantOut, TenantPatch
 from devault.db.models import Tenant
 from devault.security.auth_context import AuthContext
@@ -42,8 +47,7 @@ def patch_tenant(
     tenant_id: uuid.UUID,
     body: TenantPatch,
     db: Session = Depends(get_db),
-    auth: AuthContext = Depends(require_admin),
+    auth: AuthContext = Depends(get_auth_context),
 ) -> Tenant:
-    if auth.allowed_tenant_ids is not None and tenant_id not in auth.allowed_tenant_ids:
-        raise HTTPException(status_code=403, detail="tenant not in token scope")
+    ensure_platform_or_tenant_admin_for_tenant(auth, tenant_id)
     return control_svc.patch_tenant(db, tenant_id, body)

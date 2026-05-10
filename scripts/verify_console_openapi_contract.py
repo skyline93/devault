@@ -29,6 +29,34 @@ def main() -> int:
         print(f"unexpected /ui routes in OpenAPI (Jinja 已下线): {ui_paths[:20]}", file=sys.stderr)
         failed = True
 
+    for p in (
+        "/api/v1/auth/csrf",
+        "/api/v1/auth/login",
+        "/api/v1/auth/logout",
+        "/api/v1/auth/session",
+        "/api/v1/auth/session/refresh",
+        "/api/v1/auth/register",
+        "/api/v1/auth/password-reset/request",
+        "/api/v1/auth/password-reset/confirm",
+        "/api/v1/auth/mfa/verify",
+        "/api/v1/auth/mfa/enroll/start",
+        "/api/v1/auth/mfa/enroll/confirm",
+        "/api/v1/auth/invitations/accept",
+    ):
+        if p not in paths:
+            print(f"missing path {p} (§十六 P1)", file=sys.stderr)
+            failed = True
+
+    inv_path = "/api/v1/tenants/{tenant_id}/invitations"
+    if inv_path not in paths:
+        print(f"missing path {inv_path} (§十六-11)", file=sys.stderr)
+        failed = True
+    else:
+        inv = paths.get(inv_path) or {}
+        if "post" not in inv or "get" not in inv:
+            print(f"{inv_path} must expose GET and POST (§十六-11)", file=sys.stderr)
+            failed = True
+
     if "/api/v1/jobs" not in paths:
         print("missing path /api/v1/jobs", file=sys.stderr)
         failed = True
@@ -56,6 +84,44 @@ def main() -> int:
             if needle not in jp:
                 print(f"JobOut.properties missing {needle!r}", file=sys.stderr)
                 failed = True
+
+    auth_sess = schemas.get("AuthSessionOut")
+    if not isinstance(auth_sess, dict):
+        print("missing components.schemas.AuthSessionOut", file=sys.stderr)
+        failed = True
+    else:
+        ap = _props(auth_sess)
+        for needle in ("principal_kind", "user_id", "email", "tenants", "needs_mfa"):
+            if needle not in ap:
+                print(f"AuthSessionOut.properties missing {needle!r} (§十六-06)", file=sys.stderr)
+                failed = True
+
+    tenant_out = schemas.get("TenantOut")
+    if not isinstance(tenant_out, dict):
+        print("missing components.schemas.TenantOut", file=sys.stderr)
+        failed = True
+    else:
+        tp = _props(tenant_out)
+        for needle in (
+            "require_mfa_for_admins",
+            "sso_oidc_issuer",
+            "sso_oidc_audience",
+            "sso_password_login_disabled",
+            "sso_jit_provisioning",
+        ):
+            if needle not in tp:
+                print(f"TenantOut.properties missing {needle!r} (§十六 P2)", file=sys.stderr)
+                failed = True
+
+    sess_tenant = schemas.get("SessionTenantRow")
+    if not isinstance(sess_tenant, dict):
+        print("missing components.schemas.SessionTenantRow", file=sys.stderr)
+        failed = True
+    else:
+        stp = _props(sess_tenant)
+        if "sso_password_login_disabled" not in stp:
+            print("SessionTenantRow.properties missing 'sso_password_login_disabled' (§十六-12)", file=sys.stderr)
+            failed = True
 
     pol = schemas.get("PolicyOut")
     if not isinstance(pol, dict):

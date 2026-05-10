@@ -31,6 +31,7 @@ from devault.db.models import Artifact, Job, Policy, RestoreDrillSchedule, Sched
 from devault.plugins.file.encryption_policy import encryption_required
 from devault.services.policy_execution_binding import validate_policy_execution_binding
 from devault.services.tenant_backup_allowlist import validate_policy_paths_against_tenant_allowlist
+from devault.services.sso_policy import tenant_oidc_issuer_audience_in_use
 from devault.settings import get_settings
 
 
@@ -74,6 +75,46 @@ def patch_tenant(db: Session, tenant_id: uuid.UUID, body: TenantPatch) -> Tenant
         t.s3_assume_role_external_id = body.s3_assume_role_external_id.strip() or None
     if body.policy_paths_allowlist_mode is not None:
         t.policy_paths_allowlist_mode = body.policy_paths_allowlist_mode
+    if body.require_mfa_for_admins is not None:
+        t.require_mfa_for_admins = body.require_mfa_for_admins
+    next_oidc_iss = t.sso_oidc_issuer
+    next_oidc_aud = t.sso_oidc_audience
+    if body.sso_oidc_issuer is not None:
+        raw_iss = body.sso_oidc_issuer.strip() or None
+        next_oidc_iss = raw_iss.rstrip("/") if raw_iss else None
+    if body.sso_oidc_audience is not None:
+        next_oidc_aud = body.sso_oidc_audience.strip() or None
+    if (next_oidc_iss is None) != (next_oidc_aud is None):
+        raise HTTPException(
+            status_code=400,
+            detail="sso_oidc_issuer and sso_oidc_audience must both be set or both cleared",
+        )
+    if next_oidc_iss and next_oidc_aud:
+        if tenant_oidc_issuer_audience_in_use(
+            db,
+            issuer=next_oidc_iss,
+            audience=next_oidc_aud,
+            exclude_tenant_id=t.id,
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail="OIDC issuer and audience are already configured on another tenant",
+            )
+    t.sso_oidc_issuer = next_oidc_iss
+    t.sso_oidc_audience = next_oidc_aud
+    if body.sso_oidc_role_claim is not None:
+        t.sso_oidc_role_claim = body.sso_oidc_role_claim.strip() or "devault_role"
+    if body.sso_oidc_email_claim is not None:
+        t.sso_oidc_email_claim = body.sso_oidc_email_claim.strip() or "email"
+    if body.sso_password_login_disabled is not None:
+        t.sso_password_login_disabled = body.sso_password_login_disabled
+    if body.sso_jit_provisioning is not None:
+        t.sso_jit_provisioning = body.sso_jit_provisioning
+    if body.sso_saml_entity_id is not None:
+        t.sso_saml_entity_id = body.sso_saml_entity_id.strip() or None
+    if body.sso_saml_acs_url is not None:
+        t.sso_saml_acs_url = body.sso_saml_acs_url.strip() or None
+
     db.commit()
     db.refresh(t)
     return t

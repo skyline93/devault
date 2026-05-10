@@ -75,6 +75,8 @@ services:
       DEVAULT_DATABASE_URL: postgresql+psycopg://devault:devault@postgres:5432/devault
       DEVAULT_REDIS_URL: redis://redis:6379/0
       DEVAULT_API_TOKEN: ${DEVAULT_API_TOKEN:-changeme}
+      # §十六：演示栈默认开启控制台自助注册（/user/register）；生产可设 DEVAULT_CONSOLE_SELF_REGISTRATION_ENABLED=false
+      DEVAULT_CONSOLE_SELF_REGISTRATION_ENABLED: ${DEVAULT_CONSOLE_SELF_REGISTRATION_ENABLED:-true}
       # Enables Agent Register bootstrap; must match agent service below (dev-only default).
       DEVAULT_GRPC_REGISTRATION_SECRET: ${DEVAULT_GRPC_REGISTRATION_SECRET:-devault-docker-register-secret}
       DEVAULT_STORAGE_BACKEND: s3

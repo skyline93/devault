@@ -84,11 +84,18 @@ Content-Type: application/json
 
 对 **`Authorization: Bearer <token>`**（Web UI Basic **密码**与同一密钥链一致）：
 
-1. **OIDC JWT**（可选）：配置了 **`DEVAULT_OIDC_ISSUER`**、**`DEVAULT_OIDC_AUDIENCE`** 且 Bearer 为 JWT 时，按 OpenID Discovery 校验。角色来自 **`DEVAULT_OIDC_ROLE_CLAIM`**（默认 **`devault_role`**）：**`admin` \| `operator` \| `auditor`**。非 admin 时租户来自 **`DEVAULT_OIDC_TENANT_IDS_CLAIM`**（默认 **`devault_tenant_ids`**）。
-2. **数据库 API 密钥**：表 **`control_plane_api_keys`** 中 **`token_hash = SHA256(明文)`** 的启用行（**`devault-admin create-api-key`**）。
-3. **遗留单令牌**：与 **`DEVAULT_API_TOKEN`** 完全相等时视为 **admin、全租户**。
+1. **全局 OIDC JWT**（可选）：配置了 **`DEVAULT_OIDC_ISSUER`**、**`DEVAULT_OIDC_AUDIENCE`** 且 Bearer 为 JWT 时，按 OpenID Discovery 校验。角色来自 **`DEVAULT_OIDC_ROLE_CLAIM`**（默认 **`devault_role`**）：**`admin` \| `operator` \| `auditor`**。非 admin 时租户来自 **`DEVAULT_OIDC_TENANT_IDS_CLAIM`**（默认 **`devault_tenant_ids`**）。
+2. **租户级 OIDC JWT（§十六-12）**：当 JWT 的 **`iss` / `aud`** 与某行 **`tenants.sso_oidc_issuer` / `sso_oidc_audience`**（成对配置、**租户间唯一**）一致时，在该租户 issuer 上再次 Discovery 并校验签名；解析为 **仅该租户** 作用域的 Bearer 主体（**`allowed_tenant_ids = {该租户}`**）。角色仍映射为 REST 的 **`admin` / `operator` / `auditor`**（与 **`tenant_memberships.role`** 语义对齐）。若 **`sso_jit_provisioning=true`** 且 JWT 含 **`sso_oidc_email_claim`**（默认 **`email`**），可在验证成功后 **JIT** 创建 **`console_users`**（随机密码哈希）并 **upsert `tenant_memberships`**。**`sso_password_login_disabled`**：若某用户**所有**成员关系所在租户均启用该开关，则 **`POST /api/v1/auth/login`**（邮箱密码）返回 **403**，须改用 **IdP JWT Bearer** 或调整成员关系。**SAML**：**`sso_saml_entity_id` / `sso_saml_acs_url`** 仅作运维登记，控制面 **不解析 SAML 断言**；典型做法是由 **IdP 网关 / 边缘代理** 换发 OIDC 或终止 SAML。
+3. **数据库 API 密钥**：表 **`control_plane_api_keys`** 中 **`token_hash = SHA256(明文)`** 的启用行（**`devault-admin create-api-key`**）。
+4. **遗留单令牌**：与 **`DEVAULT_API_TOKEN`** 完全相等时视为 **admin、全租户**。
 
 若未配置 `DEVAULT_API_TOKEN`、未配置 OIDC、且无 API 密钥行，则控制面处于 **开发开放模式**（不校验 Bearer）。**生产与 SaaS 环境必须关闭该模式。**
+
+### 租户成员邀请（§十六-11）
+
+- **`POST /api/v1/tenants/{tenant_id}/invitations`**：平台 **admin** 或该租户 **`tenant_admin`**（Cookie 人机）可发邮件邀请；同一租户同一邮箱的未接受邀请在新建前会被撤销。
+- **`GET /api/v1/tenants/{tenant_id}/invitations`**：列出待处理邀请。
+- **`POST /api/v1/auth/invitations/accept`**：使用邮件中的 **token** 接受邀请；可创建 **`console_users`** 并写入 **`tenant_memberships`**，随后签发 **Cookie 会话**（与登录一致，含 **MFA** 策略）。环境变量见 **`DEVAULT_INVITATION_LINK_BASE`**、**`DEVAULT_INVITATION_TTL_HOURS`**（[配置参考](./configuration.md)）。
 
 ### 角色权限矩阵
 

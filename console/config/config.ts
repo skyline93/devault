@@ -31,6 +31,10 @@ export default defineConfig({
   },
   routes: [
     { path: '/user/login', layout: false, component: './user/login' },
+    { path: '/user/integration', layout: false, component: './user/integration' },
+    { path: '/user/register', layout: false, component: './user/register' },
+    { path: '/user/reset-password', layout: false, component: './user/reset-password' },
+    { path: '/user/accept-invite', layout: false, component: './user/accept-invite' },
     { path: '/', redirect: '/overview/welcome' },
     {
       path: '/overview',
@@ -48,6 +52,13 @@ export default defineConfig({
           name: '工作台',
           icon: 'HomeOutlined',
           component: './workbench/index',
+        },
+        {
+          path: '/overview/team-invitations',
+          name: '成员邀请',
+          icon: 'TeamOutlined',
+          component: './overview/team-invitations',
+          access: 'canInviteMembers',
         },
       ],
     },

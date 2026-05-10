@@ -1,6 +1,6 @@
 # DeVault 企业控制台（Ant Design Pro · Umi 4 · §十五）
 
-前后端分离的 **Ant Design Pro（`@umijs/max` 4 + `antd` 5 + `@ant-design/pro-components` 2）** 工程，调用控制面 **`/api/v1/*`**（Bearer + **`X-DeVault-Tenant-Id`**）。与文档站 **`website/`** 目录分离。
+前后端分离的 **Ant Design Pro（`@umijs/max` 4 + `antd` 5 + `@ant-design/pro-components` 2）** 工程，调用控制面 **`/api/v1/*`**。人机主路径：**Cookie 会话**（**`credentials: 'include'`** + **`POST /api/v1/auth/login`**）；**`Authorization: Bearer`** + **`X-DeVault-Tenant-Id`** 仍用于 API 密钥 / 自动化（§十六）。与文档站 **`website/`** 目录分离。
 
 **布局**：以 [Ant Design Pro 官方仓库](https://github.com/ant-design/ant-design-pro) 的 **`defaultSettings` + `RunTimeLayoutConfig`** 为蓝本（`mix` 顶栏 + 侧栏、**`menuItemRender` + `Link`**、**`RightContent` / `AvatarDropdown` / `DefaultFooter`**）；**精简**（无 `bgLayoutImgList`、无 `SettingDrawer`、无外链 logo）。业务逻辑（会话、租户、帮助、工作台）挂在官方推荐的顶栏右侧组合上。
 
@@ -26,9 +26,9 @@
 
 ## 已实现能力摘要
 
-### 十五-01～06（基座）
+### 十五-01～06（基座）+ §十六 P0/P1/P2（人机身份）
 
-- 会话、OpenAPI 类型、登录、**`request` 拦截器**、**`getInitialState` / `access.ts`**。
+- 会话、OpenAPI 类型、**`/user/login`**（**邮箱 + 密码** + 可选 **TOTP 第二步**）、**`/user/integration`**（**Bearer**）、**`/user/register`**、**`/user/reset-password`**、**`/user/accept-invite`**（邀请 token）；**`/overview/team-invitations`**（**`canInviteMembers`**，`tenant_admin`）；**`request` 拦截器**（**`X-CSRF-Token`**、**`credentials: 'include'`**）；**`getInitialState` / `access.ts`**（**`needs_mfa`** 时关闭 **`canWrite`/`canAdmin`/`canInviteMembers`**）。
 
 ### 十五-07（租户）
 
@@ -71,13 +71,15 @@
 - **平台管理**（仅 **`access.canAdmin`** 见菜单）：**`/platform/tenants`**（**`TenantPatch`** 表单）。
 - **RBAC**：写操作依赖 **`canWrite`**；Legal hold、Enrollment、吊销、gRPC 吊销、租户 PATCH 依赖 **`canAdmin`**；**auditor** 与 **`isAuditor`** 对齐只读。
 
-## 会话 API（十五-01）
+## 会话 API（十五-01 / §十六-06）
 
-**`GET /api/v1/auth/session`** 返回 **`role`**、**`principal_label`**、**`allowed_tenant_ids`**（admin 全租户时为 **`null`**）。
+**`GET /api/v1/auth/session`** 返回 **`role`**、**`principal_label`**、**`allowed_tenant_ids`**，以及 **`principal_kind`**（**`platform` \| `tenant_user`**）、人机时的 **`user_id` / `email` / `tenants`**、**`needs_mfa`**（**§十六-09**）。平台 admin 全租户时 **`allowed_tenant_ids`** 为 **`null`**。
+
+其它认证相关端点：**`GET /api/v1/auth/csrf`**、**`POST /api/v1/auth/login`**、**`POST /api/v1/auth/logout`**、**`POST /api/v1/auth/session/refresh`**；自助注册 **`POST /api/v1/auth/register`**（**`DEVAULT_CONSOLE_SELF_REGISTRATION_ENABLED`**）；**`POST /api/v1/auth/password-reset/request|confirm`**；**`POST /api/v1/auth/mfa/verify`** 与 **`mfa/enroll/*`**（已登录用户绑定 TOTP）。
 
 ## 存储键
 
 | 键 | 用途 |
 |----|------|
-| **`devault_bearer_token`** | Bearer 原文（与 REST 一致，可为 OIDC raw JWT）。 |
+| **`devault_bearer_token`** | 可选：仅 **API Token** 登录时保存 Bearer；**密码登录**成功后会清除，避免人机长期依赖 localStorage。 |
 | **`devault_tenant_id`** | 当前租户 UUID（顶栏选择器写入 **`X-DeVault-Tenant-Id`**）。 |

@@ -1,7 +1,7 @@
 ---
 sidebar_position: 5
 title: HTTP API 访问
-description: Bearer、多租户请求头与 Web UI Basic
+description: Bearer、Cookie 会话、多租户请求头
 ---
 
 # HTTP API 访问
@@ -26,9 +26,9 @@ X-DeVault-Tenant-Id: <tenant-uuid>
 
 表 **`control_plane_api_keys`**、`devault-admin create-api-key`、OIDC JWT 与权限矩阵见 **[租户与访问控制](../admin/tenants-and-rbac.md)**。
 
-## Web UI
+## Web 控制台（`console/`）
 
-**`console/`** 使用 **Bearer**（与 REST 相同解析链）。生产须 **HTTPS**。
+人机主路径：**Cookie 会话**（**`POST /api/v1/auth/login`**，**httpOnly** + **Redis**）；租户策略可要求 **TOTP**（**`POST /api/v1/auth/mfa/verify`**，**`AuthSessionOut.needs_mfa`**）；写请求带 **CSRF**（**`X-CSRF-Token`** 与 **`devault_csrf`** Cookie）。可选 **`Authorization: Bearer`**（与 REST 相同解析链：全局 **OIDC**、**租户级 OIDC**（**`iss`/`aud`** 匹配 **`tenants`** 行）、API 密钥、遗留令牌；控制台 **`/user/integration`**）。生产须 **HTTPS**，并设置 **`DEVAULT_SESSION_COOKIE_SECURE=true`** 等 Cookie 属性。
 
 ## OpenAPI
 

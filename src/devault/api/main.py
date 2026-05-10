@@ -7,6 +7,7 @@ from fastapi.responses import Response
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from devault import __version__
+from devault.api.csrf_middleware import CsrfProtectionMiddleware
 from devault.api.routes import (
     agent_pools,
     agents,
@@ -18,6 +19,7 @@ from devault.api.routes import (
     schedules,
     tenant_agents,
     tenants,
+    tenant_invitations,
 )
 from devault.grpc.server import start_grpc_server, stop_grpc_server
 from devault.release_meta import GRPC_API_PACKAGE
@@ -59,7 +61,10 @@ _OPENAPI_TAGS = [
     },
     {
         "name": "auth",
-        "description": "Session principal for Bearer clients (e.g. Ant Design Pro `getInitialState`, tenant picker filtering).",
+        "description": (
+            "Session principal for the console: **Cookie + Redis** human login (`/auth/login`) with CSRF on writes, "
+            "or `Authorization: Bearer` for API keys / legacy token / OIDC (Ant Design Pro `getInitialState`, tenant picker)."
+        ),
     },
     {
         "name": "agents",
@@ -102,7 +107,10 @@ app.include_router(policies.router, prefix="/api/v1")
 app.include_router(schedules.router, prefix="/api/v1")
 app.include_router(restore_drill_schedules.router, prefix="/api/v1")
 app.include_router(tenants.router, prefix="/api/v1")
+app.include_router(tenant_invitations.router, prefix="/api/v1/tenants")
 app.include_router(auth.router, prefix="/api/v1")
+
+app.add_middleware(CsrfProtectionMiddleware)
 
 
 @app.middleware("http")

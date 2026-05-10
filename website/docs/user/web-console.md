@@ -8,13 +8,17 @@ description: 入口、认证与能力范围
 
 ## 入口
 
-**主入口（企业交付）**：仓库 **`console/`**（**Ant Design Pro**，Bearer + **`X-DeVault-Tenant-Id`**）。在 **`console/`** 执行 **`npm run dev`**（默认 **`http://localhost:8010`**，**`/api`**、**`/docs`**、**`/version`** 等代理到 **`127.0.0.1:8000`**）；登录 **`/user/login`**，默认进入 **`/overview/welcome`**；顶栏 **租户选择器** 将所选租户 UUID 写入 **`localStorage`**（**`devault_tenant_id`**）并由请求拦截器注入 **`X-DeVault-Tenant-Id`**。主要路由示例：**`/backup/jobs`**、**`/backup/policies`**、**`/backup/artifacts`**、**`/compliance/schedules`**、**`/execution/fleet`**、**`/platform/tenants`**（仅 admin 菜单）。
+**主入口（企业交付）**：仓库 **`console/`**（**Ant Design Pro**；人机 **Cookie 会话**，可选 **Bearer** + **`X-DeVault-Tenant-Id`**）。在 **`console/`** 执行 **`npm run dev`**（默认 **`http://localhost:8010`**，**`/api`**、**`/docs`**、**`/version`** 等代理到 **`127.0.0.1:8000`**）。**登录**：**`/user/login`**（**邮箱 + 密码**，若策略要求则 **TOTP 第二步**）；**Bearer / 自动化**：**`/user/integration`**；可选 **注册** **`/user/register`**、**重置密码** **`/user/reset-password`**、**邮件邀请接受** **`/user/accept-invite?token=`**（§十六-11）。默认进入 **`/overview/welcome`**；顶栏 **租户选择器** 将所选租户 UUID 写入 **`localStorage`**（**`devault_tenant_id`**）并由请求拦截器注入 **`X-DeVault-Tenant-Id`**。**租户管理员** 在 **概览 · 成员邀请** 向邮箱发送 **`POST /api/v1/tenants/{tenant_id}/invitations`**。主要路由示例：**`/backup/jobs`**、**`/backup/policies`**、**`/backup/artifacts`**、**`/compliance/schedules`**、**`/execution/fleet`**、**`/platform/tenants`**（仅 admin 菜单）。
 
 **容器 / K8s**：见 **`deploy/docker-compose.yml`**（**`--profile with-console`**，镜像 **`deploy/Dockerfile.console`**）与 **`deploy/helm/devault`**（**`console.enabled`**）。详见 [Web 控制台与 REST 交付节奏](../guides/web-console.md)。
 
 ## 认证
 
-在 **`/user/login`** 录入与 REST 一致的 **Bearer**（**`localStorage`**），**非**浏览器 HTTP Basic 弹窗。
+**推荐**：在 **`/user/login`** 使用 **邮箱 + 密码**（及租户策略要求的 **TOTP**），由控制面签发 **httpOnly** 会话 Cookie（**Redis**），浏览器请求 **`/api`** 时 **`credentials: 'include'`**，写操作携带 **CSRF**（**`X-CSRF-Token`** + **`devault_csrf`** Cookie）。未完成 MFA 时 **`GET /auth/session`** 可能返回 **`needs_mfa: true`**，此时控制台不授予写菜单权限，直至 **`POST /api/v1/auth/mfa/verify`**。
+
+**自动化 / 应急**：在 **`/user/integration`** 录入 **Bearer**（**`localStorage`**），与 REST 一致。**非**浏览器 HTTP Basic 弹窗。
+
+**运维引导**：首次人机账号使用 **`devault-admin create-console-user --email … --password … --tenant <UUID> --role tenant_admin`**（需已存在租户；密码 ≥ 12 字符）。
 
 ## 能力范围
 
@@ -30,7 +34,7 @@ description: 入口、认证与能力范围
 
 ## 冒烟测试（十五-22）
 
-仓库根或 **`deploy/`** 下启动专用 Compose（从源码构建控制面与控制台）后，在 **`console/`** 执行 **`npm ci`**、**`npx playwright install chromium`**、**`npm run test:e2e`**（默认 **`E2E_BASE_URL=http://127.0.0.1:8080`**，与 **`DEVAULT_API_TOKEN`** 一致）。详见 **`console/README.md`** 与 **`.github/workflows/console-e2e.yml`**。
+仓库根或 **`deploy/`** 下启动专用 Compose（从源码构建控制面与控制台）后，在 **`console/`** 执行 **`npm ci`**、**`npx playwright install chromium`**、**`npm run test:e2e`**（默认 **`E2E_BASE_URL=http://127.0.0.1:8080`**；冒烟在 **`/user/integration`** 粘贴与 Compose 一致的 **`DEVAULT_API_TOKEN`**）。详见 **`console/README.md`** 与 **`.github/workflows/console-e2e.yml`**。
 
 ## 与租户作用域的关系
 

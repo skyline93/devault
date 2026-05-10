@@ -12,6 +12,14 @@ import { errorConfig } from '@/requestErrorConfig';
 
 const isDev = process.env.NODE_ENV === 'development';
 const loginPath = '/user/login';
+/** 未登录也可访问的认证相关页（含 §十六-11 邀请接受）。 */
+const authPublicPaths = new Set([
+  '/user/login',
+  '/user/integration',
+  '/user/register',
+  '/user/reset-password',
+  '/user/accept-invite',
+]);
 
 void openapiAuthSessionContract;
 
@@ -35,23 +43,34 @@ export async function getInitialState(): Promise<{
   currentUser?: API.CurrentUser;
   canAdmin?: boolean;
   canWrite?: boolean;
+  canInviteMembers?: boolean;
   fetchUserInfo?: () => Promise<API.CurrentUser | undefined>;
 }> {
   const fetchUserInfo = async () => {
-    const token = localStorage.getItem(STORAGE_BEARER_KEY);
-    if (!token) return undefined;
     try {
       return await maxRequest<API.CurrentUser>('/api/v1/auth/session', {
         method: 'GET',
         skipErrorHandler: true,
+        credentials: 'include',
       });
     } catch {
-      localStorage.removeItem(STORAGE_BEARER_KEY);
-      return undefined;
+      const token = localStorage.getItem(STORAGE_BEARER_KEY);
+      if (!token) return undefined;
+      try {
+        return await maxRequest<API.CurrentUser>('/api/v1/auth/session', {
+          method: 'GET',
+          skipErrorHandler: true,
+          credentials: 'include',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+      } catch {
+        localStorage.removeItem(STORAGE_BEARER_KEY);
+        return undefined;
+      }
     }
   };
 
-  if (history.location.pathname === loginPath) {
+  if (authPublicPaths.has(history.location.pathname)) {
     return {
       fetchUserInfo,
       settings: defaultSettings as Partial<ProLayoutProps>,
@@ -59,8 +78,16 @@ export async function getInitialState(): Promise<{
   }
 
   const currentUser = await fetchUserInfo();
-  const canAdmin = currentUser?.role === 'admin';
-  const canWrite = currentUser?.role === 'admin' || currentUser?.role === 'operator';
+  const gated = Boolean(currentUser?.needs_mfa);
+  const canAdmin = Boolean(currentUser && !gated && currentUser.role === 'admin');
+  const canWrite = Boolean(
+    currentUser && !gated && (currentUser.role === 'admin' || currentUser.role === 'operator'),
+  );
+  const canInviteMembers = Boolean(
+    currentUser &&
+      !gated &&
+      currentUser.tenants?.some((t) => t.membership_role === 'tenant_admin'),
+  );
 
   if (currentUser) {
     await ensureTenantSelection(currentUser);
@@ -71,6 +98,7 @@ export async function getInitialState(): Promise<{
     currentUser,
     canAdmin,
     canWrite,
+    canInviteMembers,
     settings: defaultSettings as Partial<ProLayoutProps>,
   };
 }
@@ -86,7 +114,7 @@ export const layout: RunTimeLayoutConfig = ({ initialState }) => ({
   footerRender: () => <Footer />,
   onPageChange: () => {
     const { location } = history;
-    if (!initialState?.currentUser && location.pathname !== loginPath) {
+    if (!initialState?.currentUser && !authPublicPaths.has(location.pathname)) {
       history.replace(
         `${loginPath}?redirect=${encodeURIComponent(location.pathname + location.search + location.hash)}`,
       );
@@ -106,4 +134,5 @@ export const layout: RunTimeLayoutConfig = ({ initialState }) => ({
 
 export const request: RequestConfig = {
   ...errorConfig,
+  credentials: 'include',
 };

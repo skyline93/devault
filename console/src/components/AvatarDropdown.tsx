@@ -18,6 +18,7 @@ const AvatarDropdown: React.FC = () => {
   if (!user) return null;
 
   const onLogout = () => {
+    void fetch('/api/v1/auth/logout', { method: 'POST', credentials: 'include' }).catch(() => {});
     localStorage.removeItem(STORAGE_BEARER_KEY);
     localStorage.removeItem(STORAGE_TENANT_ID_KEY);
     setInitialState((s) => ({

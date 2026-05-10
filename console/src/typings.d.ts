@@ -5,6 +5,19 @@ declare namespace API {
     principal_label: string;
     /** UUID 字符串数组；admin 全租户时为 `null`。 */
     allowed_tenant_ids: string[] | null;
+    principal_kind?: 'platform' | 'tenant_user';
+    user_id?: string | null;
+    email?: string | null;
+    tenants?: Array<{
+      tenant_id: string;
+      slug: string;
+      name: string;
+      membership_role: 'tenant_admin' | 'operator' | 'auditor';
+      require_mfa_for_admins?: boolean;
+      sso_password_login_disabled?: boolean;
+    }> | null;
+    /** 为 true 时需完成 TOTP 第二步后才能写操作。 */
+    needs_mfa?: boolean;
   }
 
   /** `GET /api/v1/tenants` 单行。 */
@@ -173,5 +186,14 @@ declare namespace API {
     s3_assume_role_arn: string | null;
     s3_assume_role_external_id: string | null;
     policy_paths_allowlist_mode: 'off' | 'enforce' | 'warn';
+    require_mfa_for_admins?: boolean;
+    sso_oidc_issuer?: string | null;
+    sso_oidc_audience?: string | null;
+    sso_oidc_role_claim?: string;
+    sso_oidc_email_claim?: string;
+    sso_password_login_disabled?: boolean;
+    sso_jit_provisioning?: boolean;
+    sso_saml_entity_id?: string | null;
+    sso_saml_acs_url?: string | null;
   }
 }

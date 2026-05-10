@@ -1,8 +1,8 @@
 # DeVault 企业级落地待办清单
 
-> **文档目的**：在 [`development-design.md`](./development-design.md) 与 [**目标架构（文档站）**](../website/docs/intro/target-architecture.md) 之上，结合当前代码实现，列出使项目**可长期作为企业级备份方案**交付所需的完整待办项，便于排期、分工与验收。  
+> **文档目的**：在 [`development-design.md`](./development-design.md) 与 [**目标架构（文档站）**](../website/docs/intro/target-architecture.md) 之上，结合当前代码实现，列出使项目**可长期作为企业级备份方案**并演进为**独立 SaaS 备份产品**（见 **§十六**）所需的完整待办项，便于排期、分工与验收。  
 > **基线说明（截至文档编写时的实现）**：S1/S2 文件备份主路径已落地；执行单元为**边缘 Agent（Pull + gRPC 租约）**，Celery Worker 已移除；控制面为 FastAPI + 内嵌 gRPC + APScheduler + PostgreSQL + Redis；对象存储以 **S3 兼容 + 预签名 URL** 为主路径；`development-design.md` 第 20 节中 **S3 数据库 MVP 仍为未完成**。  
-> **索引**：**§零～§九**、**§十四**、**§十五**（追加）的**活跃**未完成项见 **[排期波次与全量待办索引](#排期波次与全量待办索引)**（位于 **§零** 之后）；**`[x]` 历史索引行**见 **[`enterprise-backlog-completed-archive.md`](./enterprise-backlog-completed-archive.md)**。维护时请与 **§分节表** 同步勾选。
+> **索引**：**§零～§九**、**§十四**、**§十五**、**§十六**（追加）的**活跃**未完成项见 **[排期波次与全量待办索引](#排期波次与全量待办索引)**（位于 **§零** 之后）；**`[x]` 历史索引行**见 **[`enterprise-backlog-completed-archive.md`](./enterprise-backlog-completed-archive.md)**。维护时请与 **§分节表** 同步勾选。
 
 ---
 
@@ -26,7 +26,7 @@
 
 **策略**：优先完成 **M1 企业级平台能力**（传输与身份、数据面可靠性、版本与兼容、租户与治理、运维与信任、对外文档），再在稳定平台上接入 **M2 数据库备份** 等新产品能力。  
 **原因简述**：数据库 dump 体积大、耗时长，会放大弱网、断点续传、租约与升级兼容等问题；平台能力与其正交，先夯实可减少返工。  
-**维护原则**：**活跃待办**以本文件 **§七 / §九 / §十四 / §十五** 与 **「全量待办索引（活跃）」** 为准；**已闭合**分节正文、**§十三**、历史 **§十二** 修订与 Epic 长说明均在 **[归档 Part 2](./enterprise-backlog-completed-archive.md#分节正文与历史归档part-2)**，主文件**不重复**粘贴。  
+**维护原则**：**活跃待办**以本文件 **§七 / §九 / §十四 / §十五 / §十六** 与 **「全量待办索引（活跃）」** 为准；**已闭合**分节正文、**§十三**、历史 **§十二** 修订与 Epic 长说明均在 **[归档 Part 2](./enterprise-backlog-completed-archive.md#分节正文与历史归档part-2)**，主文件**不重复**粘贴。  
 **索引表维护（2026-05-10 起）**：**`[x]`** 索引行在 **[`enterprise-backlog-completed-archive.md`](./enterprise-backlog-completed-archive.md)** **Part 1** 同步追加；本表保留 **§十五** 全量 **`[x]`** 行便于对照 **§15.2**；**未完成**仅为 **`[ ]`** 与 **`三-注`**。  
 **排期原则（2026-05-09 起）**：在 **M1 波次 1～2**（基础设施闭环 + 发布/数据面韧性）未收敛前，**默认不启动 M2（§九）**；§七「增量与时间线」绑定 M2，随 **波次 6** 处理。  
 **Web UI 同步原则（2026-05-10 起）**：控制面 **REST/OpenAPI** 与 **Web UI（`E-UX-001`）** 按 **竖切同期验收**——**§十四** 每条后端能力默认 **同一发布周期** 交付 **`/ui/*` 最小可用面**（列表 / 表单 / 详情至少其一）；若仅 API 先合并，须在 PR 或 **`website/docs/guides/web-console.md`** 登记 **豁免与回填截止**，并由 **十四-16** 作为流程待办持续监督直至闭合。**M2（§九）** 数据库能力须执行 **十四-18**（**波次 5**），避免「仅 curl 可用却宣称 GA」。**十四-17** 为字段一致性与 RBAC 闸门（可与 CI/PR 模板挂钩）。**§十五** 落地后，人机主入口以 **Ant Design Pro 控制台** 为交付形态（**Bearer**；**不沿用** Jinja 平铺导航）；**八-04～八-09** 仍为已交付的 **HTML 最小 UI** 历史记录，由 **十五-19** 负责下线代码与迁移闸门。
@@ -50,11 +50,12 @@
 | **5** | M2 数据库备份 MVP | §九 全部未完成项 + **§十四 · 十四-18**（Web UI 与 §九 API **同期**；建议在 **波次 1～2** 收敛后再启动） |
 | **6** | 长期（依赖 M2） | §七 增量与时间线 |
 | **7** | M1 Agent 租户隔离与执行路由（Greenfield） | **§十四** **十四-15** 待收口（**十四-01～十四-14**、**十四-16～十七** 已收口）；与 **波次 3～4** 可部分并行；**不考虑向后兼容**，见 **§十四** 首段说明 |
+| **8** | **独立 SaaS：人机身份与租户成员** | **§十六**：**十六-01～十六-12 已全部收口**（含 **租户邀请邮件**、**租户级 OIDC Bearer** + **JIT 成员**、**仅 SSO 时禁用密码登录**、**SAML 元数据登记占位** 与文档） |
 | **—** | 已完成 | 索引 **`[x]`** 与 **§零** 基线等闭合内容见 **[归档](./enterprise-backlog-completed-archive.md)**（含 **Part 2**） |
 
 ### 全量待办索引（活跃）
 
-**`[x]` 历史索引行**在 **[`enterprise-backlog-completed-archive.md`](./enterprise-backlog-completed-archive.md)** **Part 1** 同步维护；本表 **§十五** 仍列出全部 **`[x]`** 行以便与 **§15.2** 对照。未完成项为 **`[ ]`** 与 **`三-注`**（下表：**十四-15**、**十四-18**、**七-03**、**§九** 等）。**已闭合分节表全文**在 **[Part 2](./enterprise-backlog-completed-archive.md#分节正文与历史归档part-2)**。
+**`[x]` 历史索引行**在 **[`enterprise-backlog-completed-archive.md`](./enterprise-backlog-completed-archive.md)** **Part 1** 同步维护；本表 **§十五** 仍列出全部 **`[x]`** 行以便与 **§15.2** 对照。未完成项为 **`[ ]`** 与 **`三-注`**（下表：**十四-15**、**十四-18**、**§十六**、**七-03**、**§九** 等）。**已闭合分节表全文**在 **[Part 2](./enterprise-backlog-completed-archive.md#分节正文与历史归档part-2)**。
 
 | 编号 | 章节 | 状态 | P | 排期 | 待办项（摘要与分节表标题一致） |
 |------|------|------|---|------|------------------------------|
@@ -85,6 +86,18 @@
 | 十五-22 | §十五 | [x] | P3 | 4 | **Playwright E2E** 冒烟（登录 → 作业中心 → 可选切租户 → 备份向导；**`deploy/docker-compose.console-e2e.yml`**） |
 | 十五-23 | §十五 | [x] | P3 | 4 | **（可增强）** 列表 API **query**：**`GET /jobs?kind=&status=`** |
 | 十五-24 | §十五 | [x] | P3 | 4 | **（可增强）** 备份链路**向导**、工作台 **Grafana`/metrics`** 入口 |
+| 十六-01 | §十六 | [x] | P0 | 8 | **用户表与密码**：**`console_users`** + **`tenant_memberships`**；**Argon2id**；**`devault-admin create-console-user`**；与 **`ControlPlaneApiKey`** 并存 |
+| 十六-02 | §十六 | [x] | P0 | 8 | **服务端会话 + Cookie**：opaque id → **Redis**；**`POST /api/v1/auth/logout`**；**`DEVAULT_SESSION_*` / `DEVAULT_CSRF_*`** 配置项 |
+| 十六-03 | §十六 | [x] | P0 | 8 | **`get_auth_context` 双通道**：**Cookie 优先**，否则 **Bearer**；gRPC 仍为 Bearer |
+| 十六-04 | §十六 | [x] | P0 | 8 | **CSRF**：存在会话 Cookie 时，**POST/PUT/PATCH/DELETE** `/api/v1/*`（登录/登出豁免）校验 **`X-CSRF-Token`** 与可读 **`devault_csrf`** Cookie；**`SameSite`** 见 **`DEVAULT_SESSION_COOKIE_SAMESITE`** |
+| 十六-05 | §十六 | [x] | P0 | 8 | **`tenant_memberships`** + **`ensure_admin`** 仅 **platform**；租户 **`PATCH`** / **Legal hold** 允许 **tenant_user** 的 **tenant_admin**（映射 REST **`admin`**） |
+| 十六-06 | §十六 | [x] | P0 | 8 | **`AuthSessionOut`** 扩展 **`principal_kind` / `user_id` / `email` / `tenants`**；**`console/`** 同步；**`verify_console_openapi_contract`** 校验 |
+| 十六-07 | §十六 | [x] | P1 | 8 | **`console/` 单 SPA**：`request` **`credentials: 'include'`**；**`/user/login`** 邮箱+密码 + **TOTP 第二步**；**`/user/integration`** **Bearer**；401 → 登录 |
+| 十六-08 | §十六 | [x] | P1 | 8 | **登录/注册 API**：**`POST /api/v1/auth/login|register|session/refresh`**；**Redis 滑动限流**（IP）；**`auth_audit`** 审计 |
+| 十六-09 | §十六 | [x] | P1 | 8 | **MFA**：**TOTP**（**`pyotp`**）；**`tenants.require_mfa_for_admins`**；**`AuthSessionOut.needs_mfa`**；**`POST …/mfa/verify|enroll/*`**；写操作 **`mfa_required`** 直至验证 |
+| 十六-10 | §十六 | [x] | P1 | 8 | **密码重置**：**`password_reset_tokens`**；**`POST …/password-reset/request|confirm`**；**`DEVAULT_SMTP_*`** / 空 host 时日志占位；防枚举统一响应 |
+| 十六-11 | §十六 | [x] | P2 | 8 | **邀请加入租户**：**`tenant_invitations`**；**`POST/GET …/tenants/{id}/invitations`**；**`POST …/auth/invitations/accept`**；邮件链接 **`/user/accept-invite`**；控制台 **概览 · 成员邀请** |
+| 十六-12 | §十六 | [x] | P2 | 8 | **租户级 OIDC**：**`tenants.sso_oidc_*`** + **Bearer** 解析（**`iss`/`aud`** 匹配租户）；**`sso_jit_provisioning`**；**`sso_password_login_disabled`**；**SAML** 字段仅登记；**集成测试/单测** 与文档 |
 | 七-03 | §七 | [ ] | P2 | 6 | **增量与时间线（长期）** |
 | 九-01 | §九 | [ ] | P0 | 5 | **`postgres` 插件（Agent 可执行）** |
 | 九-02 | §九 | [ ] | P0 | 5 | **`mysql` 插件（Agent 可执行）** |
@@ -138,6 +151,7 @@
 | **十四-17** | **7**（主） | **闸门**：字段、角色、变更可见性与 **OpenAPI** 对齐。 |
 | **十四-18** | **5** | **M2**：**§九** 能力与控制台 **同波次闭合**，见上表 **十四-18** 行。 |
 | **十五-01～十五-24** | **4**（主）、**3**（收尾） | **Ant Design Pro 企业控制台**：见 **§十五** 与归档 **Part 1** 增补行；**十五-19** 下线 Jinja **`/ui`** 后 **十四-17** 闸门迁移至 `console/`。 |
+| **十六-01～十六-12** | **8**（主） | **独立 SaaS 人机身份**：**§十六**；**Cookie 会话** + **Membership**；**Bearer** 保留集成；与 **十五** 单 SPA 同源部署强相关。 |
 
 ---
 
@@ -184,6 +198,54 @@
 | [x] | P3 | **（可增强）向导与聚合** | **发起备份**三步 **Steps**（方式 → 参数 → 确认）；工作台 **指标与看板**卡片：**`/metrics`** 外链 + 可选 **`UMI_APP_GRAFANA_URL`**（**`console/.env.example`**）。 |
 
 **依赖**：**§四** RBAC 与租户头语义；**§十四** 执行绑定与 Agent 模型；**`E-UX-001`**（**§八** 历史 HTML 已交付，本 § 为其企业形态演进）。与 **十四-18**（M2 UI 同期）交叉时，控制台须预留 **数据库 Job/Policy** 路由占位或特性开关。
+
+---
+
+## 十六、独立 SaaS 备份产品：人机身份与租户成员（Cookie 会话 · 单 SPA）
+
+**文档位置**：紧接 **§十五** 之后、**§七** 之前；与 **「全量待办索引（活跃）」** 中 **十六-01～十六-12** 一一对应。**里程碑**：**M1 延伸（产品化）** · **目标**：在现有 **多租户控制面 + `console/` 单 SPA** 之上，将 **租户管理员** 的主认证路径升级为 **第一方用户名/密码（+ MFA）+ HTTP-only Cookie 服务端会话**，使产品可独立以 **SaaS** 形态售卖；**企业对接**通过 **租户级 SSO 与策略开关** 定制化，而非长期依赖 **`DEVAULT_API_TOKEN` 粘贴** 作为人机主路径。
+
+**定案（2026-05-10 讨论收敛）**
+
+| 项 | 选择 | 说明 |
+|----|------|------|
+| 控制台形态 | **单 SPA** | 继续 **`console/`** 一个站点；不强制拆「客户门户」子应用（若未来 **终端客户自助** 再单列 Epic / §）。 |
+| 人机会话 | **Cookie + 服务端会话** | Cookie 仅存 **opaque session id**（**httpOnly、Secure、SameSite**）；会话载荷在 **Redis**（推荐）或 DB，支持吊销与登出。 |
+| 集成与自动化 | **保留 Bearer** | **`ControlPlaneApiKey`**、**legacy `DEVAULT_API_TOKEN`**、已配置的 **OIDC JWT** 继续作为 **机器/运维** 通道；**`get_auth_context`**：**Cookie 优先**，无 Cookie 再走 Bearer。 |
+| 安全基线 | **CSRF + 同源** | 写接口须 **CSRF 防护**；生产 **控制台与 API 同源**（`/api` 反代），与 **十五-08 / 十五-21** 一致。 |
+
+### 16.1 优先级分层（实施顺序建议）
+
+| 层级 | 主题 | 索引编号 |
+|------|------|-----------|
+| **P0** | 身份数据模型、会话、双通道认证、CSRF、租户成员、会话型 `auth/session` | **十六-01～十六-06** |
+| **P1** | 控制台登录 UX、登录 API 与限流审计、MFA、密码重置 | **十六-07～十六-10** |
+| **P2** | 邀请制租户 onboarding、租户级 SSO / 企业定制入口 | **十六-11～十六-12** |
+
+### 16.2 分节待办表（验收要点）
+
+| 状态 | 优先级 | 待办项 | 说明与验收要点 |
+|------|--------|--------|----------------|
+| [x] | P0 | **用户表与密码** | **`console_users`**（email 唯一）+ **Argon2id**；**`devault-admin create-console-user`**；迁移 **`0015`**；与 **API Key** 并存。 |
+| [x] | P0 | **服务端会话 + Cookie** | **Redis** **`devault:http_session:{id}`**；**httpOnly** session cookie；**`POST /api/v1/auth/logout`**；**`DEVAULT_SESSION_*`**。 |
+| [x] | P0 | **`get_auth_context` 双通道** | **Cookie → Redis → membership**；否则 **Bearer**；**`principal_kind`**；**gRPC** 仍为 Bearer。 |
+| [x] | P0 | **CSRF** | **`CsrfProtectionMiddleware`**；**`GET /api/v1/auth/csrf`**；**`X-CSRF-Token`** + **`devault_csrf`**；登录/登出豁免。 |
+| [x] | P0 | **`Membership` 与租户内 RBAC** | **`tenant_memberships`**；**`ensure_admin`** 仅 **platform**；租户 **PATCH / legal-hold** 允许 **tenant_admin**。 |
+| [x] | P0 | **`auth/session` 与 OpenAPI** | **`AuthSessionOut`** 扩展 **`principal_kind` / `user_id` / `email` / `tenants`**；**`console/`** **`credentials: 'include'`**；**`verify_console_openapi_contract`**；E2E 走 **`/user/integration`** 录入 Bearer。 |
+| [x] | P1 | **`console/` 单 SPA 改造** | **`/user/login`** 密码主路径 + **TOTP 第二步**；**`/user/integration`**、**`/user/register`**、**`/user/reset-password`**；**`getInitialState`** 在 **`needs_mfa`** 时关闭 **`canWrite`/`canAdmin`**。 |
+| [x] | P1 | **登录与注册 HTTP API** | **`POST /api/v1/auth/login`**、（**`DEVAULT_CONSOLE_SELF_REGISTRATION_ENABLED`** 时）**`register`**、**`session/refresh`**；**`auth_login_rate_limit_per_minute`**；**`auth_audit`**。 |
+| [x] | P1 | **MFA** | **TOTP**：**`/mfa/verify`**、**`/mfa/enroll/start|confirm`**；**`tenants.require_mfa_for_admins`**（平台 **PATCH** + 控制台 **租户** 表单）；**`needs_mfa`** 与 **`mfa_verified`** 会话载荷。 |
+| [x] | P1 | **密码重置** | **`password_reset_tokens`**；**`POST …/password-reset/request|confirm`**；**`DEVAULT_PASSWORD_RESET_LINK_BASE`** + 邮件正文链接；**`DEVAULT_SMTP_*`**；请求接口统一 **204** 防枚举。 |
+| [x] | P2 | **邀请加入租户** | **`tenant_invitations`** + **`DEVAULT_INVITATION_LINK_BASE`** / 回退 **`DEVAULT_PASSWORD_RESET_LINK_BASE`**；**`DEVAULT_INVITATION_TTL_HOURS`**；接受后 **upsert `tenant_memberships`** 并签发 **Cookie 会话**。 |
+| [x] | P2 | **租户级 SSO（企业定制）** | **租户 OIDC** 与全局 **`DEVAULT_OIDC_*`** 并存（JWT **iss/aud** 路由）；**JIT** 可选；**仅 SSO** 时 **`POST /auth/login` 403**；**SAML** 元数据列 **不解析断言**（外接网关或后续迭代）。 |
+
+### 16.3 与现有里程碑的关系
+
+- **不替代 M2（§九）**：数据库备份 MVP 仍按 **波次 5**；**§十六** 与 **§九** 可并行开发，但 **对公 SaaS 控制台承诺** 建议 **§十六 P0 完成后再放开自助注册/计费宣传**。  
+- **与 §四、§十五**：§四 的 **`AuthContext`** 语义保留并扩展来源；§十五 UI 已交付，本 § 主要是 **认证载体与会话模型** 的升级，而非重做信息架构。  
+- **Epic**：建议在 **§十** 增加 **`E-SAAS-001` 人机身份与 SaaS 商业化基座**（本 §）；与 **`E-MT-001`**、**`E-UX-001`** 交叉。
+
+**依赖**：**Redis** 已用于锁/会话类能力时可复用；**邮件** 外发通道（SMTP/SES）；**HTTPS** 终止与 **Cookie Secure**；**十五-08 / 十五-21** 同源反代。
 
 ---
 
@@ -236,6 +298,7 @@
 | E-UX-001 | Web 控制台与 REST 对等 | M1 | H（扩充）+ **§十四 · 十四-16～十七**（同步排期闸门）+ **十四-18**（M2 与 §九 同期）+ **§十五**（Ant Design Pro 企业控制台；**十五-19** 下线 Jinja **`/ui`**） |
 | E-DB-001 | 数据库备份 MVP | M2 | C |
 | E-MT-002 | 多 Agent 租户隔离与策略执行路由（Greenfield） | M1 | §十四（与 D/F/H 交叉） |
+| E-SAAS-001 | **独立 SaaS：人机身份、Cookie 会话、租户成员** | M1 | **§十六**（与 **D**、**H**、**§十五** 交叉；**波次 8**） |
 
 **Epic→波次** 长说明已迁至 **[归档 Part 2](./enterprise-backlog-completed-archive.md#分节正文与历史归档part-2)**（节内 **「十、Epic 映射表 + 波次长说明」**）。
 
@@ -254,6 +317,7 @@
 | C | M2 · 九、数据库与产品差距补全 |
 | （追加） | M1 · **十四、多 Agent / 多租户执行隔离与策略路由**（Greenfield；**正文**紧接 **§四**、在 **§五** 之前；索引 **十四-01～十四-18** 紧接 **四-05** 之后；**十四-16～十八** 为 **Web UI 与 REST 同步排期**） |
 | （追加） | M1 · **十五、企业控制台（Ant Design Pro）**（**正文**紧接 **§十四**、在 **§五** 之前；活跃索引 **十五-01～十五-24** 紧接 **十四-18** 之后） |
+| （追加） | M1 · **十六、独立 SaaS 人机身份与租户成员**（**正文**紧接 **§十五**、在 **§七** 之前；活跃索引 **十六-01～十六-12**） |
 
 **说明**：上表 **A～H** 与 **§零～§八** 分节正文已迁至 **[归档 Part 2](./enterprise-backlog-completed-archive.md#分节正文与历史归档part-2)**，本表仅保留章节映射。
 
@@ -271,4 +335,8 @@
 | 2026-05-10 | **十五-11～十八 闭合**：`console/` 嵌套路由交付作业中心、策略（Tab + 内嵌计划）、发起备份/路径预检、制品（恢复/演练/Legal hold）、两套 Cron CRUD、租户 Agent/池/舰队与登记吊销、平台租户 **`TenantPatch`**；**`CHANGELOG`**、**`console/README.md`**、**`website/docs/guides/web-console.md`**、**`website/docs/user/web-console.md`** 同步。 |
 | 2026-05-10 | **十五-19～二十一 闭合**：下线 Jinja **`/ui`**（**`routes/ui.py`**、**`web/templates/`**、**`deps.py`** UI Basic/Cookie）；策略路径合并逻辑迁至 **`services/policy_paths_form_merge.py`**；**`scripts/verify_console_openapi_contract.py`** + CI；**`deploy/Dockerfile.console`** 与 Compose **`console`** **`build`**；Helm **`console`** Deployment/Service/ConfigMap + Ingress 拆分；文档与 **§十五 · 15.2** 同步。 |
 | 2026-05-10 | **十五-22～二十四 闭合**：**Playwright** 冒烟（**`console/e2e/`**、**`deploy/docker-compose.console-e2e.yml`**、**`.github/workflows/console-e2e.yml`**）；**`GET /api/v1/jobs`** 增加 **`kind`/`status`** 查询；控制台作业列表与 OpenAPI 闸门同步；**发起备份**向导 **Steps**；工作台 **Grafana`/metrics`** 入口与 **`UMI_APP_GRAFANA_URL`**；活跃索引与归档 **Part 1**、**`CHANGELOG`**、**`guides/user/web-console`** 同步。 |
+| 2026-05-10 | **§十六入册 + 波次 8**：**独立 SaaS 备份产品** 路线——**单 SPA**、租户管理员 **Cookie 服务端会话**、**Membership**、**CSRF**、**Bearer 保留为集成**；全量索引 **十六-01～十六-12** 入册；**Epic `E-SAAS-001`**；**§十一** 映射表追加 **§十六**。 |
+| 2026-05-10 | **§十六 P0（十六-01～十六-06）闭合**：**`console_users` / `tenant_memberships`**、**Redis HTTP 会话**、**`get_auth_context` Cookie 优先**、**CSRF 中间件**、**`AuthSessionOut`/`auth/login`/`auth/logout`/`auth/csrf`**、**`console/`** 密码登录 + **`credentials: 'include'`**；**`CHANGELOG`**、**`guides/user/web-console`**、**`console/README`**、归档索引同步。 |
+| 2026-05-10 | **§十六 P1（十六-07～十六-10）闭合**：迁移 **`0016`**（**`require_mfa_for_admins`**、**`totp_*`**、**`password_reset_tokens`**）；**`pyotp`**；**注册 / 刷新 / MFA / 密码重置** REST；**限流 + 审计 + SMTP 抽象**；控制台 **`/user/integration|register|reset-password`** 与登录 **MFA 步**；OpenAPI 闸门扩展；文档与 **`CHANGELOG`** 同步。 |
+| 2026-05-10 | **§十六 P2（十六-11～十六-12）闭合**：迁移 **`0017`**（**`tenant_invitations`**、租户 **SSO/OIDC/SAML 元数据列**）；**邀请 CRUD + 接受**；**`tenant_oidc` Bearer** + **JIT**；**密码登录 SSO-only 闸门**；控制台 **`/user/accept-invite`**、**`/overview/team-invitations`**、平台 **租户表单 SSO**；**`verify_console_openapi_contract`**、单测、文档与 **`CHANGELOG`**。 |
 

@@ -88,3 +88,16 @@ def try_decode_oidc_bearer(raw_token: str, settings: Settings) -> AuthContext | 
             allowed = frozenset()
 
     return AuthContext(role=role, allowed_tenant_ids=allowed, principal_label=label)
+
+
+def fetch_jwks_uri_for_issuer(issuer: str) -> str | None:
+    """Return JWKS URL from OpenID discovery for an issuer (shared by global and per-tenant OIDC)."""
+    issuer = issuer.strip().rstrip("/")
+    if not issuer:
+        return None
+    try:
+        meta = _issuer_metadata(issuer)
+        u = str(meta.get("jwks_uri") or "")
+        return u or None
+    except Exception:
+        return None

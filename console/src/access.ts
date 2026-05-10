@@ -6,11 +6,13 @@ export default function access(initialState: {
   currentUser?: API.CurrentUser;
   canAdmin?: boolean;
   canWrite?: boolean;
+  canInviteMembers?: boolean;
 }) {
-  const { currentUser, canAdmin, canWrite } = initialState ?? {};
+  const { currentUser, canAdmin, canWrite, canInviteMembers } = initialState ?? {};
   return {
     canAdmin: Boolean(canAdmin),
     canWrite: Boolean(canWrite),
+    canInviteMembers: Boolean(canInviteMembers),
     isAuditor: currentUser?.role === 'auditor',
   };
 }

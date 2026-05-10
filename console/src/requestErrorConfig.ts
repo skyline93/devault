@@ -1,7 +1,14 @@
 import type { RequestConfig } from '@umijs/max';
 import { message } from 'antd';
 
-import { STORAGE_BEARER_KEY, STORAGE_TENANT_ID_KEY } from '@/constants/storage';
+import { CSRF_COOKIE_NAME, STORAGE_BEARER_KEY, STORAGE_TENANT_ID_KEY } from '@/constants/storage';
+
+function readCookie(name: string): string | null {
+  if (typeof document === 'undefined') return null;
+  const esc = name.replace(/([.$?*|{}()[\]\\/+^])/g, '\\$1');
+  const m = document.cookie.match(new RegExp(`(?:^|; )${esc}=([^;]*)`));
+  return m ? decodeURIComponent(m[1]) : null;
+}
 
 const loginPath = '/user/login';
 
@@ -27,6 +34,7 @@ export const errorConfig: RequestConfig = {
         if (typeof window !== 'undefined') {
           const { pathname, search, hash } = window.location;
           localStorage.removeItem(STORAGE_BEARER_KEY);
+          void fetch('/api/v1/auth/logout', { method: 'POST', credentials: 'include' }).catch(() => {});
           if (pathname !== loginPath) {
             const redirect = encodeURIComponent(pathname + search + hash);
             window.location.href = `${loginPath}?redirect=${redirect}`;
@@ -51,7 +59,19 @@ export const errorConfig: RequestConfig = {
         typeof window !== 'undefined' ? localStorage.getItem(STORAGE_TENANT_ID_KEY) : null;
       if (token) headers.Authorization = `Bearer ${token}`;
       if (tenant) headers['X-DeVault-Tenant-Id'] = tenant;
-      return { url, options: { ...options, headers } };
+      const method = String(options.method || 'GET').toUpperCase();
+      if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+        const csrf = readCookie(CSRF_COOKIE_NAME);
+        if (csrf) headers['X-CSRF-Token'] = csrf;
+      }
+      return {
+        url,
+        options: {
+          ...options,
+          headers,
+          credentials: 'include' as RequestCredentials,
+        },
+      };
     },
   ],
 };

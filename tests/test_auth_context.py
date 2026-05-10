@@ -17,6 +17,19 @@ def test_auth_admin_all_tenants() -> None:
     a.ensure_admin()
 
 
+def test_tenant_user_cannot_platform_admin() -> None:
+    tid = uuid.uuid4()
+    a = AuthContext(
+        role="admin",
+        allowed_tenant_ids=frozenset({tid}),
+        principal_label="user:a@b.com",
+        principal_kind="tenant_user",
+    )
+    with pytest.raises(HTTPException) as ei:
+        a.ensure_admin()
+    assert ei.value.status_code == 403
+
+
 def test_auth_operator_scoped() -> None:
     tid = uuid.uuid4()
     a = AuthContext(role="operator", allowed_tenant_ids=frozenset({tid}), principal_label="op")
