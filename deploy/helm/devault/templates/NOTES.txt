@@ -18,10 +18,25 @@
 6. Agent gRPC (in-cluster): {{ include "devault.fullname" . }}-api:50051 — set DEVAULT_GRPC_REGISTRATION_SECRET to match the same secret key on agents outside the chart.
 
 7. bundled PostgreSQL / Redis / MinIO are for lab use only; run a single scheduler replica (already enforced).
+{{- if .Values.console.enabled }}
+
+8. Console SPA is enabled: build/push the image from repo root with
+   `docker build -f deploy/Dockerfile.console -t {{ .Values.console.image.repository }}:{{ .Values.console.image.tag }} .`
+   then `kubectl rollout status deploy/{{ include "devault.fullname" . }}-console`.
+   Ingress on the chart host splits `/api`, `/docs`, … to API and `/` to the console (same origin as nginx in the image).
+{{- end }}
 {{- if .Values.monitoring.enabled }}
+{{- if .Values.console.enabled }}
+
+9. Monitoring is enabled: Prometheus scrapes the API; Alertmanager routes to demo webhook echo.
+   kubectl port-forward svc/{{ include "devault.fullname" . }}-prometheus 9090:9090
+   kubectl port-forward svc/{{ include "devault.fullname" . }}-alertmanager 9093:9093
+   kubectl logs -f deploy/{{ include "devault.fullname" . }}-alertdump
+{{- else }}
 
 8. Monitoring is enabled: Prometheus scrapes the API; Alertmanager routes to demo webhook echo.
    kubectl port-forward svc/{{ include "devault.fullname" . }}-prometheus 9090:9090
    kubectl port-forward svc/{{ include "devault.fullname" . }}-alertmanager 9093:9093
    kubectl logs -f deploy/{{ include "devault.fullname" . }}-alertdump
+{{- end }}
 {{- end }}

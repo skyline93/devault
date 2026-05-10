@@ -48,10 +48,10 @@ description: agent_pools、成员、权重/排序与 LeaseJobs 收窄（§十四
 3. **失败重试**：API **retry** 产生 **新 `job_id`** 的新 **`pending`** 作业；**任意合格池成员**均可领取（仍受绑定与 enrollment 约束）。  
 4. **sort_order / weight**：当前 **不在控制面**做加权随机派发；**拉取顺序**仍为作业 **`created_at` FIFO**。**`sort_order`** 用于文档与 UI 列表顺序，便于运维标注「主 / 备」；**`weight`** 预留给后续调度增强。
 
-## Web 控制台
+## Web 控制台（`console/`）
 
-- **`/ui/agent-pools`**：列表、新建池、成员 JSON 编辑、删除。  
-- **策略表单**（`/ui/policies/new`、`…/edit`）：执行绑定模式 + Agent UUID 或池下拉。
+- **`/execution/agent-pools`**、**`/execution/agent-pools/:poolId`**：列表、成员编辑、删除。  
+- **策略**（**`/backup/policies/new`**、**`…/edit`**）：执行绑定模式 + Agent 或池下拉。
 
 ## 相关文档
 

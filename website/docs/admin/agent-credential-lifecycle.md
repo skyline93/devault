@@ -20,7 +20,7 @@ description: Register 会话、登记变更、与运行中作业的影响（Runb
 
 **场景**：怀疑 Register 会话泄露、主机失陷、或需强制下线某台 Agent。
 
-1. **调用吊销**（admin）：**`POST /api/v1/agents/{agent_id}/revoke-grpc-sessions`**，或 Web **`/ui/agents`** 行内 **Revoke gRPC sessions**。  
+1. **调用吊销**（admin）：**`POST /api/v1/agents/{agent_id}/revoke-grpc-sessions`**，或 **`console/`** **`/execution/fleet/:agentId`** 内 **吊销 gRPC 会话**。  
    实现为 Redis **`INCR devault:grpc:sess_ver:{agent_id}`**；所有旧会话载荷中的 **`v`** 与当前代际不一致，**下一次任意 gRPC** 即 **`UNAUTHENTICATED`**。
 2. **运行中作业**：若 Agent 正持有租约，**后续** **`RequestStorageGrant` / `CompleteJob`** 会因令牌失效而失败；租约在 **`lease_expires_at`** 到达后由控制面回收为 **`pending`**（与既有租约语义一致）。应在业务上预期 **该轮备份/恢复可能失败**，必要时人工 **retry** 或等待重新调度。
 3. **不吊销 API Key**：吊销 API Key 使用 **`control_plane_api_keys`** 的禁用/轮换流程（见 [租户与 RBAC](./tenants-and-rbac.md)），与 Register 会话独立。

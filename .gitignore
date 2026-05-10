@@ -15,3 +15,10 @@ htmlcov/
 .ruff_cache/
 *.log
 deploy/tls/dev/
+
+# Ant Design Pro console (十五-02): install + ephemeral OpenAPI snapshot
+console/node_modules/
+console/openapi.json
+console/dist/
+console/src/.umi/
+console/src/.umi-production/

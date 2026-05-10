@@ -54,6 +54,23 @@ class TenantPatch(BaseModel):
     policy_paths_allowlist_mode: Literal["off", "enforce", "warn"] | None = None
 
 
+class AuthSessionOut(BaseModel):
+    """Resolved principal for Bearer (or dev-open when authentication is disabled)."""
+
+    role: Literal["admin", "operator", "auditor"] = Field(
+        ...,
+        description="RBAC role for REST and future Ant Design Pro `access.ts` routing.",
+    )
+    principal_label: str = Field(
+        ...,
+        description="Stable display / audit label (e.g. api-key name, legacy token, oidc:sub).",
+    )
+    allowed_tenant_ids: list[uuid.UUID] | None = Field(
+        ...,
+        description="Tenants this principal may use with `X-DeVault-Tenant-Id`; null means all tenants (admin scope).",
+    )
+
+
 class FileBackupConfigV1(BaseModel):
     """File-plugin backup configuration (version 1)."""
 

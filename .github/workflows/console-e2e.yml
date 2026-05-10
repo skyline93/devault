@@ -1,0 +1,70 @@
+name: Console E2E
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - "console/**"
+      - "deploy/Dockerfile.console"
+      - "deploy/docker-compose.console-e2e.yml"
+      - "src/devault/api/**"
+      - ".github/workflows/console-e2e.yml"
+  pull_request:
+    branches: [main, master]
+    paths:
+      - "console/**"
+      - "deploy/Dockerfile.console"
+      - "deploy/docker-compose.console-e2e.yml"
+      - "src/devault/api/**"
+      - ".github/workflows/console-e2e.yml"
+
+jobs:
+  playwright:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: console/package-lock.json
+
+      - name: Build & start API + console stack
+        working-directory: deploy
+        run: docker compose -f docker-compose.console-e2e.yml up -d --build
+
+      - name: Wait for health
+        run: |
+          set -e
+          for i in $(seq 1 90); do
+            if curl -fsS http://127.0.0.1:8000/healthz >/dev/null 2>&1 && curl -fsS http://127.0.0.1:8080/ >/dev/null 2>&1; then
+              echo "ready after ${i} attempts"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "timeout waiting for services"
+          exit 1
+
+      - name: Playwright smoke（十五-22）
+        working-directory: console
+        env:
+          E2E_BASE_URL: http://127.0.0.1:8080
+          E2E_API_ORIGIN: http://127.0.0.1:8000
+          E2E_API_TOKEN: changeme
+        run: |
+          npm ci
+          npx playwright install chromium
+          npm run test:e2e
+
+      - name: Compose logs on failure
+        if: failure()
+        working-directory: deploy
+        run: docker compose -f docker-compose.console-e2e.yml logs --tail=200 --no-color
+
+      - name: Tear down
+        if: always()
+        working-directory: deploy
+        run: docker compose -f docker-compose.console-e2e.yml down -v --remove-orphans

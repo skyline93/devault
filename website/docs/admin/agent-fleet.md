@@ -44,15 +44,13 @@ description: edge_agents 登记、租户 enrollment、HTTP API、强制升级与
 
 提高 **`DEVAULT_GRPC_MIN_SUPPORTED_AGENT_VERSION`** 可在滚动升级后切断过旧 Agent。
 
-## Web 控制台
+## Web 控制台（`console/`）
 
-**HTTP Basic**，密码 **`DEVAULT_API_TOKEN`**（或 API Key 链）。
+Bearer 与 REST 一致（见 [Web 控制台](../user/web-console.md)）。
 
-- 入口：**`/ui/agents`**（全平台 **`edge_agents`**）
-- **租户子视图**：**`/ui/tenant-agents`**（仅 **`agent_enrollments`** 含当前租户的 Agent；尚未 **Heartbeat** 的登记行也会列出，快照列为空）
-- 展示最近 **200** 条（按 **`last_seen_at`**），含 **`≥ min SemVer`**、**`Proto OK`**、**`allowed_tenant_ids`**（来自登记）、**`hostname`**、**`backup_path_allowlist`**（全平台表）。
-
-详见 [Web 控制台](../user/web-console.md)。
+- **全舰队**：路由 **`/execution/fleet`**（数据 **`GET /api/v1/agents`**）
+- **租户内 Agent**：**`/execution/tenant-agents`**（**`GET /api/v1/tenant-agents`**；尚未 **Heartbeat** 的登记行也会列出，快照列可为空）
+- **Agent 详情 / 登记 / 吊销**：**`/execution/fleet/:agentId`**
 
 ## HTTP API
 
@@ -73,14 +71,14 @@ description: edge_agents 登记、租户 enrollment、HTTP API、强制升级与
 
 - **REST**：**`POST /api/v1/jobs/path-precheck`**，请求体 **`{"policy_id":"<uuid>"}`**（须对策略租户有写权限）。
 - **语义**：入队 **`kind=path_precheck`** 作业；Agent **只读**检查策略 **`config.paths`** 在本地是否存在且可读，**不上传** bundle。结果写入 **`jobs.result_meta`**，**`schema`: `devault-path-precheck-report-v1`**（与 **`restore_drill`** 演练类 Job 区分）。
-- **Web UI**：策略页 **Run path precheck**，跳转 Jobs 列表查看状态与摘要列。
+- **控制台**：**`/backup/precheck`** 入队预检；**`/backup/jobs`** 查看状态与 **`result_meta`**。
 - **租约**：与备份相同策略绑定与租户过滤；**同一 `policy_id` 上活跃备份**仍通过 Redis 锁互斥，但 **pending 的 `path_precheck` 可与非备份活跃态并存**（SQL 候选仅将 **`kind=backup`** 视为阻塞同策略的其他 pending 作业）。
 
 ## 作业 hostname 快照（十四-12）
 
 - **`jobs.lease_agent_hostname`**：在 **`LeaseJobs`** 成功将作业从 **`pending`→`running`** 时，从当时 **`edge_agents.hostname`** 写入（可为空）。
 - **`jobs.completed_agent_hostname`**：**`CompleteJob`** 时优先取请求 **`agent_hostname`**（Agent 进程上报），否则回退 **`edge_agents.hostname`**。
-- **REST / UI**：**`JobOut`** 与 **`/ui/jobs`** 表格展示 **`lease_agent_id`**、上述两列，便于审计（避免事后依赖可变 **`edge_agents`** 行）。
+- **REST / 控制台**：**`JobOut`** 与 **`/backup/jobs`** 表格展示 **`lease_agent_id`**、上述两列，便于审计（避免事后依赖可变 **`edge_agents`** 行）。
 
 ## 策略路径与 allowlist（十四-10）
 
@@ -88,7 +86,7 @@ description: edge_agents 登记、租户 enrollment、HTTP API、强制升级与
 - 校验对象：文件策略 **`config.paths`** 须落在 **本租户已登记 Agent** 在 **Heartbeat** 中上报的 **`backup_path_allowlist`** 之前缀**并集**之下（前缀匹配，与 Agent 侧 **`DEVAULT_ALLOWED_PATH_PREFIXES`** 对齐）。
 - 若并集为空（尚无 Agent 上报 allowlist），**不执行**该校验，以免升级后阻断存量策略。
 
-**REST**：**`PATCH /api/v1/tenants/{tenant_id}`**（admin）可更新 **`policy_paths_allowlist_mode`**；**Web UI**：编辑租户表单。
+**REST**：**`PATCH /api/v1/tenants/{tenant_id}`**（admin）可更新 **`policy_paths_allowlist_mode`**；**控制台**：**`/platform/tenants`**（admin）。
 
 **凭据吊销与轮换 Runbook**：[Agent 凭据生命周期](./agent-credential-lifecycle.md)。
 

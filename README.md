@@ -56,6 +56,7 @@ API surfaces, gRPC/TLS, S3, and Helm are covered in the doc site; this root READ
 | `src/devault/` | Control plane and Agent Python packages |
 | `deploy/` | `docker-compose.yml`, `scripts/install.sh`, images, Helm chart, `demo_data/` sample for the agent bind mount |
 | `website/` | Docusaurus documentation site |
+| `console/` | Ant Design Pro（Umi 4）企业控制台：Bearer + 租户头；`npm run dev` / `npm run build` |
 | `tests/` | pytest suite |
 
 ## Local development (summary)

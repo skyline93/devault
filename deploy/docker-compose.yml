@@ -1,6 +1,8 @@
 # Pre-built images only (no compose `build`). Default app image: Docker Hub glf9832/devault.
 # Override: DEVAULT_IMAGE=registry.example.com/acme/devault:tag
 # Run: cd deploy && docker compose pull && docker compose up -d
+# Optional SPA：`docker compose --profile with-console build console && docker compose --profile with-console up -d` → :8080（十五-21 多阶段镜像）
+# Playwright 专用栈（源码构建 API+console）：`docker compose -f deploy/docker-compose.console-e2e.yml up -d --build`（十五-22）
 #
 # Remote agents (outside this compose network) need presigned S3 URLs they can reach. By default
 # DEVAULT_S3_ENDPOINT is http://minio:9000 (in-stack only). Set in .env or the shell, e.g.:
@@ -164,6 +166,21 @@ services:
         condition: service_healthy
       minio-init:
         condition: service_completed_successfully
+
+  # Ant Design Pro 控制台（十五-08 / 十五-21）：多阶段镜像内置 `dist` + nginx 反代 `api:8000`。
+  #   docker compose --profile with-console build console && docker compose --profile with-console up -d
+  # 访问 http://127.0.0.1:8080/
+  console:
+    profiles: ["with-console"]
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.console
+    image: ${DEVAULT_CONSOLE_IMAGE:-devault-console:local}
+    ports:
+      - "8080:80"
+    depends_on:
+      api:
+        condition: service_healthy
 
 volumes:
   pgdata: {}

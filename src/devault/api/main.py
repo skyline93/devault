@@ -11,13 +11,13 @@ from devault.api.routes import (
     agent_pools,
     agents,
     artifacts,
+    auth,
     jobs,
     policies,
     restore_drill_schedules,
     schedules,
     tenant_agents,
     tenants,
-    ui,
 )
 from devault.grpc.server import start_grpc_server, stop_grpc_server
 from devault.release_meta import GRPC_API_PACKAGE
@@ -58,8 +58,8 @@ _OPENAPI_TAGS = [
         "description": "List and create tenants; other resources are scoped per `X-DeVault-Tenant-Id` (or default slug).",
     },
     {
-        "name": "ui",
-        "description": "Minimal HTML UI (HTTP Basic = API token or DB API key): jobs, artifacts, policies, schedules, restore-drill schedules, agents fleet.",
+        "name": "auth",
+        "description": "Session principal for Bearer clients (e.g. Ant Design Pro `getInitialState`, tenant picker filtering).",
     },
     {
         "name": "agents",
@@ -102,7 +102,7 @@ app.include_router(policies.router, prefix="/api/v1")
 app.include_router(schedules.router, prefix="/api/v1")
 app.include_router(restore_drill_schedules.router, prefix="/api/v1")
 app.include_router(tenants.router, prefix="/api/v1")
-app.include_router(ui.router)
+app.include_router(auth.router, prefix="/api/v1")
 
 
 @app.middleware("http")

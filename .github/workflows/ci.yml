@@ -42,8 +42,17 @@ jobs:
       - name: Verify compatibility matrix JSON
         run: python scripts/verify_compatibility_matrix.py
 
-      - name: Verify UI ↔ OpenAPI template registry (§十四-17)
-        run: python scripts/verify_ui_openapi_registry.py
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: console/package-lock.json
+
+      - name: Export OpenAPI + contract gate + console build (十五-02 / 十五-19)
+        run: |
+          python scripts/export_openapi_json.py -o console/openapi.json
+          python scripts/verify_console_openapi_contract.py console/openapi.json
+          cd console && npm ci && npm run codegen && npm run build
 
       - name: Pytest (full)
         if: matrix.suite == 'full'
@@ -56,3 +65,4 @@ jobs:
           tests/test_proto_contracts.py
           tests/test_agent_version_gate.py
           tests/test_verify_compatibility_matrix.py
+          tests/test_openapi_jobs_list_filters.py

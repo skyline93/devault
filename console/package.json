@@ -1,0 +1,33 @@
+{
+  "name": "@devault/console",
+  "private": true,
+  "scripts": {
+    "dev": "max dev --port 8010",
+    "build": "max build",
+    "export-openapi": "python3 ../scripts/export_openapi_json.py -o openapi.json",
+    "codegen": "openapi-typescript openapi.json -o src/openapi/api-types.d.ts",
+    "codegen:full": "npm run export-openapi && npm run codegen",
+    "postinstall": "max setup",
+    "preview": "max preview --port 8001",
+    "setup": "max setup",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "@ant-design/icons": "^5.5.1",
+    "@ant-design/pro-components": "^2.8.4",
+    "antd": "^5.22.5",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.1",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@umijs/max": "^4.3.36",
+    "openapi-typescript": "^7.10.1",
+    "typescript": "^5.6.3"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

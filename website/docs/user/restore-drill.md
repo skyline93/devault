@@ -22,7 +22,7 @@ description: restore_drill、Cron 调度与演练报告
 
 ## Web 控制台
 
-在 **`/ui/restore-drill-schedules`** 可管理 Cron 演练调度；一次性演练使用 **`POST /api/v1/jobs/restore-drill`**。
+在 **`console/`** 路由 **`/compliance/restore-drill-schedules`** 可管理 Cron 演练调度；一次性演练使用 **`POST /api/v1/jobs/restore-drill`**。
 
 ## 一次性演练（API）
 

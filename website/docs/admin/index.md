@@ -26,7 +26,7 @@ description: 运维文档阅读路径与适用范围
 2. [配置参考](./configuration.md)、[数据库迁移](./database-migrations.md)  
 3. [对象存储模型](../storage/object-store-model.md)、[租户与访问控制](./tenants-and-rbac.md)（多租户上线前必读）
 
-验证：`GET /healthz`、Swagger `/docs`、控制台 `/ui/jobs`。
+验证：`GET /healthz`、Swagger `/docs`、**`console/`** 本地 **`npm run dev`**（默认 **`http://localhost:8010`**）或 Compose **`--profile with-console`**。
 
 ### 路径 B：Kubernetes 与生产编排
 

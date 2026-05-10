@@ -28,7 +28,7 @@ X-DeVault-Tenant-Id: <tenant-uuid>
 
 ## Web UI
 
-**`/ui/*`** 使用 **HTTP Basic**：密码为 **`DEVAULT_API_TOKEN`** 或与 REST 相同的密钥链可解析值。生产须 **HTTPS**。
+**`console/`** 使用 **Bearer**（与 REST 相同解析链）。生产须 **HTTPS**。
 
 ## OpenAPI
 

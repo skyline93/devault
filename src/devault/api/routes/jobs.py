@@ -15,6 +15,7 @@ from devault.api.schemas import (
     EnqueueResponse,
     JobOut,
 )
+from devault.core.enums import JobKind, JobStatus
 from devault.db.models import Job, Tenant
 from devault.security.auth_context import AuthContext
 from devault.services import control as control_svc
@@ -109,12 +110,13 @@ def list_jobs(
     tenant: Tenant = Depends(get_effective_tenant),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
+    kind: JobKind | None = Query(None, description="Filter by job kind"),
+    status: JobStatus | None = Query(None, description="Filter by job status"),
 ) -> list[Job]:
-    stmt = (
-        select(Job)
-        .where(Job.tenant_id == tenant.id)
-        .order_by(Job.created_at.desc())
-        .limit(limit)
-        .offset(offset)
-    )
+    stmt = select(Job).where(Job.tenant_id == tenant.id)
+    if kind is not None:
+        stmt = stmt.where(Job.kind == kind.value)
+    if status is not None:
+        stmt = stmt.where(Job.status == status.value)
+    stmt = stmt.order_by(Job.created_at.desc()).limit(limit).offset(offset)
     return list(db.scalars(stmt).all())

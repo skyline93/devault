@@ -66,7 +66,7 @@ curl -sS -H "Authorization: Bearer changeme" -H "Content-Type: application/json"
 | 地址 | 说明 |
 |------|------|
 | `http://127.0.0.1:8000/docs` | OpenAPI（Swagger） |
-| `http://127.0.0.1:8000/ui/jobs` | Web 控制台（Basic 密码为 `DEVAULT_API_TOKEN`） |
+| `http://localhost:8010`（`console/` **`npm run dev`**） | Ant Design Pro 控制台（Bearer，见 [Web 控制台](./web-console.md)） |
 | `http://127.0.0.1:8000/metrics` | Prometheus 指标 |
 
 多 Agent 时可为策略绑定 **单台 Agent** 或 **Agent 池**（控制 **LeaseJobs** 谁可领该策略作业），见 [Agent 池](../admin/agent-pools.md)。

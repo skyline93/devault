@@ -525,7 +525,7 @@ devault/
 - [x] 任务取消 / 失败重试、`celery_task_id` 记录、同 `policy_id` 备份 Redis 互斥锁  
 - [x] Prometheus：`/metrics`（`devault_jobs_total`、`devault_job_duration_seconds` 等）  
 - [x] CLI：`devault file|job|artifact|policy|schedule`  
-- [x] Web UI（Jinja2）：`/ui/jobs|artifacts|policies|schedules`（HTTP Basic，密码为 `DEVAULT_API_TOKEN`）  
+- [x] Web UI：历史 Jinja **`/ui/*`**（已随 **十五-19** 下线）；企业交付为 **`console/`** Ant Design Pro（Bearer），能力见 **`/api/v1/*`** 与 **§十五** backlog。  
 - [x] Compose 含 `scheduler` 服务 + 文档  
 
 ### 20.3 S3 — 数据库 MVP（建议 3～4 周）

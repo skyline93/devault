@@ -8,7 +8,8 @@
 |------|------|
 | [`docs-old/development-design.md`](../docs-old/development-design.md) | 开发设计、阶段与非目标 |
 | [平台实现架构（文档站）](../website/docs/engineering/platform-architecture.md) | 边缘 Agent + 控制面：原则、控制/数据面、Pull 序列、存储与安全摘要 |
-| [`docs-old/enterprise-backlog.md`](../docs-old/enterprise-backlog.md) | 企业能力待办与验收口径 |
+| [`docs-old/enterprise-backlog.md`](../docs-old/enterprise-backlog.md) | 企业能力待办与验收口径（活跃索引） |
+| [`docs-old/enterprise-backlog-completed-archive.md`](../docs-old/enterprise-backlog-completed-archive.md) | 企业待办 **Part 1**：索引 **`[x]`**；**Part 2**：已闭合分节正文、§十三、§十二 历史修订、Epic 长说明 |
 | [`docs/compatibility.json`](compatibility.json) | 控制面 / Agent 兼容矩阵（CI 校验） |
 | [`docs/RELEASE.md`](RELEASE.md) | 发版检查清单 |
 

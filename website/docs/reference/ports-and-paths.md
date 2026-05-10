@@ -36,4 +36,4 @@ description: 默认端口、HTTP 路由与 Agent 挂载
 | `/version` | 版本 JSON |
 | `/metrics` | Prometheus |
 | `/healthz` | 健康检查 |
-| `/ui/jobs` | Web 控制台任务 |
+| `console/`（默认 `:8010`） | Ant Design Pro 控制台（见仓库 **`console/README.md`**） |

@@ -17,3 +17,4 @@ htmlcov
 .coverage
 demo_data
 **/node_modules
+console/dist
