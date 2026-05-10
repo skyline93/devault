@@ -18,8 +18,28 @@
            value="{{ policy.name if policy else '' }}"/>
   </p>
   <p>
-    <label for="paths_multiline">Paths (one absolute path per line)</label><br/>
-    <textarea id="paths_multiline" name="paths_multiline" required>{% if policy %}{{ policy.config.get('paths', []) | join('\n') }}{% endif %}</textarea>
+    <strong>Backup paths</strong><br/>
+    <span class="muted">Tick roots from the union above (Heartbeat <code>backup_path_allowlist</code>), and/or add more absolute paths below. Saved policy order: ticked roots in list order, then additional lines.</span>
+  </p>
+  {% if allowlist_union %}
+  <fieldset style="border:1px solid #ccc;padding:8px 10px;margin:0 0 10px;">
+    <legend class="muted">Allowlist roots</legend>
+    {% for root in allowlist_union %}
+    <label style="display:block;margin:4px 0;">
+      <input type="checkbox" name="paths_from_allowlist" value="{{ root|e }}"
+        {% if root in selected_allowlist_paths %}checked{% endif %}/>
+      <code>{{ root }}</code>
+    </label>
+    {% endfor %}
+  </fieldset>
+  {% else %}
+  <p class="muted">No allowlist union yet — Agents have not reported <code>backup_path_allowlist</code> for this tenant. Use <strong>Additional paths</strong> only until then.</p>
+  {% endif %}
+  <p>
+    <label for="paths_extra_multiline">Additional absolute paths (optional unless allowlist is empty; one per line)</label><br/>
+    <textarea id="paths_extra_multiline" name="paths_extra_multiline" rows="6"
+      {% if not allowlist_union %}required{% endif %}>{{ paths_extra_multiline }}</textarea>
+    <span class="muted">For subpaths under a prefix (e.g. <code>/var/lib/app</code> under <code>/var</code>) or extra roots not listed above.</span>
   </p>
   <p>
     <label for="excludes_multiline">Excludes (optional, gitwildmatch, one pattern per line)</label><br/>

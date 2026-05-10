@@ -43,6 +43,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **策略表单路径**：**多选** Heartbeat 并集 **`allowlist_union`** 根路径（**`paths_from_allowlist`**）+ **可选** **「Additional paths」** 文本区（**`paths_extra_multiline`**）；提交时合并去重写入策略 **`config.paths`**。无并集时仅文本区且 **HTML `required`**。见 **`policy_form.html`**、**`ui.py`**。
 - **策略表单执行绑定**：单 Agent 由 **UUID 文本框** 改为 **下拉框**（选项为当前租户 **已登记** Agent，与 **`/ui/tenant-agents`** 同源）；若已绑定 Agent 不在列表中，编辑页保留 **「Current bind (not in enrolled list)」** 选项。见 **`policy_form.html`**、**`ui.py`**。
 - **破坏性（Register / 多租户）**：新部署必须先 **`PUT .../enrollment`** 再 **`Register`**；否则 **`FAILED_PRECONDITION`**。已签发的 Redis 会话在 **吊销** 或 **删除/替换登记** 后失效（见运维 Runbook）。**`EdgeAgentOut`** 增加 **`allowed_tenant_ids`**（无登记时为 `null`）。
 - **破坏性（Register）**：**`Register`** 不再返回共享 **`DEVAULT_API_TOKEN`**；成功时在 **Redis** 签发 **按 `agent_id` 绑定** 的 Bearer（需 Redis）。运维排障仍可使用 **`DEVAULT_API_TOKEN`** / API Key 调用 Agent gRPC。

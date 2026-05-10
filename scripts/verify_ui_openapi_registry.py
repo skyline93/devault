@@ -20,6 +20,11 @@ CHECKS: list[tuple[str, Path, tuple[str, ...]]] = [
         TPL / "policies.html",
         ("bound_agent_id", "bound_agent_pool_id", "updated_at", "auth_ctx.can_write()"),
     ),
+    (
+        "policy_form.html",
+        TPL / "policy_form.html",
+        ("paths_from_allowlist", "paths_extra_multiline", "selected_allowlist_paths"),
+    ),
 ]
 
 

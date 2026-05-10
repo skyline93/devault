@@ -79,6 +79,65 @@ def _lines(text: str | None) -> list[str]:
     return [ln.strip() for ln in (text or "").splitlines() if ln.strip()]
 
 
+def _path_norm_key(path: str) -> str:
+    s = path.strip()
+    return s.rstrip("/") or "/"
+
+
+def _merge_policy_paths_from_allowlist_form(
+    *,
+    allowlist_union: list[str],
+    paths_from_allowlist: list[str] | None,
+    paths_extra_multiline: str,
+) -> list[str]:
+    """Allowlist checkboxes (validated against union) in union order, then extra lines; dedupe by normalized path."""
+    submitted = {str(x).strip() for x in (paths_from_allowlist or [])}
+    merged: list[str] = []
+    seen: set[str] = set()
+    for u in allowlist_union:
+        uu = str(u).strip()
+        if uu in submitted:
+            k = _path_norm_key(uu)
+            if k not in seen:
+                seen.add(k)
+                merged.append(uu)
+    for line in _lines(paths_extra_multiline):
+        k = _path_norm_key(line)
+        if k not in seen:
+            seen.add(k)
+            merged.append(line)
+    return merged
+
+
+def _split_policy_paths_for_allowlist_form(
+    policy_paths: list[str],
+    allowlist_union: list[str],
+) -> tuple[list[str], str]:
+    """Paths that exactly match a union root -> checkboxes; everything else -> extra textarea."""
+    selected: list[str] = []
+    extras: list[str] = []
+    seen_sel: set[str] = set()
+    for raw in policy_paths or []:
+        line = raw.strip()
+        if not line:
+            continue
+        line_key = _path_norm_key(line)
+        matched: str | None = None
+        for u in allowlist_union:
+            uu = str(u).strip()
+            if _path_norm_key(uu) == line_key:
+                matched = uu
+                break
+        if matched is not None:
+            mk = _path_norm_key(matched)
+            if mk not in seen_sel:
+                seen_sel.add(mk)
+                selected.append(matched)
+        else:
+            extras.append(line)
+    return selected, "\n".join(extras)
+
+
 def _optional_int(raw: str) -> int | None:
     s = (raw or "").strip()
     if not s:
@@ -570,6 +629,7 @@ def ui_policies_new(
     auth: AuthContext = Depends(verify_ui_basic_auth),
 ) -> HTMLResponse:
     binding_agents = tenant_scoped_agents_for_tenant(db, tenant.id)
+    union_al = union_backup_path_allowlist_for_tenant(db, tenant.id)
     return _tpl(
         request,
         "policy_form.html",
@@ -580,7 +640,9 @@ def ui_policies_new(
         agent_pools=_agent_pools_for_tenant(db, tenant.id),
         binding_agents=binding_agents,
         orphan_bound_agent_id=None,
-        allowlist_union=union_backup_path_allowlist_for_tenant(db, tenant.id),
+        allowlist_union=union_al,
+        selected_allowlist_paths=[],
+        paths_extra_multiline="",
         flash=None,
         error=None,
         heading="New policy",
@@ -590,7 +652,8 @@ def ui_policies_new(
 @router.post("/policies/new", dependencies=_ui_dep)
 def ui_policies_create(
     name: str = Form(...),
-    paths_multiline: str = Form(...),
+    paths_from_allowlist: list[str] = Form(default_factory=list),
+    paths_extra_multiline: str = Form(""),
     excludes_multiline: str = Form(""),
     encrypt_artifacts: str = Form("no"),
     kms_envelope_key_id: str = Form(""),
@@ -606,8 +669,19 @@ def ui_policies_create(
     _w: AuthContext = Depends(require_write_ui),
 ) -> RedirectResponse:
     try:
+        union_al = union_backup_path_allowlist_for_tenant(db, tenant.id)
+        merged_paths = _merge_policy_paths_from_allowlist_form(
+            allowlist_union=union_al,
+            paths_from_allowlist=paths_from_allowlist,
+            paths_extra_multiline=paths_extra_multiline,
+        )
+        if not merged_paths:
+            return _redirect(
+                "/ui/policies/new",
+                error="Choose at least one path: tick an Agent allowlist root and/or add absolute paths under Additional paths.",
+            )
         cfg = _file_backup_config_v1(
-            paths_multiline=paths_multiline,
+            paths_multiline="\n".join(merged_paths),
             excludes_multiline=excludes_multiline,
             encrypt_artifacts=encrypt_artifacts,
             retention_days_raw=retention_days,
@@ -661,6 +735,12 @@ def ui_policies_edit(
     binding_agents = tenant_scoped_agents_for_tenant(db, tenant.id)
     bound_ids = {a.id for a in binding_agents}
     orphan_bound = p.bound_agent_id if p.bound_agent_id and p.bound_agent_id not in bound_ids else None
+    union_al = union_backup_path_allowlist_for_tenant(db, tenant.id)
+    raw_paths = (p.config or {}).get("paths", []) if isinstance(p.config, dict) else []
+    sel_al, extra_ml = _split_policy_paths_for_allowlist_form(
+        [str(x) for x in raw_paths] if raw_paths else [],
+        union_al,
+    )
     return _tpl(
         request,
         "policy_form.html",
@@ -671,7 +751,9 @@ def ui_policies_edit(
         agent_pools=_agent_pools_for_tenant(db, tenant.id),
         binding_agents=binding_agents,
         orphan_bound_agent_id=orphan_bound,
-        allowlist_union=union_backup_path_allowlist_for_tenant(db, tenant.id),
+        allowlist_union=union_al,
+        selected_allowlist_paths=sel_al,
+        paths_extra_multiline=extra_ml,
         flash=None,
         error=None,
         heading=f"Edit policy — {p.name}",
@@ -682,7 +764,8 @@ def ui_policies_edit(
 def ui_policies_update(
     policy_id: uuid.UUID,
     name: str = Form(...),
-    paths_multiline: str = Form(...),
+    paths_from_allowlist: list[str] = Form(default_factory=list),
+    paths_extra_multiline: str = Form(""),
     excludes_multiline: str = Form(""),
     encrypt_artifacts: str = Form("no"),
     kms_envelope_key_id: str = Form(""),
@@ -698,8 +781,19 @@ def ui_policies_update(
     _w: AuthContext = Depends(require_write_ui),
 ) -> RedirectResponse:
     try:
+        union_al = union_backup_path_allowlist_for_tenant(db, tenant.id)
+        merged_paths = _merge_policy_paths_from_allowlist_form(
+            allowlist_union=union_al,
+            paths_from_allowlist=paths_from_allowlist,
+            paths_extra_multiline=paths_extra_multiline,
+        )
+        if not merged_paths:
+            return _redirect(
+                f"/ui/policies/{policy_id}/edit",
+                error="Choose at least one path: tick an Agent allowlist root and/or add absolute paths under Additional paths.",
+            )
         cfg = _file_backup_config_v1(
-            paths_multiline=paths_multiline,
+            paths_multiline="\n".join(merged_paths),
             excludes_multiline=excludes_multiline,
             encrypt_artifacts=encrypt_artifacts,
             retention_days_raw=retention_days,
