@@ -1,6 +1,6 @@
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { PageContainer, ProTable } from '@ant-design/pro-components';
-import { history, Link, request, useAccess, useLocation } from '@umijs/max';
+import { history, Link, request, useAccess, useIntl, useLocation } from '@umijs/max';
 import {
   App,
   Button,
@@ -38,6 +38,7 @@ function parseConfig(raw: Record<string, unknown> | undefined) {
 }
 
 const PolicyEditPage: React.FC = () => {
+  const { formatMessage } = useIntl();
   const { message } = App.useApp();
   const access = useAccess();
   const { pathname } = useLocation();
@@ -110,41 +111,60 @@ const PolicyEditPage: React.FC = () => {
     return schedules.filter((s) => s.policy_id === policyId);
   }, [schedules, policyId]);
 
-  const schColumns: ProColumns<API.ScheduleOut>[] = [
-    { title: 'Cron', dataIndex: 'cron_expression', copyable: true },
-    { title: '时区', dataIndex: 'timezone', width: 140 },
-    { title: '启用', dataIndex: 'enabled', width: 72, render: (_, r) => (r.enabled ? '是' : '否') },
-    {
-      title: '操作',
-      valueType: 'option',
-      width: 160,
-      render: (_, row) => (
-        <Space>
-          <Link to="/compliance/schedules">计划管理</Link>
-          {access.canWrite ? (
-            <Button
-              type="link"
-              size="small"
-              danger
-              onClick={() => {
-                Modal.confirm({
-                  title: '删除该计划？',
-                  onOk: async () => {
-                    await request(`/api/v1/schedules/${row.id}`, { method: 'DELETE' });
-                    message.success('已删除');
-                    await loadAux();
-                    scheduleRef.current?.reload();
-                  },
-                });
-              }}
-            >
-              删除
-            </Button>
-          ) : null}
-        </Space>
-      ),
-    },
-  ];
+  const schColumns: ProColumns<API.ScheduleOut>[] = useMemo(
+    () => [
+      {
+        title: formatMessage({ id: 'page.schedules.colCron' }),
+        dataIndex: 'cron_expression',
+        copyable: true,
+      },
+      {
+        title: formatMessage({ id: 'page.schedules.colTimezone' }),
+        dataIndex: 'timezone',
+        width: 140,
+      },
+      {
+        title: formatMessage({ id: 'page.schedules.colEnabled' }),
+        dataIndex: 'enabled',
+        width: 72,
+        render: (_, r) =>
+          r.enabled
+            ? formatMessage({ id: 'page.schedules.yes' })
+            : formatMessage({ id: 'page.schedules.no' }),
+      },
+      {
+        title: formatMessage({ id: 'page.schedules.colActions' }),
+        valueType: 'option',
+        width: 200,
+        render: (_, row) => (
+          <Space>
+            <Link to="/compliance/schedules">{formatMessage({ id: 'page.policyEdit.plansLink' })}</Link>
+            {access.canWrite ? (
+              <Button
+                type="link"
+                size="small"
+                danger
+                onClick={() => {
+                  Modal.confirm({
+                    title: formatMessage({ id: 'page.policyEdit.deleteScheduleTitle' }),
+                    onOk: async () => {
+                      await request(`/api/v1/schedules/${row.id}`, { method: 'DELETE' });
+                      message.success(formatMessage({ id: 'page.policyEdit.scheduleDeleted' }));
+                      await loadAux();
+                      scheduleRef.current?.reload();
+                    },
+                  });
+                }}
+              >
+                {formatMessage({ id: 'page.schedules.delete' })}
+              </Button>
+            ) : null}
+          </Space>
+        ),
+      },
+    ],
+    [access.canWrite, formatMessage, loadAux, message],
+  );
 
   const buildConfigPayload = () => {
     const v = form.getFieldsValue();
@@ -205,7 +225,7 @@ const PolicyEditPage: React.FC = () => {
           ...bind,
         },
       });
-      message.success('已创建');
+      message.success(formatMessage({ id: 'page.policyEdit.policyCreated' }));
       history.push('/backup/policies');
       return;
     }
@@ -218,13 +238,13 @@ const PolicyEditPage: React.FC = () => {
         ...bind,
       },
     });
-    message.success('已保存');
+    message.success(formatMessage({ id: 'page.policyEdit.policySaved' }));
     history.push('/backup/policies');
   };
 
   return (
     <PageContainer
-      title={isNew ? '新建策略' : '编辑策略'}
+      title={isNew ? formatMessage({ id: 'page.policyEdit.newTitle' }) : formatMessage({ id: 'page.policyEdit.editTitle' })}
       loading={loading}
       onBack={() => history.push('/backup/policies')}
     >
@@ -234,13 +254,22 @@ const PolicyEditPage: React.FC = () => {
             items={[
               {
                 key: 'basic',
-                label: '基本',
+                label: formatMessage({ id: 'page.policyEdit.tabBasic' }),
                 children: (
                   <Space direction="vertical" style={{ width: '100%' }} size="middle">
-                    <Form.Item name="name" label="名称" rules={[{ required: true, message: '请输入名称' }]}>
+                    <Form.Item
+                      name="name"
+                      label={formatMessage({ id: 'page.policyEdit.name' })}
+                      rules={[{ required: true, message: formatMessage({ id: 'page.policyEdit.nameRequired' }) }]}
+                    >
                       <Input maxLength={255} />
                     </Form.Item>
-                    <Form.Item name="enabled" label="启用" valuePropName="checked" initialValue>
+                    <Form.Item
+                      name="enabled"
+                      label={formatMessage({ id: 'page.policyEdit.enabled' })}
+                      valuePropName="checked"
+                      initialValue
+                    >
                       <Switch />
                     </Form.Item>
                   </Space>
@@ -248,47 +277,85 @@ const PolicyEditPage: React.FC = () => {
               },
               {
                 key: 'file',
-                label: '文件备份配置 (FileBackupConfigV1)',
+                label: formatMessage({ id: 'page.policyEdit.tabConfig' }),
                 children: (
                   <Space direction="vertical" style={{ width: '100%' }} size="middle">
                     <Form.Item
                       name="pathsText"
-                      label="paths（每行一个绝对路径）"
-                      rules={[{ required: true, message: '至少一行路径' }]}
+                      label={formatMessage({ id: 'page.policyEdit.pathsLabel' })}
+                      rules={[{ required: true, message: formatMessage({ id: 'page.policyEdit.pathsRequired' }) }]}
                     >
-                      <Input.TextArea rows={6} placeholder="/data/app&#10;/var/log" />
+                      <Input.TextArea
+                        rows={6}
+                        placeholder={formatMessage({ id: 'page.policyEdit.pathsPlaceholder' })}
+                      />
                     </Form.Item>
-                    <Form.Item name="excludesText" label="excludes（gitwildmatch，每行一条）">
-                      <Input.TextArea rows={4} placeholder="**/.git/**" />
+                    <Form.Item
+                      name="excludesText"
+                      label={formatMessage({ id: 'page.policyEdit.excludesLabel' })}
+                    >
+                      <Input.TextArea
+                        rows={4}
+                        placeholder={formatMessage({ id: 'page.policyEdit.excludesPlaceholder' })}
+                      />
                     </Form.Item>
-                    <Form.Item name="follow_symlinks" label="follow_symlinks" valuePropName="checked">
+                    <Form.Item
+                      name="follow_symlinks"
+                      label={formatMessage({ id: 'page.policyEdit.followSymlinks' })}
+                      valuePropName="checked"
+                    >
                       <Switch />
                     </Form.Item>
-                    <Form.Item name="preserve_uid_gid" label="preserve_uid_gid" valuePropName="checked">
+                    <Form.Item
+                      name="preserve_uid_gid"
+                      label={formatMessage({ id: 'page.policyEdit.preserveUidGid' })}
+                      valuePropName="checked"
+                    >
                       <Switch defaultChecked />
                     </Form.Item>
-                    <Form.Item name="one_filesystem" label="one_filesystem" valuePropName="checked">
+                    <Form.Item
+                      name="one_filesystem"
+                      label={formatMessage({ id: 'page.policyEdit.oneFilesystem' })}
+                      valuePropName="checked"
+                    >
                       <Switch />
                     </Form.Item>
-                    <Form.Item name="encrypt_artifacts" label="encrypt_artifacts" valuePropName="checked">
+                    <Form.Item
+                      name="encrypt_artifacts"
+                      label={formatMessage({ id: 'page.policyEdit.encryptArtifacts' })}
+                      valuePropName="checked"
+                    >
                       <Switch />
                     </Form.Item>
-                    <Form.Item name="kms_envelope_key_id" label="kms_envelope_key_id（可选）">
-                      <Input placeholder="CMK id 或 ARN" />
+                    <Form.Item name="kms_envelope_key_id" label={formatMessage({ id: 'page.policyEdit.kmsLabel' })}>
+                      <Input placeholder={formatMessage({ id: 'page.policyEdit.kmsPh' })} />
                     </Form.Item>
-                    <Form.Item name="object_lock_mode" label="object_lock_mode">
+                    <Form.Item name="object_lock_mode" label={formatMessage({ id: 'page.policyEdit.retentionMode' })}>
                       <Select
                         allowClear
                         options={[
-                          { value: 'GOVERNANCE', label: 'GOVERNANCE' },
-                          { value: 'COMPLIANCE', label: 'COMPLIANCE' },
+                          {
+                            value: 'GOVERNANCE',
+                            label: formatMessage({ id: 'page.policyEdit.objectLockGovernance' }),
+                          },
+                          {
+                            value: 'COMPLIANCE',
+                            label: formatMessage({ id: 'page.policyEdit.objectLockCompliance' }),
+                          },
                         ]}
                       />
                     </Form.Item>
-                    <Form.Item name="object_lock_retain_days" label="object_lock_retain_days">
-                      <InputNumber min={1} style={{ width: '100%' }} placeholder="与 mode 成对填写" />
+                    <Form.Item
+                      name="object_lock_retain_days"
+                      label={formatMessage({ id: 'page.policyEdit.objectLockRetainDays' })}
+                    >
+                      <InputNumber
+                        min={1}
+                        style={{ width: '100%' }}
+                        placeholder={formatMessage({ id: 'page.policyEdit.objectLockRetainPlaceholder' })}
+                      />
                     </Form.Item>
-                    <Form.Item name="retention_days" label="retention_days（可选）">
+                    <Form.Item name="retention_days" label={formatMessage({ id: 'page.policyEdit.backupRetentionDays' })}>
                       <InputNumber min={1} style={{ width: '100%' }} />
                     </Form.Item>
                   </Space>
@@ -296,7 +363,7 @@ const PolicyEditPage: React.FC = () => {
               },
               {
                 key: 'bind',
-                label: '执行绑定',
+                label: formatMessage({ id: 'page.policyEdit.tabBinding' }),
                 children: (
                   <Space direction="vertical" style={{ width: '100%' }} size="middle">
                     <Radio.Group
@@ -308,12 +375,16 @@ const PolicyEditPage: React.FC = () => {
                         }
                       }}
                     >
-                      <Radio.Button value="none">不绑定</Radio.Button>
-                      <Radio.Button value="agent">指定 Agent</Radio.Button>
-                      <Radio.Button value="pool">指定池</Radio.Button>
+                      <Radio.Button value="none">{formatMessage({ id: 'page.policyEdit.bindNone' })}</Radio.Button>
+                      <Radio.Button value="agent">{formatMessage({ id: 'page.policyEdit.bindAgent' })}</Radio.Button>
+                      <Radio.Button value="pool">{formatMessage({ id: 'page.policyEdit.bindPool' })}</Radio.Button>
                     </Radio.Group>
                     {bindingMode === 'agent' ? (
-                      <Form.Item name="bound_agent_id" label="Agent" rules={[{ required: true }]}>
+                      <Form.Item
+                        name="bound_agent_id"
+                        label={formatMessage({ id: 'page.policyEdit.agentLabel' })}
+                        rules={[{ required: true }]}
+                      >
                         <Select
                           showSearch
                           optionFilterProp="label"
@@ -325,7 +396,11 @@ const PolicyEditPage: React.FC = () => {
                       </Form.Item>
                     ) : null}
                     {bindingMode === 'pool' ? (
-                      <Form.Item name="bound_agent_pool_id" label="Agent 池" rules={[{ required: true }]}>
+                      <Form.Item
+                        name="bound_agent_pool_id"
+                        label={formatMessage({ id: 'page.policyEdit.poolLabel' })}
+                        rules={[{ required: true }]}
+                      >
                         <Select
                           showSearch
                           optionFilterProp="label"
@@ -337,9 +412,9 @@ const PolicyEditPage: React.FC = () => {
                       </Form.Item>
                     ) : null}
                     <Space>
-                      <Link to="/execution/tenant-agents">租户内 Agents</Link>
+                      <Link to="/execution/tenant-agents">{formatMessage({ id: 'page.policyEdit.agentsLink' })}</Link>
                       <span>|</span>
-                      <Link to="/execution/agent-pools">Agent 池</Link>
+                      <Link to="/execution/agent-pools">{formatMessage({ id: 'page.policyEdit.poolsLink' })}</Link>
                     </Space>
                   </Space>
                 ),
@@ -348,17 +423,17 @@ const PolicyEditPage: React.FC = () => {
           />
           {access.canWrite ? (
             <Button type="primary" onClick={() => void onSave()} style={{ marginTop: 16 }}>
-              保存
+              {formatMessage({ id: 'page.policyEdit.save' })}
             </Button>
           ) : null}
         </Form>
       </Card>
 
       {!isNew && policyId ? (
-        <Card title="关联备份计划（本策略）" style={{ marginTop: 16 }}>
+        <Card title={formatMessage({ id: 'page.policyEdit.schedulesCard' })} style={{ marginTop: 16 }}>
           {access.canWrite ? (
             <Button type="primary" onClick={() => setSchOpen(true)} style={{ marginBottom: 12 }}>
-              新建计划
+              {formatMessage({ id: 'page.policyEdit.newSchedule' })}
             </Button>
           ) : null}
           <ProTable<API.ScheduleOut>
@@ -374,7 +449,7 @@ const PolicyEditPage: React.FC = () => {
       ) : null}
 
       <Modal
-        title="新建备份计划"
+        title={formatMessage({ id: 'page.policyEdit.scheduleModalNew' })}
         open={schOpen}
         onCancel={() => setSchOpen(false)}
         onOk={async () => {
@@ -388,7 +463,7 @@ const PolicyEditPage: React.FC = () => {
               enabled: v.enabled !== false,
             },
           });
-          message.success('已创建计划');
+          message.success(formatMessage({ id: 'page.policyEdit.scheduleCreated' }));
           schForm.resetFields();
           setSchOpen(false);
           await loadAux();
@@ -397,13 +472,22 @@ const PolicyEditPage: React.FC = () => {
         destroyOnClose
       >
         <Form form={schForm} layout="vertical">
-          <Form.Item name="cron_expression" label="Cron（五段）" rules={[{ required: true }]}>
+          <Form.Item
+            name="cron_expression"
+            label={formatMessage({ id: 'page.policyEdit.cron' })}
+            rules={[{ required: true }]}
+          >
             <Input placeholder="0 2 * * *" />
           </Form.Item>
-          <Form.Item name="timezone" label="时区" initialValue="UTC">
+          <Form.Item name="timezone" label={formatMessage({ id: 'page.policyEdit.timezone' })} initialValue="UTC">
             <Input />
           </Form.Item>
-          <Form.Item name="enabled" label="启用" valuePropName="checked" initialValue>
+          <Form.Item
+            name="enabled"
+            label={formatMessage({ id: 'page.policyEdit.scheduleEnabled' })}
+            valuePropName="checked"
+            initialValue
+          >
             <Switch />
           </Form.Item>
         </Form>

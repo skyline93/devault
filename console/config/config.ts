@@ -1,5 +1,4 @@
 import { defineConfig } from '@umijs/max';
-import zhCN from 'antd/locale/zh_CN';
 
 import defaultSettings from './defaultSettings';
 
@@ -28,10 +27,14 @@ export default defineConfig({
     'process.env.UMI_APP_AUTH_DEBUG': JSON.stringify(umiAuthDebugInject),
   },
   title: 'DeVault',
+  locale: {
+    default: 'en-US',
+    antd: true,
+    baseNavigator: false,
+    useLocalStorage: true,
+    title: false,
+  },
   antd: {
-    configProvider: {
-      locale: zhCN,
-    },
     theme: {
       token: {
         colorPrimary: '#1677ff',
@@ -44,7 +47,7 @@ export default defineConfig({
   initialState: {},
   request: {},
   layout: {
-    locale: false,
+    locale: true,
     ...defaultSettings,
   },
   routes: [
@@ -61,24 +64,24 @@ export default defineConfig({
     { path: '/', redirect: '/overview/welcome' },
     {
       path: '/overview',
-      name: '概览',
+      name: 'overview',
       icon: 'DashboardOutlined',
       routes: [
         {
           path: '/overview/welcome',
-          name: '欢迎',
+          name: 'welcome',
           icon: 'SmileOutlined',
           component: './welcome/index',
         },
         {
           path: '/overview/workbench',
-          name: '工作台',
+          name: 'workbench',
           icon: 'HomeOutlined',
           component: './workbench/index',
         },
         {
           path: '/overview/team-invitations',
-          name: '成员邀请',
+          name: 'team-invitations',
           icon: 'TeamOutlined',
           component: './overview/team-invitations',
           access: 'canInviteMembers',
@@ -87,48 +90,48 @@ export default defineConfig({
     },
     {
       path: '/backup',
-      name: '备份与恢复',
+      name: 'backup',
       icon: 'CloudSyncOutlined',
       routes: [
         {
           path: '/backup/jobs',
-          name: '作业中心',
+          name: 'jobs',
           icon: 'UnorderedListOutlined',
           component: './backup/jobs',
         },
         {
           path: '/backup/policies',
-          name: '策略',
+          name: 'policies',
           icon: 'FileTextOutlined',
           component: './backup/policies',
         },
         {
           path: '/backup/policies/new',
-          name: '新建策略',
+          name: 'new-policy',
           component: './backup/policies/edit',
           hideInMenu: true,
         },
         {
           path: '/backup/policies/:policyId',
-          name: '编辑策略',
+          name: 'edit-policy',
           component: './backup/policies/edit',
           hideInMenu: true,
         },
         {
           path: '/backup/run',
-          name: '发起备份',
+          name: 'run',
           icon: 'PlayCircleOutlined',
           component: './backup/run',
         },
         {
           path: '/backup/precheck',
-          name: '路径预检',
+          name: 'precheck',
           icon: 'SearchOutlined',
           component: './backup/precheck',
         },
         {
           path: '/backup/artifacts',
-          name: '制品',
+          name: 'artifacts',
           icon: 'DatabaseOutlined',
           component: './backup/artifacts',
         },
@@ -136,36 +139,36 @@ export default defineConfig({
     },
     {
       path: '/execution',
-      name: '执行面',
+      name: 'execution',
       icon: 'ClusterOutlined',
       routes: [
         {
           path: '/execution/tenant-agents',
-          name: '租户内 Agents',
+          name: 'tenant-agents',
           icon: 'TeamOutlined',
           component: './execution/tenant-agents',
         },
         {
           path: '/execution/agent-pools',
-          name: 'Agent 池',
+          name: 'agent-pools',
           icon: 'ApartmentOutlined',
           component: './execution/agent-pools',
         },
         {
           path: '/execution/agent-pools/:poolId',
-          name: '池详情',
+          name: 'agent-pool-detail',
           component: './execution/agent-pools/detail',
           hideInMenu: true,
         },
         {
           path: '/execution/fleet',
-          name: '全舰队',
+          name: 'fleet',
           icon: 'CloudServerOutlined',
           component: './execution/fleet',
         },
         {
           path: '/execution/fleet/:agentId',
-          name: 'Agent 详情',
+          name: 'fleet-agent-detail',
           component: './execution/fleet/detail',
           hideInMenu: true,
         },
@@ -173,18 +176,18 @@ export default defineConfig({
     },
     {
       path: '/compliance',
-      name: '合规与演练',
+      name: 'compliance',
       icon: 'SafetyOutlined',
       routes: [
         {
           path: '/compliance/schedules',
-          name: '备份计划',
+          name: 'schedules',
           icon: 'ScheduleOutlined',
           component: './compliance/schedules',
         },
         {
           path: '/compliance/restore-drill-schedules',
-          name: '恢复演练计划',
+          name: 'restore-drill-schedules',
           icon: 'ExperimentOutlined',
           component: './compliance/restore-drill-schedules',
         },
@@ -192,13 +195,13 @@ export default defineConfig({
     },
     {
       path: '/platform',
-      name: '平台管理',
+      name: 'platform',
       icon: 'SettingOutlined',
       access: 'canAdmin',
       routes: [
         {
           path: '/platform/tenants',
-          name: '租户',
+          name: 'tenants',
           icon: 'BankOutlined',
           component: './platform/tenants',
         },

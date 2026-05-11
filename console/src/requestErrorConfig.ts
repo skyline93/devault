@@ -1,4 +1,5 @@
 import type { RequestConfig } from '@umijs/max';
+import { getIntl } from '@umijs/max';
 import { message } from 'antd';
 
 import { LOGIN_PATH } from '@/constants/auth-routes';
@@ -22,7 +23,22 @@ export function detailFromError(error: unknown): string {
       )
       .join('; ');
   }
-  return (error as Error)?.message || '请求失败';
+  const raw = (error as Error)?.message;
+  if (raw) return raw;
+  try {
+    return getIntl().formatMessage({ id: 'error.requestFailed' });
+  } catch {
+    return 'Request failed';
+  }
+}
+
+function formatErrorMessage(id: string, defaultMessage: string): string {
+  if (typeof window === 'undefined') return defaultMessage;
+  try {
+    return getIntl().formatMessage({ id, defaultMessage });
+  } catch {
+    return defaultMessage;
+  }
 }
 
 export const errorConfig: RequestConfig = {
@@ -49,7 +65,7 @@ export const errorConfig: RequestConfig = {
         return;
       }
       if (status === 403) {
-        message.error(detailFromError(error) || '权限不足');
+        message.error(detailFromError(error) || formatErrorMessage('error.forbidden', 'Forbidden'));
         return;
       }
       message.error(detailFromError(error));

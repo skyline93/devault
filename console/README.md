@@ -4,6 +4,8 @@
 
 **布局**：以 [Ant Design Pro 官方仓库](https://github.com/ant-design/ant-design-pro) 的 **`defaultSettings` + `RunTimeLayoutConfig`** 为蓝本（`mix` 顶栏 + 侧栏、**`menuItemRender` + `Link`**、**`RightContent` / `AvatarDropdown` / `DefaultFooter`**）；**精简**（无 `bgLayoutImgList`、无 `SettingDrawer`、无外链 logo）。业务逻辑（会话、租户、帮助、工作台）挂在官方推荐的顶栏右侧组合上。
 
+**国际化（需求与验收）**：默认英文、界面内切换简体中文、不跟随系统语言、可扩展更多语言；优先 **Ant Design / Umi Max** 惯用方案，用户向文案须正式且不得暴露内部设计术语。详见 [`docs/web-console-i18n.md`](../docs/web-console-i18n.md)。
+
 ## 先决条件
 
 - **Node.js ≥ 20**（推荐 22，与 CI 一致）。

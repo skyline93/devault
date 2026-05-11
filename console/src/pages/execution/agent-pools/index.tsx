@@ -1,37 +1,39 @@
 import { PlusOutlined } from '@ant-design/icons';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { PageContainer, ProTable } from '@ant-design/pro-components';
-import { history, Link, request, useAccess } from '@umijs/max';
+import { history, Link, request, useAccess, useIntl } from '@umijs/max';
 import { App, Button, Form, Input, Modal } from 'antd';
-import React, { useRef, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 
 const AgentPoolsPage: React.FC = () => {
+  const { formatMessage } = useIntl();
   const { message } = App.useApp();
   const access = useAccess();
   const actionRef = useRef<ActionType>();
   const [open, setOpen] = useState(false);
   const [form] = Form.useForm();
 
-  const columns: ProColumns<API.AgentPoolOut>[] = [
-    {
-      title: '名称',
-      dataIndex: 'name',
-      render: (_, r) => <Link to={`/execution/agent-pools/${r.id}`}>{r.name}</Link>,
-    },
-    { title: '创建时间', dataIndex: 'created_at', valueType: 'dateTime', width: 170 },
-    {
-      title: '操作',
-      valueType: 'option',
-      width: 120,
-      render: (_, row) => (
-        <Link to={`/execution/agent-pools/${row.id}`}>成员与详情</Link>
-      ),
-    },
-  ];
+  const columns: ProColumns<API.AgentPoolOut>[] = useMemo(
+    () => [
+      {
+        title: formatMessage({ id: 'page.agentPools.colName' }),
+        dataIndex: 'name',
+        render: (_, r) => <Link to={`/execution/agent-pools/${r.id}`}>{r.name}</Link>,
+      },
+      { title: formatMessage({ id: 'page.agentPools.colCreated' }), dataIndex: 'created_at', valueType: 'dateTime', width: 170 },
+      {
+        title: formatMessage({ id: 'page.agentPools.colActions' }),
+        valueType: 'option',
+        width: 160,
+        render: (_, row) => <Link to={`/execution/agent-pools/${row.id}`}>{formatMessage({ id: 'page.agentPools.detailLink' })}</Link>,
+      },
+    ],
+    [formatMessage],
+  );
 
   return (
     <PageContainer
-      title="Agent 池"
+      title={formatMessage({ id: 'page.agentPools.title' })}
       extra={
         access.canWrite ? (
           <Button
@@ -42,7 +44,7 @@ const AgentPoolsPage: React.FC = () => {
               setOpen(true);
             }}
           >
-            新建池
+            {formatMessage({ id: 'page.agentPools.new' })}
           </Button>
         ) : undefined
       }
@@ -60,7 +62,7 @@ const AgentPoolsPage: React.FC = () => {
       />
 
       <Modal
-        title="新建 Agent 池"
+        title={formatMessage({ id: 'page.agentPools.modalTitle' })}
         open={open}
         onCancel={() => setOpen(false)}
         onOk={async () => {
@@ -69,7 +71,7 @@ const AgentPoolsPage: React.FC = () => {
             method: 'POST',
             data: { name: v.name },
           });
-          message.success('已创建');
+          message.success(formatMessage({ id: 'page.agentPools.created' }));
           setOpen(false);
           actionRef.current?.reload();
           history.push(`/execution/agent-pools/${created.id}`);
@@ -77,7 +79,7 @@ const AgentPoolsPage: React.FC = () => {
         destroyOnClose
       >
         <Form form={form} layout="vertical">
-          <Form.Item name="name" label="名称" rules={[{ required: true }]}>
+          <Form.Item name="name" label={formatMessage({ id: 'page.agentPools.name' })} rules={[{ required: true }]}>
             <Input maxLength={255} />
           </Form.Item>
         </Form>

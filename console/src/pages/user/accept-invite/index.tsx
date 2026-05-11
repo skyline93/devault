@@ -1,11 +1,11 @@
 import { LockOutlined } from '@ant-design/icons';
 import { LoginForm, ProFormText } from '@ant-design/pro-components';
-import { history, Link, request, useModel } from '@umijs/max';
+import { history, Link, request, useIntl, useModel } from '@umijs/max';
 import { Alert, Card, theme, Typography } from 'antd';
 import React, { useMemo, useState } from 'react';
 
-/** §十六-11：接受租户邀请（邮件内 token），必要时设置密码并建立会话。 */
 const AcceptInvitePage: React.FC = () => {
+  const { formatMessage } = useIntl();
   const { token } = theme.useToken();
   const { setInitialState } = useModel('@@initialState');
   const [err, setErr] = useState<string | null>(null);
@@ -24,20 +24,20 @@ const AcceptInvitePage: React.FC = () => {
     >
       <Card style={{ width: 'min(440px, 100%)' }} bordered={false}>
         <div style={{ marginBottom: 16, textAlign: 'center' }}>
-          <h1 style={{ margin: 0, fontSize: 22 }}>接受租户邀请</h1>
+          <h1 style={{ margin: 0, fontSize: 22 }}>{formatMessage({ id: 'page.acceptInvite.title' })}</h1>
           <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
-            若尚无账号，请设置登录密码（≥12 位）。若已登录为被邀请邮箱，可留空密码。
+            {formatMessage({ id: 'page.acceptInvite.subtitle' })}
           </Typography.Paragraph>
         </div>
         {!urlToken ? (
-          <Alert type="warning" showIcon message="链接缺少 token 参数" />
+          <Alert type="warning" showIcon message={formatMessage({ id: 'page.acceptInvite.missingToken' })} />
         ) : null}
         {err ? <Alert type="error" showIcon message={err} style={{ marginBottom: 16 }} closable onClose={() => setErr(null)} /> : null}
         <LoginForm
-          submitter={{ searchConfig: { submitText: '接受并进入' } }}
+          submitter={{ searchConfig: { submitText: formatMessage({ id: 'page.acceptInvite.submit' }) } }}
           onFinish={async (values) => {
             if (!urlToken) {
-              setErr('无效的邀请链接');
+              setErr(formatMessage({ id: 'page.acceptInvite.invalid' }));
               return;
             }
             const pwd = (values as { password?: string }).password?.trim();
@@ -61,18 +61,18 @@ const AcceptInvitePage: React.FC = () => {
               history.push('/overview/welcome');
             } catch (e) {
               const d = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
-              setErr(typeof d === 'string' ? d : '无法接受邀请');
+              setErr(typeof d === 'string' ? d : formatMessage({ id: 'page.acceptInvite.failed' }));
             }
           }}
         >
           <ProFormText.Password
             name="password"
             fieldProps={{ size: 'large', prefix: <LockOutlined /> }}
-            placeholder="新密码（可选，已登录同邮箱可留空）"
+            placeholder={formatMessage({ id: 'page.acceptInvite.passwordPh' })}
           />
         </LoginForm>
         <Typography.Paragraph type="secondary" style={{ marginTop: 16, marginBottom: 0 }}>
-          <Link to="/user/login">返回登录</Link>
+          <Link to="/user/login">{formatMessage({ id: 'page.acceptInvite.backLogin' })}</Link>
         </Typography.Paragraph>
       </Card>
     </div>

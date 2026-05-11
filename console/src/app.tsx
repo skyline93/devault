@@ -2,11 +2,12 @@ import { LinkOutlined } from '@ant-design/icons';
 import type { MenuDataItem } from '@ant-design/pro-layout';
 import type { ProLayoutProps } from '@ant-design/pro-components';
 import type { RequestConfig, RunTimeLayoutConfig } from '@umijs/max';
-import { Link, request as maxRequest } from '@umijs/max';
+import { Link, request as maxRequest, useIntl } from '@umijs/max';
 import { App as AntdApp } from 'antd';
 import React from 'react';
 
 import { Footer, RightContent } from '@/components';
+import DocumentLang from '@/components/DocumentLang';
 import defaultSettings from '../config/defaultSettings';
 import { STORAGE_BEARER_KEY } from '@/constants/storage';
 import RequireSession from '@/wrappers/require-session';
@@ -38,6 +39,16 @@ let childrenRenderLogCount = 0;
 const LAYOUT_LOG_CAP = 25;
 
 void openapiAuthSessionContract;
+
+function DevOpenApiLink() {
+  const { formatMessage } = useIntl();
+  return (
+    <a key="openapi" href="/docs" target="_blank" rel="noreferrer">
+      <LinkOutlined />
+      <span style={{ marginLeft: 8 }}>{formatMessage({ id: 'component.openapiDev' })}</span>
+    </a>
+  );
+}
 
 /** Ant Design 5：`App.useApp()` 的 message/modal 等依赖此包裹，否则部分页成功提示不显示。 */
 export function rootContainer(container: React.ReactNode) {
@@ -144,7 +155,13 @@ export const layout: RunTimeLayoutConfig = (initData) => {
           outerPropKeys: keys.slice(0, 24),
         });
       }
-      return <RequireSession>{children}</RequireSession>;
+      // DocumentLang 依赖 useIntl：须挂在 layout 子树内（IntlProvider 在 rootContainer 的 container 一侧），勿放回 rootContainer 与 container 并列。
+      return (
+        <>
+          <DocumentLang />
+          <RequireSession>{children}</RequireSession>
+        </>
+      );
     },
     menuDataRender: (menuData) => {
       if (isLayoutDebugEnabled() && menuDataRenderLogCount < LAYOUT_LOG_CAP) {
@@ -180,14 +197,7 @@ export const layout: RunTimeLayoutConfig = (initData) => {
     },
     actionsRender: () => [<RightContent key="right-content" />],
     footerRender: () => <Footer />,
-    links: isDev
-      ? [
-          <a key="openapi" href="/docs" target="_blank" rel="noreferrer">
-            <LinkOutlined />
-            <span style={{ marginLeft: 8 }}>OpenAPI</span>
-          </a>,
-        ]
-      : [],
+    links: isDev ? [<DevOpenApiLink key="openapi" />] : [],
     /** 精简：不使用官方模板中的 `bgLayoutImgList` 与 `SettingDrawer`。 */
     ...settingsForUmiLayout(initialState?.settings),
   };

@@ -1,11 +1,12 @@
 import { PlusOutlined } from '@ant-design/icons';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { PageContainer, ProTable } from '@ant-design/pro-components';
-import { request, useAccess } from '@umijs/max';
+import { request, useAccess, useIntl } from '@umijs/max';
 import { App, Button, Form, Input, Modal, Select, Space, Switch } from 'antd';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 const RestoreDrillSchedulesPage: React.FC = () => {
+  const { formatMessage } = useIntl();
   const { message } = App.useApp();
   const access = useAccess();
   const actionRef = useRef<ActionType>();
@@ -23,64 +24,73 @@ const RestoreDrillSchedulesPage: React.FC = () => {
     void loadArtifacts();
   }, []);
 
-  const columns: ProColumns<API.RestoreDrillScheduleOut>[] = [
-    { title: '制品', dataIndex: 'artifact_id', ellipsis: true, copyable: true },
-    { title: 'Cron', dataIndex: 'cron_expression', copyable: true },
-    { title: '时区', dataIndex: 'timezone', width: 120 },
-    { title: '演练根路径', dataIndex: 'drill_base_path', ellipsis: true },
-    { title: '启用', dataIndex: 'enabled', width: 72, render: (_, r) => (r.enabled ? '是' : '否') },
-    {
-      title: '操作',
-      valueType: 'option',
-      width: 160,
-      render: (_, row) => (
-        <Space>
-          {access.canWrite ? (
-            <>
-              <Button
-                type="link"
-                size="small"
-                onClick={() => {
-                  setEditRow(row);
-                  form.setFieldsValue({
-                    cron_expression: row.cron_expression,
-                    timezone: row.timezone,
-                    enabled: row.enabled,
-                    drill_base_path: row.drill_base_path,
-                    artifact_id: row.artifact_id,
-                  });
-                  setOpen(true);
-                }}
-              >
-                编辑
-              </Button>
-              <Button
-                type="link"
-                size="small"
-                danger
-                onClick={() => {
-                  Modal.confirm({
-                    title: '删除该演练计划？',
-                    onOk: async () => {
-                      await request(`/api/v1/restore-drill-schedules/${row.id}`, { method: 'DELETE' });
-                      message.success('已删除');
-                      actionRef.current?.reload();
-                    },
-                  });
-                }}
-              >
-                删除
-              </Button>
-            </>
-          ) : null}
-        </Space>
-      ),
-    },
-  ];
+  const columns: ProColumns<API.RestoreDrillScheduleOut>[] = useMemo(
+    () => [
+      { title: formatMessage({ id: 'page.drillSchedules.colArtifact' }), dataIndex: 'artifact_id', ellipsis: true, copyable: true },
+      { title: formatMessage({ id: 'page.drillSchedules.colCron' }), dataIndex: 'cron_expression', copyable: true },
+      { title: formatMessage({ id: 'page.drillSchedules.colTimezone' }), dataIndex: 'timezone', width: 120 },
+      { title: formatMessage({ id: 'page.drillSchedules.colPath' }), dataIndex: 'drill_base_path', ellipsis: true },
+      {
+        title: formatMessage({ id: 'page.drillSchedules.colEnabled' }),
+        dataIndex: 'enabled',
+        width: 72,
+        render: (_, r) =>
+          r.enabled ? formatMessage({ id: 'page.drillSchedules.yes' }) : formatMessage({ id: 'page.drillSchedules.no' }),
+      },
+      {
+        title: formatMessage({ id: 'page.drillSchedules.colActions' }),
+        valueType: 'option',
+        width: 160,
+        render: (_, row) => (
+          <Space>
+            {access.canWrite ? (
+              <>
+                <Button
+                  type="link"
+                  size="small"
+                  onClick={() => {
+                    setEditRow(row);
+                    form.setFieldsValue({
+                      cron_expression: row.cron_expression,
+                      timezone: row.timezone,
+                      enabled: row.enabled,
+                      drill_base_path: row.drill_base_path,
+                      artifact_id: row.artifact_id,
+                    });
+                    setOpen(true);
+                  }}
+                >
+                  {formatMessage({ id: 'page.drillSchedules.edit' })}
+                </Button>
+                <Button
+                  type="link"
+                  size="small"
+                  danger
+                  onClick={() => {
+                    Modal.confirm({
+                      title: formatMessage({ id: 'page.drillSchedules.deleteTitle' }),
+                      onOk: async () => {
+                        await request(`/api/v1/restore-drill-schedules/${row.id}`, { method: 'DELETE' });
+                        message.success(formatMessage({ id: 'page.drillSchedules.deleted' }));
+                        actionRef.current?.reload();
+                      },
+                    });
+                  }}
+                >
+                  {formatMessage({ id: 'page.drillSchedules.delete' })}
+                </Button>
+              </>
+            ) : null}
+          </Space>
+        ),
+      },
+    ],
+    [access.canWrite, formatMessage, form, message],
+  );
 
   return (
     <PageContainer
-      title="恢复演练计划"
+      title={formatMessage({ id: 'page.drillSchedules.title' })}
       extra={
         access.canWrite ? (
           <Button
@@ -93,7 +103,7 @@ const RestoreDrillSchedulesPage: React.FC = () => {
               setOpen(true);
             }}
           >
-            新建
+            {formatMessage({ id: 'page.drillSchedules.new' })}
           </Button>
         ) : undefined
       }
@@ -111,10 +121,10 @@ const RestoreDrillSchedulesPage: React.FC = () => {
       />
 
       <Modal
-        title={editRow ? '编辑演练计划' : '新建演练计划'}
+        title={editRow ? formatMessage({ id: 'page.drillSchedules.modalEdit' }) : formatMessage({ id: 'page.drillSchedules.modalNew' })}
         open={open}
         onCancel={() => setOpen(false)}
-        okText="保存"
+        okText={formatMessage({ id: 'page.drillSchedules.okSave' })}
         onOk={async () => {
           const v = await form.validateFields();
           if (editRow) {
@@ -128,7 +138,7 @@ const RestoreDrillSchedulesPage: React.FC = () => {
                 artifact_id: v.artifact_id,
               },
             });
-            message.success('已更新');
+            message.success(formatMessage({ id: 'page.drillSchedules.saved' }));
           } else {
             await request('/api/v1/restore-drill-schedules', {
               method: 'POST',
@@ -140,7 +150,7 @@ const RestoreDrillSchedulesPage: React.FC = () => {
                 drill_base_path: v.drill_base_path,
               },
             });
-            message.success('已创建');
+            message.success(formatMessage({ id: 'page.drillSchedules.created' }));
           }
           setOpen(false);
           actionRef.current?.reload();
@@ -149,7 +159,7 @@ const RestoreDrillSchedulesPage: React.FC = () => {
         width={560}
       >
         <Form form={form} layout="vertical">
-          <Form.Item name="artifact_id" label="制品" rules={[{ required: true }]}>
+          <Form.Item name="artifact_id" label={formatMessage({ id: 'page.drillSchedules.artifact' })} rules={[{ required: true }]}>
             <Select
               showSearch
               optionFilterProp="label"
@@ -160,16 +170,16 @@ const RestoreDrillSchedulesPage: React.FC = () => {
               }))}
             />
           </Form.Item>
-          <Form.Item name="cron_expression" label="Cron" rules={[{ required: true }]}>
+          <Form.Item name="cron_expression" label={formatMessage({ id: 'page.drillSchedules.colCron' })} rules={[{ required: true }]}>
             <Input />
           </Form.Item>
-          <Form.Item name="timezone" label="时区">
+          <Form.Item name="timezone" label={formatMessage({ id: 'page.drillSchedules.colTimezone' })}>
             <Input />
           </Form.Item>
-          <Form.Item name="drill_base_path" label="drill_base_path（绝对路径）" rules={[{ required: true }]}>
+          <Form.Item name="drill_base_path" label={formatMessage({ id: 'page.drillSchedules.pathLabel' })} rules={[{ required: true }]}>
             <Input />
           </Form.Item>
-          <Form.Item name="enabled" label="启用" valuePropName="checked">
+          <Form.Item name="enabled" label={formatMessage({ id: 'page.drillSchedules.colEnabled' })} valuePropName="checked">
             <Switch />
           </Form.Item>
         </Form>

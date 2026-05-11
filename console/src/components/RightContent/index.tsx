@@ -3,6 +3,7 @@ import React from 'react';
 
 import AvatarDropdown from '@/components/AvatarDropdown';
 import HelpMenu from '@/components/HelpMenu';
+import LanguageSwitcher from '@/components/LanguageSwitcher';
 import TenantSwitcher from '@/components/TenantSwitcher';
 
 /**
@@ -16,6 +17,7 @@ const RightContent: React.FC = () => {
         {envLabel}
       </Tag>
       <HelpMenu />
+      <LanguageSwitcher />
       <TenantSwitcher />
       <AvatarDropdown />
     </Space>

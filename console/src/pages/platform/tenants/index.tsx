@@ -1,14 +1,15 @@
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { PageContainer, ProTable } from '@ant-design/pro-components';
-import { request } from '@umijs/max';
+import { request, useIntl } from '@umijs/max';
 import { App, Button, Form, Input, Modal, Select, Switch, Typography, notification } from 'antd';
-import React, { useRef, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 
 import { detailFromError } from '@/requestErrorConfig';
 
 const slugPattern = /^[a-z0-9]+(?:[-_][a-z0-9]+)*$/;
 
 const TenantsAdminPage: React.FC = () => {
+  const { formatMessage } = useIntl();
   const { message } = App.useApp();
   const actionRef = useRef<ActionType>();
   const [open, setOpen] = useState(false);
@@ -17,59 +18,66 @@ const TenantsAdminPage: React.FC = () => {
   const [form] = Form.useForm();
   const [createForm] = Form.useForm();
 
-  const columns: ProColumns<API.TenantOut>[] = [
-    { title: '名称', dataIndex: 'name' },
-    { title: 'slug', dataIndex: 'slug', copyable: true },
-    { title: '强制加密制品', dataIndex: 'require_encrypted_artifacts', width: 120, render: (_, r) => (r.require_encrypted_artifacts ? '是' : '否') },
-    {
-      title: '管理员 MFA',
-      dataIndex: 'require_mfa_for_admins',
-      width: 110,
-      render: (_, r) => (r.require_mfa_for_admins ? '是' : '否'),
-    },
-    { title: 'allowlist 模式', dataIndex: 'policy_paths_allowlist_mode', width: 120 },
-    {
-      title: '操作',
-      valueType: 'option',
-      width: 100,
-      render: (_, r) => (
-        <Button
-          type="link"
-          size="small"
-          onClick={() => {
-            setRow(r);
-            form.setFieldsValue({
-              name: r.name,
-              require_encrypted_artifacts: r.require_encrypted_artifacts,
-              require_mfa_for_admins: Boolean(r.require_mfa_for_admins),
-              kms_envelope_key_id: r.kms_envelope_key_id ?? '',
-              s3_bucket: r.s3_bucket ?? '',
-              s3_assume_role_arn: r.s3_assume_role_arn ?? '',
-              s3_assume_role_external_id: r.s3_assume_role_external_id ?? '',
-              policy_paths_allowlist_mode: r.policy_paths_allowlist_mode,
-              sso_oidc_issuer: r.sso_oidc_issuer ?? '',
-              sso_oidc_audience: r.sso_oidc_audience ?? '',
-              sso_oidc_role_claim: r.sso_oidc_role_claim ?? 'devault_role',
-              sso_oidc_email_claim: r.sso_oidc_email_claim ?? 'email',
-              sso_password_login_disabled: Boolean(r.sso_password_login_disabled),
-              sso_jit_provisioning: Boolean(r.sso_jit_provisioning),
-              sso_saml_entity_id: r.sso_saml_entity_id ?? '',
-              sso_saml_acs_url: r.sso_saml_acs_url ?? '',
-            });
-            setOpen(true);
-          }}
-        >
-          编辑
-        </Button>
-      ),
-    },
-  ];
+  const columns: ProColumns<API.TenantOut>[] = useMemo(
+    () => [
+      { title: formatMessage({ id: 'page.tenants.colName' }), dataIndex: 'name' },
+      { title: formatMessage({ id: 'page.tenants.colSlug' }), dataIndex: 'slug', copyable: true },
+      {
+        title: formatMessage({ id: 'page.tenants.colEncrypted' }),
+        dataIndex: 'require_encrypted_artifacts',
+        width: 120,
+        render: (_, r) =>
+          r.require_encrypted_artifacts ? formatMessage({ id: 'page.tenants.yes' }) : formatMessage({ id: 'page.tenants.no' }),
+      },
+      {
+        title: formatMessage({ id: 'page.tenants.colMfaAdmins' }),
+        dataIndex: 'require_mfa_for_admins',
+        width: 110,
+        render: (_, r) =>
+          r.require_mfa_for_admins ? formatMessage({ id: 'page.tenants.yes' }) : formatMessage({ id: 'page.tenants.no' }),
+      },
+      { title: formatMessage({ id: 'page.tenants.colAllowlist' }), dataIndex: 'policy_paths_allowlist_mode', width: 120 },
+      {
+        title: formatMessage({ id: 'page.tenants.colActions' }),
+        valueType: 'option',
+        width: 100,
+        render: (_, r) => (
+          <Button
+            type="link"
+            size="small"
+            onClick={() => {
+              setRow(r);
+              form.setFieldsValue({
+                name: r.name,
+                require_encrypted_artifacts: r.require_encrypted_artifacts,
+                require_mfa_for_admins: Boolean(r.require_mfa_for_admins),
+                kms_envelope_key_id: r.kms_envelope_key_id ?? '',
+                s3_bucket: r.s3_bucket ?? '',
+                s3_assume_role_arn: r.s3_assume_role_arn ?? '',
+                s3_assume_role_external_id: r.s3_assume_role_external_id ?? '',
+                policy_paths_allowlist_mode: r.policy_paths_allowlist_mode,
+                sso_oidc_issuer: r.sso_oidc_issuer ?? '',
+                sso_oidc_audience: r.sso_oidc_audience ?? '',
+                sso_oidc_role_claim: r.sso_oidc_role_claim ?? 'devault_role',
+                sso_oidc_email_claim: r.sso_oidc_email_claim ?? 'email',
+                sso_password_login_disabled: Boolean(r.sso_password_login_disabled),
+                sso_jit_provisioning: Boolean(r.sso_jit_provisioning),
+                sso_saml_entity_id: r.sso_saml_entity_id ?? '',
+                sso_saml_acs_url: r.sso_saml_acs_url ?? '',
+              });
+              setOpen(true);
+            }}
+          >
+            {formatMessage({ id: 'page.tenants.edit' })}
+          </Button>
+        ),
+      },
+    ],
+    [formatMessage, form],
+  );
 
   return (
-    <PageContainer
-      title="租户（平台管理员）"
-      subTitle="租户不是单独一套登录账号：用户仍使用全局登录页；加入该租户成员关系后，可在顶栏「租户」里切换到新租户。"
-    >
+    <PageContainer title={formatMessage({ id: 'page.tenants.title' })} subTitle={formatMessage({ id: 'page.tenants.subtitle' })}>
       <div style={{ marginBottom: 16 }}>
         <Button
           type="primary"
@@ -78,7 +86,7 @@ const TenantsAdminPage: React.FC = () => {
             setCreateOpen(true);
           }}
         >
-          新建租户
+          {formatMessage({ id: 'page.tenants.new' })}
         </Button>
       </div>
 
@@ -95,11 +103,11 @@ const TenantsAdminPage: React.FC = () => {
       />
 
       <Modal
-        title="新建租户"
+        title={formatMessage({ id: 'page.tenants.modalNewTitle' })}
         open={createOpen}
         onCancel={() => setCreateOpen(false)}
         destroyOnClose
-        okText="创建"
+        okText={formatMessage({ id: 'page.tenants.modalCreate' })}
         onOk={async () => {
           const v = await createForm.validateFields();
           const slug = String(v.slug ?? '')
@@ -113,23 +121,15 @@ const TenantsAdminPage: React.FC = () => {
             });
             setCreateOpen(false);
             await actionRef.current?.reload?.();
-            message.success('租户已创建');
+            message.success(formatMessage({ id: 'page.tenants.created' }));
             notification.success({
-              message: '租户已创建',
+              message: formatMessage({ id: 'page.tenants.notificationCreated' }),
               duration: 14,
               description: (
                 <div>
-                  <p style={{ marginBottom: 8 }}>
-                    <strong>如何「进入」该租户：</strong>DeVault 控制台是<strong>统一登录</strong>（同一邮箱/密码或
-                    SSO）。用户<strong>不会</strong>按租户单独登录；需要先具备该租户的<strong>成员关系</strong>，再用顶栏
-                    「租户」下拉框切换到「{created.name}」。
-                  </p>
-                  <p style={{ marginBottom: 8 }}>
-                    <strong>添加成员：</strong>新租户一般还没有任何成员——请先在可访问数据库的主机上执行{' '}
-                    <code>devault-admin create-console-user</code>，其中 <code>--tenant</code> 填下方复制的租户 ID，以绑定首名{' '}
-                    <code>tenant_admin</code>；之后该用户用常规方式登录，并在顶栏选择本租户，再在「概览 → 成员邀请」邀请其他人。
-                  </p>
-                  <Typography.Text type="secondary">租户 ID（可点击复制）：</Typography.Text>
+                  <p style={{ marginBottom: 8 }}>{formatMessage({ id: 'page.tenants.createdNotifyP1' }, { name: created.name })}</p>
+                  <p style={{ marginBottom: 8 }}>{formatMessage({ id: 'page.tenants.createdNotifyP2' })}</p>
+                  <Typography.Text type="secondary">{formatMessage({ id: 'page.tenants.copyTenantId' })}</Typography.Text>
                   <Typography.Paragraph copyable style={{ marginBottom: 0 }} code>
                     {created.id}
                   </Typography.Paragraph>
@@ -143,33 +143,32 @@ const TenantsAdminPage: React.FC = () => {
         }}
       >
         <Form form={createForm} layout="vertical">
-          <Form.Item name="name" label="显示名称" rules={[{ required: true, message: '请输入名称' }]}>
-            <Input placeholder="例如 Acme Corp" />
+          <Form.Item name="name" label={formatMessage({ id: 'page.tenants.displayName' })} rules={[{ required: true, message: formatMessage({ id: 'page.tenants.displayNameRequired' }) }]}>
+            <Input placeholder={formatMessage({ id: 'page.tenants.namePlaceholder' })} />
           </Form.Item>
           <Form.Item
             name="slug"
-            label="slug（唯一标识）"
+            label={formatMessage({ id: 'page.tenants.slugLabel' })}
             rules={[
-              { required: true, message: '请输入 slug' },
-              { pattern: slugPattern, message: '仅小写字母、数字、连字符或下划线，且分隔处两侧须有字符' },
+              { required: true, message: formatMessage({ id: 'page.tenants.slugRequired' }) },
+              { pattern: slugPattern, message: formatMessage({ id: 'page.tenants.slugPatternMsg' }) },
             ]}
-            extra="提交时会转为小写；须全局唯一。"
+            extra={formatMessage({ id: 'page.tenants.slugExtra' })}
           >
-            <Input placeholder="例如 acme-corp" />
+            <Input placeholder={formatMessage({ id: 'page.tenants.slugPlaceholder' })} />
           </Form.Item>
         </Form>
       </Modal>
 
       <Modal
-        title={row ? `编辑租户 ${row.slug}` : ''}
+        title={row ? formatMessage({ id: 'page.tenants.editTitle' }, { slug: row.slug }) : ''}
         open={open}
         onCancel={() => setOpen(false)}
-        okText="PATCH 保存"
+        okText={formatMessage({ id: 'page.tenants.editModalOk' })}
         width={720}
         onOk={async () => {
           if (!row) return;
           const v = await form.validateFields();
-          /** 空字符串可走服务端 strip→None 清空 BYOB/KMS 等可选字段。 */
           const body: Record<string, unknown> = {
             name: v.name,
             require_encrypted_artifacts: v.require_encrypted_artifacts,
@@ -197,39 +196,35 @@ const TenantsAdminPage: React.FC = () => {
           const ext = String(v.s3_assume_role_external_id ?? '').trim();
           body.s3_assume_role_external_id = ext.length ? ext : '';
           await request(`/api/v1/tenants/${row.id}`, { method: 'PATCH', data: body });
-          message.success('已更新租户');
+          message.success(formatMessage({ id: 'page.tenants.updated' }));
           setOpen(false);
           actionRef.current?.reload();
         }}
         destroyOnClose
       >
         <Form form={form} layout="vertical">
-          <Form.Item name="name" label="name" rules={[{ required: true }]}>
+          <Form.Item name="name" label={formatMessage({ id: 'page.tenants.editNameLabel' })} rules={[{ required: true }]}>
             <Input />
           </Form.Item>
-          <Form.Item name="require_encrypted_artifacts" label="require_encrypted_artifacts" valuePropName="checked">
+          <Form.Item name="require_encrypted_artifacts" label={formatMessage({ id: 'page.tenants.editRequireEnc' })} valuePropName="checked">
             <Switch />
           </Form.Item>
-          <Form.Item
-            name="require_mfa_for_admins"
-            label="租户管理员须 TOTP（require_mfa_for_admins）"
-            valuePropName="checked"
-          >
+          <Form.Item name="require_mfa_for_admins" label={formatMessage({ id: 'page.tenants.requireMfaLabel' })} valuePropName="checked">
             <Switch />
           </Form.Item>
-          <Form.Item name="kms_envelope_key_id" label="kms_envelope_key_id">
-            <Input placeholder="留空则清空" />
+          <Form.Item name="kms_envelope_key_id" label={formatMessage({ id: 'page.tenants.editKms' })}>
+            <Input placeholder={formatMessage({ id: 'page.tenants.placeholderClear' })} />
           </Form.Item>
-          <Form.Item name="s3_bucket" label="s3_bucket（BYOB）">
-            <Input placeholder="留空则清空" />
+          <Form.Item name="s3_bucket" label={formatMessage({ id: 'page.tenants.editS3Bucket' })}>
+            <Input placeholder={formatMessage({ id: 'page.tenants.placeholderClear' })} />
           </Form.Item>
-          <Form.Item name="s3_assume_role_arn" label="s3_assume_role_arn">
-            <Input placeholder="留空则清空" />
+          <Form.Item name="s3_assume_role_arn" label={formatMessage({ id: 'page.tenants.editRoleArn' })}>
+            <Input placeholder={formatMessage({ id: 'page.tenants.placeholderClear' })} />
           </Form.Item>
-          <Form.Item name="s3_assume_role_external_id" label="s3_assume_role_external_id">
-            <Input placeholder="留空则清空" />
+          <Form.Item name="s3_assume_role_external_id" label={formatMessage({ id: 'page.tenants.editExternalId' })}>
+            <Input placeholder={formatMessage({ id: 'page.tenants.placeholderClear' })} />
           </Form.Item>
-          <Form.Item name="policy_paths_allowlist_mode" label="policy_paths_allowlist_mode">
+          <Form.Item name="policy_paths_allowlist_mode" label={formatMessage({ id: 'page.tenants.editAllowlist' })}>
             <Select
               options={[
                 { value: 'off', label: 'off' },
@@ -239,40 +234,34 @@ const TenantsAdminPage: React.FC = () => {
             />
           </Form.Item>
           <Typography.Title level={5} style={{ marginTop: 16 }}>
-            §十六-12 租户 OIDC / SAML 元数据
+            {formatMessage({ id: 'page.tenants.ssoSection' })}
           </Typography.Title>
           <Typography.Paragraph type="secondary" style={{ marginBottom: 8 }}>
-            配置 <strong>issuer + audience</strong> 后，携带对应 IdP JWT 的 <code>Authorization: Bearer</code> 将解析为仅该租户作用域的主体；与全局{' '}
-            <code>DEVAULT_OIDC_*</code> 并存时由 JWT 的 <code>iss</code>/<code>aud</code> 匹配租户行。
-            <strong>SAML</strong> 下列字段仅作运维登记，控制面<strong>不消费</strong> SAML 断言。
+            {formatMessage({ id: 'page.tenants.ssoIntro' })}
           </Typography.Paragraph>
-          <Form.Item name="sso_oidc_issuer" label="sso_oidc_issuer（OpenID issuer URL）">
-            <Input placeholder="留空则清空 OIDC 绑定" />
+          <Form.Item name="sso_oidc_issuer" label={formatMessage({ id: 'page.tenants.ssoIssuerField' })}>
+            <Input placeholder={formatMessage({ id: 'page.tenants.clearOidc' })} />
           </Form.Item>
-          <Form.Item name="sso_oidc_audience" label="sso_oidc_audience（JWT aud）">
-            <Input placeholder="与 issuer 成对填写或同时留空" />
+          <Form.Item name="sso_oidc_audience" label={formatMessage({ id: 'page.tenants.ssoAudienceField' })}>
+            <Input placeholder={formatMessage({ id: 'page.tenants.pairWithIssuer' })} />
           </Form.Item>
-          <Form.Item name="sso_oidc_role_claim" label="sso_oidc_role_claim">
+          <Form.Item name="sso_oidc_role_claim" label={formatMessage({ id: 'page.tenants.ssoRoleClaim' })}>
             <Input />
           </Form.Item>
-          <Form.Item name="sso_oidc_email_claim" label="sso_oidc_email_claim（JIT 用）">
+          <Form.Item name="sso_oidc_email_claim" label={formatMessage({ id: 'page.tenants.oidcEmailClaim' })}>
             <Input />
           </Form.Item>
-          <Form.Item name="sso_jit_provisioning" label="OIDC JIT 成员（sso_jit_provisioning）" valuePropName="checked">
+          <Form.Item name="sso_jit_provisioning" label={formatMessage({ id: 'page.tenants.jitLabel' })} valuePropName="checked">
             <Switch />
           </Form.Item>
-          <Form.Item
-            name="sso_password_login_disabled"
-            label="禁用该租户成员的邮箱密码登录（sso_password_login_disabled）"
-            valuePropName="checked"
-          >
+          <Form.Item name="sso_password_login_disabled" label={formatMessage({ id: 'page.tenants.passwordDisabledLabel' })} valuePropName="checked">
             <Switch />
           </Form.Item>
-          <Form.Item name="sso_saml_entity_id" label="sso_saml_entity_id（登记用）">
-            <Input placeholder="可选" />
+          <Form.Item name="sso_saml_entity_id" label={formatMessage({ id: 'page.tenants.samlEntity' })}>
+            <Input placeholder={formatMessage({ id: 'page.tenants.optional' })} />
           </Form.Item>
-          <Form.Item name="sso_saml_acs_url" label="sso_saml_acs_url（登记用）">
-            <Input placeholder="可选" />
+          <Form.Item name="sso_saml_acs_url" label={formatMessage({ id: 'page.tenants.samlAcs' })}>
+            <Input placeholder={formatMessage({ id: 'page.tenants.optional' })} />
           </Form.Item>
         </Form>
       </Modal>

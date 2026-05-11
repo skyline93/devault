@@ -1,8 +1,8 @@
 import { PageContainer, ProCard, ProTable } from '@ant-design/pro-components';
-import { Link, request, useModel } from '@umijs/max';
+import { Link, request, useIntl, useModel } from '@umijs/max';
 import { Button, Space, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 
 const ACTIVE_STATUSES = new Set(['pending', 'running', 'uploading', 'verifying', 'retrying']);
 
@@ -17,6 +17,7 @@ const statusColor = (s: string) => {
 const grafanaUrl = (process.env.UMI_APP_GRAFANA_URL || '').trim();
 
 const Workbench: React.FC = () => {
+  const { formatMessage } = useIntl();
   const { initialState } = useModel('@@initialState');
   const [version, setVersion] = useState<API.VersionInfo | null>(null);
   const [jobs, setJobs] = useState<API.JobRow[]>([]);
@@ -51,18 +52,26 @@ const Workbench: React.FC = () => {
     };
   }, [initialState?.currentUser]);
 
-  const columns: ColumnsType<API.JobRow> = [
-    { title: '创建时间', dataIndex: 'created_at', width: 200, ellipsis: true },
-    { title: '类型', dataIndex: 'kind', width: 120 },
-    { title: '状态', dataIndex: 'status', width: 110, render: (s: string) => <Tag color={statusColor(s)}>{s}</Tag> },
-    { title: '插件', dataIndex: 'plugin', width: 90 },
-    { title: '错误码', dataIndex: 'error_code', ellipsis: true },
-    { title: '错误信息', dataIndex: 'error_message', ellipsis: true },
-  ];
+  const columns: ColumnsType<API.JobRow> = useMemo(
+    () => [
+      { title: formatMessage({ id: 'page.workbench.colCreated' }), dataIndex: 'created_at', width: 200, ellipsis: true },
+      { title: formatMessage({ id: 'page.workbench.colKind' }), dataIndex: 'kind', width: 120 },
+      {
+        title: formatMessage({ id: 'page.workbench.colStatus' }),
+        dataIndex: 'status',
+        width: 110,
+        render: (s: string) => <Tag color={statusColor(s)}>{s}</Tag>,
+      },
+      { title: formatMessage({ id: 'page.workbench.colPlugin' }), dataIndex: 'plugin', width: 90 },
+      { title: formatMessage({ id: 'page.workbench.colErrorCode' }), dataIndex: 'error_code', ellipsis: true },
+      { title: formatMessage({ id: 'page.workbench.colErrorMessage' }), dataIndex: 'error_message', ellipsis: true },
+    ],
+    [formatMessage],
+  );
 
   return (
-    <PageContainer title="工作台">
-      <ProCard title="控制面版本（GET /version）" style={{ marginBottom: 16 }} bordered>
+    <PageContainer title={formatMessage({ id: 'page.workbench.title' })}>
+      <ProCard title={formatMessage({ id: 'page.workbench.versionCard' })} style={{ marginBottom: 16 }} bordered>
         {version ? (
           <Typography.Paragraph copyable style={{ marginBottom: 0 }}>
             <strong>{version.service}</strong> · <code>{version.version}</code> · API {version.api}
@@ -70,39 +79,32 @@ const Workbench: React.FC = () => {
             {version.git_sha ? ` · git ${version.git_sha}` : null}
           </Typography.Paragraph>
         ) : (
-          <Typography.Text type="secondary">无法加载 /version（检查代理与控制面是否运行）</Typography.Text>
+          <Typography.Text type="secondary">{formatMessage({ id: 'page.workbench.versionUnavailable' })}</Typography.Text>
         )}
       </ProCard>
 
-      <ProCard title="指标与看板（十五-24）" style={{ marginBottom: 16 }} bordered>
+      <ProCard title={formatMessage({ id: 'page.workbench.observabilityCard' })} style={{ marginBottom: 16 }} bordered>
         <Typography.Paragraph type="secondary" style={{ marginTop: 0 }}>
-          与顶栏<strong>帮助</strong>一致：同源 <Typography.Text code>/metrics</Typography.Text>、
-          <Typography.Text code>/version</Typography.Text> 等由 nginx/代理转发到控制面。部署 Prometheus + Grafana
-          时参见文档站 <Typography.Text code>install/observability</Typography.Text>。
+          {formatMessage({ id: 'page.workbench.observabilityIntro' })}
         </Typography.Paragraph>
         <Space wrap>
           <Button type="link" href="/metrics" target="_blank" rel="noreferrer">
-            Prometheus 指标（/metrics）
+            {formatMessage({ id: 'page.workbench.metricsLink' })}
           </Button>
           {grafanaUrl ? (
             <Button type="primary" href={grafanaUrl} target="_blank" rel="noreferrer">
-              打开 Grafana
+              {formatMessage({ id: 'page.workbench.openGrafana' })}
             </Button>
           ) : (
-            <Typography.Text type="secondary">
-              构建前设置环境变量 <Typography.Text code>UMI_APP_GRAFANA_URL</Typography.Text> 可在此显示 Grafana
-              按钮（见 <Typography.Text code>console/.env.example</Typography.Text>）。
-            </Typography.Text>
+            <Typography.Text type="secondary">{formatMessage({ id: 'page.workbench.grafanaEnvHint' })}</Typography.Text>
           )}
         </Space>
       </ProCard>
 
-      <ProCard title="最近失败或进行中的作业（当前租户）" bordered loading={loading}>
+      <ProCard title={formatMessage({ id: 'page.workbench.jobsCard' })} bordered loading={loading}>
         <Typography.Paragraph type="secondary" style={{ marginTop: 0 }}>
-          数据来源 <Typography.Text code>GET /api/v1/jobs?limit=50</Typography.Text>
-          ，前端筛选 <Typography.Text code>failed</Typography.Text> 与进行中状态；可按需在 API 使用{' '}
-          <Typography.Text code>kind</Typography.Text> / <Typography.Text code>status</Typography.Text> 查询参数（十五-23）。完整列表见{' '}
-          <Link to="/backup/jobs">作业中心</Link>。
+          {formatMessage({ id: 'page.workbench.jobsIntro' })}{' '}
+          <Link to="/backup/jobs">{formatMessage({ id: 'menu.backup.jobs' })}</Link>.
         </Typography.Paragraph>
         <ProTable<API.JobRow>
           search={false}
@@ -111,7 +113,7 @@ const Workbench: React.FC = () => {
           rowKey="id"
           columns={columns}
           dataSource={jobs}
-          locale={{ emptyText: '暂无失败或进行中的作业' }}
+          locale={{ emptyText: formatMessage({ id: 'page.workbench.jobsEmpty' }) }}
         />
       </ProCard>
     </PageContainer>

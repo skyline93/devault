@@ -1,6 +1,6 @@
 import { LockOutlined, SafetyCertificateOutlined, UserOutlined } from '@ant-design/icons';
 import { LoginForm, ProFormText } from '@ant-design/pro-components';
-import { history, Link, request, useModel } from '@umijs/max';
+import { history, Link, request, useIntl, useModel } from '@umijs/max';
 import { Alert, Card, theme, Typography } from 'antd';
 import React, { useRef, useState } from 'react';
 
@@ -19,12 +19,12 @@ type IamTokenOut = {
 };
 
 const Login: React.FC = () => {
+  const { formatMessage } = useIntl();
   const { token } = theme.useToken();
   const { setInitialState } = useModel('@@initialState');
   const [err, setErr] = useState<string | null>(null);
   const [mfaStep, setMfaStep] = useState(false);
   const [pendingIam, setPendingIam] = useState<{ email: string; password: string } | null>(null);
-  /** 防止 LoginForm / 导航竞态导致 IAM 登录链路被触发两次（重复 session 与双次 push）。 */
   const authSubmitLock = useRef(false);
 
   const finishLogin = async (currentUser: API.CurrentUser) => {
@@ -98,20 +98,14 @@ const Login: React.FC = () => {
         <div style={{ marginBottom: 24, textAlign: 'center' }}>
           <h1 style={{ margin: 0, fontSize: 22 }}>DeVault</h1>
           <p style={{ marginTop: 8, color: token.colorTextSecondary, marginBottom: 0 }}>
-            {isIamConsoleEnabled() ? (
-              <>
-                已通过 <strong>独立 IAM</strong> 登录（Bearer + DeVault 会话接口）
-              </>
-            ) : (
-              <>
-                人机主路径：<strong>邮箱 + 密码</strong>（Cookie 会话）
-              </>
-            )}
+            {isIamConsoleEnabled()
+              ? formatMessage({ id: 'page.login.subtitleIam' })
+              : formatMessage({ id: 'page.login.subtitleCookie' })}
           </p>
           <Typography.Paragraph type="secondary" style={{ marginBottom: 0, marginTop: 8 }}>
-            <Link to="/user/integration">API Token / 机器集成</Link>
+            <Link to="/user/integration">{formatMessage({ id: 'page.login.linkIntegration' })}</Link>
             {' · '}
-            <Link to="/user/register">自助注册</Link>
+            <Link to="/user/register">{formatMessage({ id: 'page.login.linkRegister' })}</Link>
           </Typography.Paragraph>
         </div>
         {err ? (
@@ -123,15 +117,15 @@ const Login: React.FC = () => {
             <Alert
               type="info"
               showIcon
-              message="请输入验证器中的 6 位动态码"
+              message={formatMessage({ id: 'page.login.mfaInfo' })}
               style={{ marginBottom: 16 }}
             />
             <LoginForm
-              submitter={{ searchConfig: { submitText: '验证' } }}
+              submitter={{ searchConfig: { submitText: formatMessage({ id: 'page.login.verify' }) } }}
               onFinish={async (values) => {
                 const code = (values as { code?: string }).code?.trim();
                 if (!code) {
-                  setErr('请输入动态码');
+                  setErr(formatMessage({ id: 'page.login.totpRequired' }));
                   return;
                 }
                 setErr(null);
@@ -148,26 +142,26 @@ const Login: React.FC = () => {
                   await finishLogin(currentUser);
                 } catch (e) {
                   const d = (e as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
-                  setErr(typeof d === 'string' ? d : '验证失败');
+                  setErr(typeof d === 'string' ? d : formatMessage({ id: 'page.login.verifyFailed' }));
                 }
               }}
             >
               <ProFormText
                 name="code"
                 fieldProps={{ size: 'large', prefix: <SafetyCertificateOutlined /> }}
-                placeholder="TOTP 动态码"
-                rules={[{ required: true, message: '请输入动态码' }]}
+                placeholder={formatMessage({ id: 'page.login.mfaPlaceholder' })}
+                rules={[{ required: true, message: formatMessage({ id: 'page.login.totpRequired' }) }]}
               />
             </LoginForm>
           </>
         ) : (
           <LoginForm
-            submitter={{ searchConfig: { submitText: '登录' } }}
+            submitter={{ searchConfig: { submitText: formatMessage({ id: 'page.login.signIn' }) } }}
             onFinish={async (values) => {
               const email = (values as { email?: string }).email?.trim();
               const password = (values as { password?: string }).password;
               if (!email || !password) {
-                setErr('请输入邮箱与密码');
+                setErr(formatMessage({ id: 'page.login.emailPasswordRequired' }));
                 return;
               }
               setErr(null);
@@ -190,9 +184,9 @@ const Login: React.FC = () => {
                     return;
                   }
                   if (status === 401 || status === 403) {
-                    setErr(typeof detail === 'string' ? detail : '邮箱或密码错误');
+                    setErr(typeof detail === 'string' ? detail : formatMessage({ id: 'page.login.badCredentials' }));
                   } else {
-                    setErr('无法连接 IAM 或控制面，请确认 IAM / API 已启动且代理正确');
+                    setErr(formatMessage({ id: 'page.login.networkIdentity' }));
                   }
                 }
                 return;
@@ -221,9 +215,9 @@ const Login: React.FC = () => {
                   ?.status;
                 const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
                 if (status === 401 || status === 403) {
-                  setErr(typeof detail === 'string' ? detail : '邮箱或密码错误');
+                  setErr(typeof detail === 'string' ? detail : formatMessage({ id: 'page.login.badCredentials' }));
                 } else {
-                  setErr('无法连接控制面，请确认已启动 API 且开发代理指向正确端口');
+                  setErr(formatMessage({ id: 'page.login.networkControlPlane' }));
                 }
               }
             }}
@@ -231,14 +225,14 @@ const Login: React.FC = () => {
             <ProFormText
               name="email"
               fieldProps={{ size: 'large', prefix: <UserOutlined /> }}
-              placeholder="邮箱"
-              rules={[{ required: true, message: '请输入邮箱' }]}
+              placeholder={formatMessage({ id: 'page.login.email' })}
+              rules={[{ required: true, message: formatMessage({ id: 'page.login.emailRequired' }) }]}
             />
             <ProFormText.Password
               name="password"
               fieldProps={{ size: 'large', prefix: <LockOutlined /> }}
-              placeholder="密码"
-              rules={[{ required: true, message: '请输入密码' }]}
+              placeholder={formatMessage({ id: 'page.login.password' })}
+              rules={[{ required: true, message: formatMessage({ id: 'page.login.passwordRequired' }) }]}
             />
           </LoginForm>
         )}

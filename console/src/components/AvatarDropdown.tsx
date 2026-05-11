@@ -1,5 +1,5 @@
 import { LogoutOutlined, UserOutlined } from '@ant-design/icons';
-import { history, useModel } from '@umijs/max';
+import { history, useIntl, useModel } from '@umijs/max';
 import { Avatar, Dropdown, Space, Tag, Typography } from 'antd';
 import type { MenuProps } from 'antd';
 import React, { useMemo } from 'react';
@@ -12,6 +12,7 @@ import { STORAGE_BEARER_KEY, STORAGE_TENANT_ID_KEY } from '@/constants/storage';
  * 与 Pro 模板 `AvatarDropdown` 同构：头像 + 下拉菜单（账户信息 / 退出）。
  */
 const AvatarDropdown: React.FC = () => {
+  const { formatMessage } = useIntl();
   const { initialState, setInitialState } = useModel('@@initialState');
   const user = initialState?.currentUser;
 
@@ -66,20 +67,20 @@ const AvatarDropdown: React.FC = () => {
           ) : null}
           <div>
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              角色：{user.role}
+              {formatMessage({ id: 'component.role' })}：{user.role}
             </Typography.Text>
           </div>
           {currentTenantLabel ? (
             <div>
               <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                当前租户：{currentTenantLabel}
+                {formatMessage({ id: 'component.currentOrg' })}：{currentTenantLabel}
               </Typography.Text>
             </div>
           ) : null}
           {permList.length > 0 ? (
             <div style={{ marginTop: 6 }}>
               <Typography.Text type="secondary" style={{ fontSize: 11, display: 'block', marginBottom: 4 }}>
-                权限（IAM）
+                {formatMessage({ id: 'component.grantedPermissions' })}
               </Typography.Text>
               <div style={{ maxHeight: 160, overflowY: 'auto' }}>
                 {permList.map((p) => (
@@ -97,7 +98,7 @@ const AvatarDropdown: React.FC = () => {
     {
       key: 'logout',
       icon: <LogoutOutlined />,
-      label: '退出登录',
+      label: formatMessage({ id: 'component.logout' }),
       onClick: onLogout,
     },
   ];

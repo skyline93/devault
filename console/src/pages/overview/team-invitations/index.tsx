@@ -1,8 +1,8 @@
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { PageContainer, ProTable } from '@ant-design/pro-components';
-import { request } from '@umijs/max';
+import { request, useIntl } from '@umijs/max';
 import { App, Button, Form, Input, Modal, Select } from 'antd';
-import React, { useRef, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 
 import { STORAGE_TENANT_ID_KEY } from '@/constants/storage';
 
@@ -16,8 +16,8 @@ type InvitationRow = {
   accepted_at: string | null;
 };
 
-/** §十六-11：租户管理员向邮箱发送加入租户的邀请。 */
 const TeamInvitationsPage: React.FC = () => {
+  const { formatMessage } = useIntl();
   const { message } = App.useApp();
   const actionRef = useRef<ActionType>();
   const [open, setOpen] = useState(false);
@@ -25,22 +25,25 @@ const TeamInvitationsPage: React.FC = () => {
 
   const tenantId = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_TENANT_ID_KEY) : null;
 
-  const columns: ProColumns<InvitationRow>[] = [
-    { title: '邮箱', dataIndex: 'email' },
-    { title: '角色', dataIndex: 'role', width: 120 },
-    { title: '创建时间', dataIndex: 'created_at', width: 200 },
-    { title: '过期时间', dataIndex: 'expires_at', width: 200 },
-  ];
+  const columns: ProColumns<InvitationRow>[] = useMemo(
+    () => [
+      { title: formatMessage({ id: 'page.teamInvites.colEmail' }), dataIndex: 'email' },
+      { title: formatMessage({ id: 'page.teamInvites.colRole' }), dataIndex: 'role', width: 120 },
+      { title: formatMessage({ id: 'page.teamInvites.colCreated' }), dataIndex: 'created_at', width: 200 },
+      { title: formatMessage({ id: 'page.teamInvites.colExpires' }), dataIndex: 'expires_at', width: 200 },
+    ],
+    [formatMessage],
+  );
 
   return (
-    <PageContainer title="成员邀请">
+    <PageContainer title={formatMessage({ id: 'page.teamInvites.title' })}>
       {!tenantId ? (
-        <p>请先在顶栏选择租户。</p>
+        <p>{formatMessage({ id: 'page.teamInvites.selectTenant' })}</p>
       ) : (
         <>
           <div style={{ marginBottom: 16 }}>
             <Button type="primary" onClick={() => setOpen(true)}>
-              发送邀请
+              {formatMessage({ id: 'page.teamInvites.send' })}
             </Button>
           </div>
           <ProTable<InvitationRow>
@@ -57,10 +60,10 @@ const TeamInvitationsPage: React.FC = () => {
             pagination={{ pageSize: 20 }}
           />
           <Modal
-            title="邀请加入当前租户"
+            title={formatMessage({ id: 'page.teamInvites.modalTitle' })}
             open={open}
             onCancel={() => setOpen(false)}
-            okText="发送"
+            okText={formatMessage({ id: 'page.teamInvites.okSend' })}
             destroyOnClose
             onOk={async () => {
               const v = await form.validateFields();
@@ -68,17 +71,17 @@ const TeamInvitationsPage: React.FC = () => {
                 method: 'POST',
                 data: { email: v.email, role: v.role },
               });
-              message.success('邀请已发送（邮件可能因 SMTP 未配置仅记日志）');
+              message.success(formatMessage({ id: 'page.teamInvites.sent' }));
               setOpen(false);
               form.resetFields();
               actionRef.current?.reload();
             }}
           >
             <Form form={form} layout="vertical">
-              <Form.Item name="email" label="邮箱" rules={[{ required: true, type: 'email' }]}>
+              <Form.Item name="email" label={formatMessage({ id: 'page.teamInvites.email' })} rules={[{ required: true, type: 'email' }]}>
                 <Input />
               </Form.Item>
-              <Form.Item name="role" label="成员角色" initialValue="operator" rules={[{ required: true }]}>
+              <Form.Item name="role" label={formatMessage({ id: 'page.teamInvites.role' })} initialValue="operator" rules={[{ required: true }]}>
                 <Select
                   options={[
                     { value: 'tenant_admin', label: 'tenant_admin' },

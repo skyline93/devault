@@ -1,9 +1,10 @@
 import { PageContainer, ProTable } from '@ant-design/pro-components';
-import { history, Link, request, useAccess, useParams } from '@umijs/max';
+import { history, Link, request, useAccess, useIntl, useParams } from '@umijs/max';
 import { App, Button, Card, Form, InputNumber, Modal, Select, Space, Typography } from 'antd';
 import React, { useCallback, useEffect, useState } from 'react';
 
 const PoolDetailPage: React.FC = () => {
+  const { formatMessage } = useIntl();
   const { poolId } = useParams<{ poolId: string }>();
   const { message } = App.useApp();
   const access = useAccess();
@@ -44,16 +45,17 @@ const PoolDetailPage: React.FC = () => {
 
   return (
     <PageContainer
-      title={detail?.name ?? '池详情'}
+      title={detail?.name ?? formatMessage({ id: 'menu.execution.agent-pool-detail' })}
       loading={loading}
       onBack={() => history.push('/execution/agent-pools')}
     >
       <Typography.Paragraph type="secondary">
-        成员整表替换（<Typography.Text code>PUT /api/v1/agent-pools/…/members</Typography.Text>
-        ）。策略侧绑定见
-        <Link to="/backup/policies"> 策略 </Link>（池 ID：<Typography.Text code>{poolId}</Typography.Text>）。
+        {formatMessage({ id: 'page.agentPoolDetail.intro' })}{' '}
+        <Link to="/backup/policies">{formatMessage({ id: 'page.agentPoolDetail.policiesLink' })}</Link>
+        {' · '}
+        <Typography.Text code>{poolId}</Typography.Text>
       </Typography.Paragraph>
-      <Card title="成员">
+      <Card title={formatMessage({ id: 'page.agentPoolDetail.members' })}>
         <Form form={form} disabled={!access.canWrite}>
           <Form.List name="members">
             {(fields, { add, remove }) => (
@@ -64,18 +66,18 @@ const PoolDetailPage: React.FC = () => {
                       <Select showSearch optionFilterProp="label" options={agentOptions} style={{ minWidth: 280 }} />
                     </Form.Item>
                     <Form.Item {...rest} name={[name, 'weight']} rules={[{ required: true }]}>
-                      <InputNumber min={1} max={1000000} placeholder="weight" />
+                      <InputNumber min={1} max={1000000} placeholder={formatMessage({ id: 'page.agentPoolDetail.weightPh' })} />
                     </Form.Item>
                     <Form.Item {...rest} name={[name, 'sort_order']}>
-                      <InputNumber placeholder="sort_order" />
+                      <InputNumber placeholder={formatMessage({ id: 'page.agentPoolDetail.orderPh' })} />
                     </Form.Item>
                     <Button type="link" danger onClick={() => remove(name)}>
-                      移除
+                      {formatMessage({ id: 'page.agentPoolDetail.remove' })}
                     </Button>
                   </Space>
                 ))}
                 <Button type="dashed" onClick={() => add({ weight: 100, sort_order: 0 })} block>
-                  添加成员
+                  {formatMessage({ id: 'page.agentPoolDetail.addMember' })}
                 </Button>
               </>
             )}
@@ -97,30 +99,35 @@ const PoolDetailPage: React.FC = () => {
                   method: 'PUT',
                   data: { members },
                 });
-                message.success('已保存成员');
+                message.success(formatMessage({ id: 'page.agentPoolDetail.saved' }));
                 void load();
               }}
             >
-              保存成员
+              {formatMessage({ id: 'page.agentPoolDetail.saveMembers' })}
             </Button>
           ) : null}
         </Form>
       </Card>
 
-      <Card title="当前成员快照" style={{ marginTop: 16 }}>
+      <Card title={formatMessage({ id: 'page.agentPoolDetail.snapshotTitle' })} style={{ marginTop: 16 }}>
         <ProTable<API.AgentPoolMemberOut>
           rowKey="agent_id"
           search={false}
           pagination={false}
           columns={[
             {
-              title: 'Agent',
+              title: formatMessage({ id: 'page.agentPoolDetail.colAgent' }),
               dataIndex: 'agent_id',
               render: (_, r) => <Link to={`/execution/fleet/${r.agent_id}`}>{r.agent_id}</Link>,
             },
-            { title: 'weight', dataIndex: 'weight', width: 100 },
-            { title: 'sort_order', dataIndex: 'sort_order', width: 100 },
-            { title: 'last_seen_at', dataIndex: 'last_seen_at', valueType: 'dateTime', width: 170 },
+            { title: formatMessage({ id: 'page.agentPoolDetail.colWeight' }), dataIndex: 'weight', width: 100 },
+            { title: formatMessage({ id: 'page.agentPoolDetail.colSort' }), dataIndex: 'sort_order', width: 100 },
+            {
+              title: formatMessage({ id: 'page.agentPoolDetail.colLastSeen' }),
+              dataIndex: 'last_seen_at',
+              valueType: 'dateTime',
+              width: 170,
+            },
           ]}
           dataSource={detail?.members ?? []}
           toolBarRender={false}
@@ -131,17 +138,17 @@ const PoolDetailPage: React.FC = () => {
             style={{ marginTop: 12 }}
             onClick={() => {
               Modal.confirm({
-                title: '删除整个池？',
-                content: '将清除引用本池的策略绑定。',
+                title: formatMessage({ id: 'page.agentPoolDetail.deletePoolTitle' }),
+                content: formatMessage({ id: 'page.agentPoolDetail.deletePoolContent' }),
                 onOk: async () => {
                   await request(`/api/v1/agent-pools/${poolId}`, { method: 'DELETE' });
-                  message.success('已删除');
+                  message.success(formatMessage({ id: 'page.agentPoolDetail.poolDeleted' }));
                   history.push('/execution/agent-pools');
                 },
               });
             }}
           >
-            删除池
+            {formatMessage({ id: 'page.agentPoolDetail.deletePool' })}
           </Button>
         ) : null}
       </Card>

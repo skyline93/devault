@@ -13,6 +13,7 @@
 | [`docs/compatibility.json`](compatibility.json) | 控制面 / Agent 兼容矩阵（CI 校验） |
 | [`docs/RELEASE.md`](RELEASE.md) | 发版检查清单 |
 | [`docs/iam-service-design.md`](iam-service-design.md) | **独立 IAM 服务** 设计方案（人 + 控制面 API Key）；代码在仓库 **`iam/`** 目录 |
+| [`docs/web-console-i18n.md`](web-console-i18n.md) | **Web 控制台国际化**：默认英文、可切换简体中文、可扩展语言、Ant Design 生态优先、用户向文案禁止内部术语 |
 | [`iam/docs/BACKLOG.md`](../iam/docs/BACKLOG.md) | IAM **按优先级的实现待办**（P0–P5，对齐 `iam-service-design` 与 `docs-old/iam.md`） |
 
 ## 愿景 vs 当前实现（差距表）

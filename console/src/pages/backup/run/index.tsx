@@ -1,9 +1,10 @@
 import { PageContainer } from '@ant-design/pro-components';
-import { request, useAccess } from '@umijs/max';
+import { request, useAccess, useIntl } from '@umijs/max';
 import { App, Button, Card, Descriptions, Form, Input, Radio, Select, Space, Steps } from 'antd';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 
 const BackupRunPage: React.FC = () => {
+  const { formatMessage } = useIntl();
   const { message } = App.useApp();
   const access = useAccess();
   const [form] = Form.useForm();
@@ -15,32 +16,57 @@ const BackupRunPage: React.FC = () => {
     void request<API.PolicyOut[]>('/api/v1/policies').then(setPolicies);
   }, []);
 
+  const stepItems = useMemo(
+    () => [
+      {
+        title: formatMessage({ id: 'page.backupRun.stepChoose' }),
+        description: formatMessage({ id: 'page.backupRun.stepChooseDesc' }),
+      },
+      {
+        title: formatMessage({ id: 'page.backupRun.stepParams' }),
+        description:
+          mode === 'policy'
+            ? formatMessage({ id: 'page.backupRun.stepParamsPolicy' })
+            : formatMessage({ id: 'page.backupRun.stepParamsInline' }),
+      },
+      {
+        title: formatMessage({ id: 'page.backupRun.stepConfirm' }),
+        description: formatMessage({ id: 'page.backupRun.stepConfirmDesc' }),
+      },
+    ],
+    [formatMessage, mode],
+  );
+
   if (!access.canWrite) {
     return (
-      <PageContainer title="发起备份">
-        <Card>当前角色无写权限。</Card>
+      <PageContainer title={formatMessage({ id: 'page.backupRun.title' })}>
+        <Card>{formatMessage({ id: 'page.backupRun.noWrite' })}</Card>
       </PageContainer>
     );
   }
 
   const summary = () => {
-    // Steps 会卸载中间步骤的 Form.Item；用 true 取回含已卸载字段在内的整表 store（与 rc-field-form 行为一致）。
     const v = form.getFieldsValue(true);
     if (mode === 'policy') {
       const p = policies.find((x) => x.id === v.policy_id);
-      return { mode: '按策略', policy: p ? `${p.name} (${p.id})` : v.policy_id };
+      return {
+        mode: formatMessage({ id: 'page.backupRun.modeSummaryPolicy' }),
+        policy: p ? `${p.name} (${p.id})` : v.policy_id,
+      };
     }
-    return { mode: '内联 JSON', preview: (v.configJson as string)?.slice(0, 200) ?? '' };
+    return {
+      mode: formatMessage({ id: 'page.backupRun.modeSummaryInline' }),
+      preview: (v.configJson as string)?.slice(0, 200) ?? '',
+    };
   };
 
   const submit = async () => {
-    // 第三步无 policy_id/configJson 的 Form.Item 挂载；无参 validateFields 返回 {}，会导致未带 policy_id/config。
     const namePaths =
       mode === 'policy' ? (['mode', 'policy_id', 'idempotency_key'] as const) : (['mode', 'configJson', 'idempotency_key'] as const);
     const v = await form.validateFields([...namePaths]);
     if (mode === 'policy') {
       if (!v.policy_id) {
-        message.error('缺少策略，请返回上一步选择策略');
+        message.error(formatMessage({ id: 'page.backupRun.missingPolicy' }));
         return;
       }
       await request('/api/v1/jobs/backup', {
@@ -53,14 +79,14 @@ const BackupRunPage: React.FC = () => {
       });
     } else {
       if (v.configJson == null || String(v.configJson).trim() === '') {
-        message.error('缺少内联配置，请返回上一步填写 JSON');
+        message.error(formatMessage({ id: 'page.backupRun.missingInline' }));
         return;
       }
       let config: Record<string, unknown>;
       try {
         config = JSON.parse(v.configJson as string) as Record<string, unknown>;
       } catch {
-        message.error('内联 config 须为合法 JSON');
+        message.error(formatMessage({ id: 'page.backupRun.jsonInvalid' }));
         return;
       }
       if (!config.version) config.version = 1;
@@ -73,7 +99,7 @@ const BackupRunPage: React.FC = () => {
         },
       });
     }
-    message.success('已入队备份作业');
+    message.success(formatMessage({ id: 'page.backupRun.queued' }));
     form.resetFields();
     setStep(0);
   };
@@ -87,38 +113,31 @@ const BackupRunPage: React.FC = () => {
       }
       setStep(2);
     } catch {
-      /* Form 已提示 */
+      /* validation shown by form */
     }
   };
 
   const s = summary();
+  const dash = formatMessage({ id: 'page.backupRun.dash' });
 
   return (
-    <PageContainer title="发起备份">
+    <PageContainer title={formatMessage({ id: 'page.backupRun.title' })}>
       <Card>
-        <Steps
-          current={step}
-          style={{ marginBottom: 24 }}
-          items={[
-            { title: '选择方式', description: '策略或内联配置' },
-            { title: '填写参数', description: mode === 'policy' ? 'policy_id 等' : 'JSON' },
-            { title: '确认并入队', description: '核对后提交' },
-          ]}
-        />
+        <Steps current={step} style={{ marginBottom: 24 }} items={stepItems} />
 
         <Form form={form} layout="vertical" initialValues={{ mode: 'policy' }}>
           {step === 0 ? (
             <>
-              <Form.Item name="mode" label="方式">
+              <Form.Item name="mode" label={formatMessage({ id: 'page.backupRun.modeLabel' })}>
                 <Radio.Group
                   options={[
-                    { label: '按策略 policy_id', value: 'policy' },
-                    { label: '内联 FileBackupConfigV1（JSON）', value: 'inline' },
+                    { label: formatMessage({ id: 'page.backupRun.modePolicy' }), value: 'policy' },
+                    { label: formatMessage({ id: 'page.backupRun.modeInline' }), value: 'inline' },
                   ]}
                 />
               </Form.Item>
               <Button type="primary" onClick={() => setStep(1)}>
-                下一步
+                {formatMessage({ id: 'page.backupRun.next' })}
               </Button>
             </>
           ) : null}
@@ -126,7 +145,11 @@ const BackupRunPage: React.FC = () => {
           {step === 1 ? (
             <>
               {mode === 'policy' ? (
-                <Form.Item name="policy_id" label="策略" rules={[{ required: true, message: '请选择策略' }]}>
+                <Form.Item
+                  name="policy_id"
+                  label={formatMessage({ id: 'page.backupRun.policyLabel' })}
+                  rules={[{ required: true, message: formatMessage({ id: 'page.backupRun.policyRequired' }) }]}
+                >
                   <Select
                     showSearch
                     optionFilterProp="label"
@@ -139,8 +162,8 @@ const BackupRunPage: React.FC = () => {
               ) : (
                 <Form.Item
                   name="configJson"
-                  label="config JSON"
-                  rules={[{ required: true, message: '请输入 JSON' }]}
+                  label={formatMessage({ id: 'page.backupRun.configJsonLabel' })}
+                  rules={[{ required: true, message: formatMessage({ id: 'page.backupRun.jsonRequired' }) }]}
                 >
                   <Input.TextArea
                     rows={14}
@@ -148,13 +171,13 @@ const BackupRunPage: React.FC = () => {
                   />
                 </Form.Item>
               )}
-              <Form.Item name="idempotency_key" label="幂等键（可选）">
+              <Form.Item name="idempotency_key" label={formatMessage({ id: 'page.backupRun.idempotencyLabel' })}>
                 <Input />
               </Form.Item>
               <Space>
-                <Button onClick={() => setStep(0)}>上一步</Button>
+                <Button onClick={() => setStep(0)}>{formatMessage({ id: 'page.backupRun.prev' })}</Button>
                 <Button type="primary" onClick={() => void nextFrom1()}>
-                  下一步
+                  {formatMessage({ id: 'page.backupRun.next' })}
                 </Button>
               </Space>
             </>
@@ -163,22 +186,26 @@ const BackupRunPage: React.FC = () => {
           {step === 2 ? (
             <>
               <Descriptions bordered column={1} size="small" style={{ marginBottom: 16 }}>
-                <Descriptions.Item label="方式">{s.mode}</Descriptions.Item>
+                <Descriptions.Item label={formatMessage({ id: 'page.backupRun.summaryMode' })}>{s.mode}</Descriptions.Item>
                 {mode === 'policy' ? (
-                  <Descriptions.Item label="策略">{String(s.policy ?? '—')}</Descriptions.Item>
+                  <Descriptions.Item label={formatMessage({ id: 'page.backupRun.summaryPolicy' })}>
+                    {String((s as { policy?: string }).policy ?? dash)}
+                  </Descriptions.Item>
                 ) : (
-                  <Descriptions.Item label="JSON 摘要">
-                    <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontSize: 12 }}>{String(s.preview)}</pre>
+                  <Descriptions.Item label={formatMessage({ id: 'page.backupRun.summaryJson' })}>
+                    <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontSize: 12 }}>
+                      {String((s as { preview?: string }).preview)}
+                    </pre>
                   </Descriptions.Item>
                 )}
-                <Descriptions.Item label="幂等键">
-                  {(form.getFieldsValue(true).idempotency_key as string) || '—'}
+                <Descriptions.Item label={formatMessage({ id: 'page.backupRun.summaryIdem' })}>
+                  {(form.getFieldsValue(true).idempotency_key as string) || dash}
                 </Descriptions.Item>
               </Descriptions>
               <Space>
-                <Button onClick={() => setStep(1)}>上一步</Button>
+                <Button onClick={() => setStep(1)}>{formatMessage({ id: 'page.backupRun.prev' })}</Button>
                 <Button type="primary" onClick={() => void submit()}>
-                  确认并入队
+                  {formatMessage({ id: 'page.backupRun.confirmSubmit' })}
                 </Button>
               </Space>
             </>

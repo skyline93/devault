@@ -1,15 +1,12 @@
-import { request, useModel } from '@umijs/max';
+import { request, useModel, useIntl } from '@umijs/max';
 import { Select, Space, Tooltip, Typography, message } from 'antd';
 import React, { useEffect, useMemo, useState } from 'react';
 
 import { STORAGE_TENANT_ID_KEY } from '@/constants/storage';
 import { authDebug } from '@/utils/auth-debug';
 
-/**
- * 顶栏租户选择（十五-07）：`GET /api/v1/tenants`（服务端已按 token 过滤）+ 本地持久化 UUID。
- * 替代旧 Jinja **`devault_ui_tenant` Cookie** / **`POST /ui/context/tenant`**。
- */
 const TenantSwitcher: React.FC = () => {
+  const { formatMessage } = useIntl();
   const { initialState } = useModel('@@initialState');
   const user = initialState?.currentUser;
   const [tenants, setTenants] = useState<API.TenantRow[]>([]);
@@ -55,21 +52,25 @@ const TenantSwitcher: React.FC = () => {
 
   if (!user) return null;
 
+  const tooltipTitle = selectedLabel
+    ? formatMessage({ id: 'component.tenantTooltipSelected' }, { label: selectedLabel })
+    : formatMessage({ id: 'component.tenantTooltipEmpty' });
+
   return (
     <Space size={6} align="center" className="ant-pro-global-header-index-action" style={{ marginInline: 8 }}>
       <Typography.Text type="secondary" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
-        当前租户
+        {formatMessage({ id: 'component.tenantCurrent' })}
       </Typography.Text>
-      <Tooltip title={selectedLabel ? `已选：${selectedLabel}` : '请选择可访问的租户'}>
+      <Tooltip title={tooltipTitle}>
         <Select
           style={{ minWidth: 220 }}
           loading={loading}
-          placeholder="选择租户…"
+          placeholder={formatMessage({ id: 'component.tenantSelectPlaceholder' })}
           value={options.some((o) => o.value === value) ? value : undefined}
           options={options}
           onChange={(id: string) => {
             localStorage.setItem(STORAGE_TENANT_ID_KEY, id);
-            message.success('已切换租户');
+            message.success(formatMessage({ id: 'component.tenantSwitched' }));
             window.location.reload();
           }}
           showSearch

@@ -1,9 +1,10 @@
 import { PageContainer } from '@ant-design/pro-components';
-import { history, request, useAccess, useParams } from '@umijs/max';
+import { history, request, useAccess, useIntl, useParams } from '@umijs/max';
 import { App, Button, Card, Form, Input, Modal, Select, Typography } from 'antd';
 import React, { useCallback, useEffect, useState } from 'react';
 
 const FleetAgentDetailPage: React.FC = () => {
+  const { formatMessage } = useIntl();
   const { agentId } = useParams<{ agentId: string }>();
   const { message } = App.useApp();
   const access = useAccess();
@@ -47,20 +48,22 @@ const FleetAgentDetailPage: React.FC = () => {
   if (!agentId) return null;
 
   return (
-    <PageContainer title={`Agent ${agentId}`} loading={loading} onBack={() => history.push('/execution/fleet')}>
+    <PageContainer
+      title={formatMessage({ id: 'page.fleetDetail.pageTitle' }, { agentId })}
+      loading={loading}
+      onBack={() => history.push('/execution/fleet')}
+    >
       {agent ? (
-        <Card title="快照">
+        <Card title={formatMessage({ id: 'page.fleetDetail.snapshot' })}>
           <pre style={{ fontSize: 12, background: '#f5f5f5', padding: 12, borderRadius: 8, overflow: 'auto' }}>
             {JSON.stringify(agent, null, 2)}
           </pre>
         </Card>
       ) : null}
 
-      <Card title="租户登记（Enrollment）" style={{ marginTop: 16 }}>
+      <Card title={formatMessage({ id: 'page.fleetDetail.enrollment' })} style={{ marginTop: 16 }}>
         {enr404 ? (
-          <Typography.Paragraph type="warning">
-            尚无登记记录（404）。管理员可通过下方表单创建（PUT 即 upsert）。
-          </Typography.Paragraph>
+          <Typography.Paragraph type="warning">{formatMessage({ id: 'page.fleetDetail.enrollmentEmpty' })}</Typography.Paragraph>
         ) : null}
         {access.canAdmin ? (
           <Form
@@ -69,21 +72,21 @@ const FleetAgentDetailPage: React.FC = () => {
             onFinish={async (v) => {
               const ids = v.allowed_tenant_ids as string[];
               if (!ids?.length) {
-                message.error('至少选择一个租户 UUID（API 要求非空列表）');
+                message.error(formatMessage({ id: 'page.fleetDetail.enrollmentErr' }));
                 return;
               }
               await request(`/api/v1/agents/${agentId}/enrollment`, {
                 method: 'PUT',
                 data: { allowed_tenant_ids: ids },
               });
-              message.success('已保存登记');
+              message.success(formatMessage({ id: 'page.fleetDetail.enrollmentSaved' }));
               void load();
             }}
           >
             <Form.Item
               name="allowed_tenant_ids"
-              label="allowed_tenant_ids"
-              rules={[{ required: true, message: '至少一项' }]}
+              label={formatMessage({ id: 'page.fleetDetail.organizationsLabel' })}
+              rules={[{ required: true, message: formatMessage({ id: 'page.fleetDetail.membersRequired' }) }]}
             >
               <Select
                 mode="multiple"
@@ -97,57 +100,50 @@ const FleetAgentDetailPage: React.FC = () => {
             </Form.Item>
             <Form.Item>
               <Button type="primary" htmlType="submit">
-                保存登记（PUT）
+                {formatMessage({ id: 'page.fleetDetail.saveEnrollment' })}
               </Button>
             </Form.Item>
           </Form>
         ) : enrollment ? (
           <pre style={{ fontSize: 12 }}>{JSON.stringify(enrollment, null, 2)}</pre>
         ) : (
-          <Typography.Text type="secondary">无登记数据或不可读。</Typography.Text>
+          <Typography.Text type="secondary">{formatMessage({ id: 'page.fleetDetail.noEnrollment' })}</Typography.Text>
         )}
       </Card>
 
       {access.canAdmin ? (
-        <Card title="吊销 gRPC 会话" style={{ marginTop: 16 }}>
-          <Typography.Paragraph type="secondary">
-            调用 <Typography.Text code>POST /api/v1/agents/…/revoke-grpc-sessions</Typography.Text>
-            ，使 Register 签发的 Bearer 全部失效。须强确认。
-          </Typography.Paragraph>
+        <Card title={formatMessage({ id: 'page.fleetDetail.revokeCard' })} style={{ marginTop: 16 }}>
+          <Typography.Paragraph type="secondary">{formatMessage({ id: 'page.fleetDetail.revokeIntro' })}</Typography.Paragraph>
           <Button danger onClick={() => setRevokeOpen(true)}>
-            吊销 gRPC 会话
+            {formatMessage({ id: 'page.fleetDetail.revokeBtn' })}
           </Button>
           <Modal
-            title="确认吊销 gRPC 会话"
+            title={formatMessage({ id: 'page.fleetDetail.revokeModalTitle' })}
             open={revokeOpen}
             onCancel={() => {
               setRevokeOpen(false);
               revokeForm.resetFields();
             }}
-            okText="执行吊销"
+            okText={formatMessage({ id: 'page.fleetDetail.revokeOk' })}
             okButtonProps={{ danger: true }}
             onOk={async () => {
               const v = await revokeForm.validateFields();
               if (String(v.confirm).trim() !== 'REVOKE') {
-                message.error('确认框须输入大写 REVOKE');
+                message.error(formatMessage({ id: 'page.fleetDetail.revokeTypeErr' }));
                 throw new Error('abort');
               }
               const res = await request<{ session_generation: number }>(
                 `/api/v1/agents/${agentId}/revoke-grpc-sessions`,
                 { method: 'POST' },
               );
-              message.success(`已吊销，session_generation=${res.session_generation}`);
+              message.success(formatMessage({ id: 'page.fleetDetail.revokeDone' }, { generation: res.session_generation }));
               setRevokeOpen(false);
               revokeForm.resetFields();
             }}
             destroyOnClose
           >
             <Form form={revokeForm} layout="vertical">
-              <Form.Item
-                name="confirm"
-                label='请输入大写 "REVOKE" 以确认'
-                rules={[{ required: true }]}
-              >
+              <Form.Item name="confirm" label={formatMessage({ id: 'page.fleetDetail.revokeConfirmLabel' })} rules={[{ required: true }]}>
                 <Input autoComplete="off" placeholder="REVOKE" />
               </Form.Item>
             </Form>

@@ -1,22 +1,12 @@
 import { EyeOutlined } from '@ant-design/icons';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { PageContainer, ProTable } from '@ant-design/pro-components';
-import { request, useAccess } from '@umijs/max';
-import {
-  App,
-  Button,
-  Drawer,
-  Form,
-  Input,
-  Modal,
-  Space,
-  Switch,
-  Tag,
-  Typography,
-} from 'antd';
-import React, { useRef, useState } from 'react';
+import { request, useAccess, useIntl } from '@umijs/max';
+import { App, Button, Drawer, Form, Input, Modal, Space, Switch, Tag, Typography } from 'antd';
+import React, { useMemo, useRef, useState } from 'react';
 
 const ArtifactsPage: React.FC = () => {
+  const { formatMessage } = useIntl();
   const { message } = App.useApp();
   const access = useAccess();
   const actionRef = useRef<ActionType>();
@@ -33,74 +23,87 @@ const ArtifactsPage: React.FC = () => {
     setDrawerOpen(true);
   };
 
-  const columns: ProColumns<API.ArtifactOut>[] = [
-    { title: '创建时间', dataIndex: 'created_at', valueType: 'dateTime', width: 170 },
-    {
-      title: '大小',
-      dataIndex: 'size_bytes',
-      width: 120,
-      render: (_, r) => {
-        const b = r.size_bytes;
-        if (b >= 1073741824) return `${(b / 1073741824).toFixed(2)} GiB`;
-        if (b >= 1048576) return `${(b / 1048576).toFixed(2)} MiB`;
-        if (b >= 1024) return `${(b / 1024).toFixed(1)} KiB`;
-        return `${b} B`;
+  const columns: ProColumns<API.ArtifactOut>[] = useMemo(
+    () => [
+      { title: formatMessage({ id: 'page.artifacts.colCreated' }), dataIndex: 'created_at', valueType: 'dateTime', width: 170 },
+      {
+        title: formatMessage({ id: 'page.artifacts.colSize' }),
+        dataIndex: 'size_bytes',
+        width: 120,
+        render: (_, r) => {
+          const b = r.size_bytes;
+          if (b >= 1073741824) return `${(b / 1073741824).toFixed(2)} GiB`;
+          if (b >= 1048576) return `${(b / 1048576).toFixed(2)} MiB`;
+          if (b >= 1024) return `${(b / 1024).toFixed(1)} KiB`;
+          return `${b} B`;
+        },
       },
-    },
-    { title: '加密', dataIndex: 'encrypted', width: 72, render: (_, r) => (r.encrypted ? '是' : '否') },
-    {
-      title: 'Legal hold',
-      dataIndex: 'legal_hold',
-      width: 100,
-      render: (_, r) => (r.legal_hold ? <Tag color="red">是</Tag> : <Tag>否</Tag>),
-    },
-    { title: 'SHA256', dataIndex: 'checksum_sha256', ellipsis: true, copyable: true },
-    {
-      title: '操作',
-      valueType: 'option',
-      width: 280,
-      render: (_, row) => (
-        <Space wrap>
-          <Button type="link" size="small" icon={<EyeOutlined />} onClick={() => void openDetail(row.id)}>
-            详情
-          </Button>
-          {access.canWrite ? (
-            <>
-              <Button
-                type="link"
-                size="small"
-                onClick={() => {
-                  restoreForm.setFieldsValue({
-                    artifact_id: row.id,
-                    target_path: '',
-                    confirm: '',
-                    overwrite: false,
-                  });
-                  setRestoreOpen(true);
-                }}
-              >
-                恢复
-              </Button>
-              <Button
-                type="link"
-                size="small"
-                onClick={() => {
-                  drillForm.setFieldsValue({
-                    artifact_id: row.id,
-                    drill_base_path: '',
-                    confirm: '',
-                  });
-                  setDrillOpen(true);
-                }}
-              >
-                恢复演练
-              </Button>
-            </>
-          ) : null}
-        </Space>
-      ),
-    },
-  ];
+      {
+        title: formatMessage({ id: 'page.artifacts.colEncrypted' }),
+        dataIndex: 'encrypted',
+        width: 72,
+        render: (_, r) => (r.encrypted ? formatMessage({ id: 'page.artifacts.yes' }) : formatMessage({ id: 'page.artifacts.no' })),
+      },
+      {
+        title: formatMessage({ id: 'page.artifacts.colLegalHold' }),
+        dataIndex: 'legal_hold',
+        width: 100,
+        render: (_, r) =>
+          r.legal_hold ? (
+            <Tag color="red">{formatMessage({ id: 'page.artifacts.yes' })}</Tag>
+          ) : (
+            <Tag>{formatMessage({ id: 'page.artifacts.no' })}</Tag>
+          ),
+      },
+      { title: formatMessage({ id: 'page.artifacts.colChecksum' }), dataIndex: 'checksum_sha256', ellipsis: true, copyable: true },
+      {
+        title: formatMessage({ id: 'page.artifacts.colActions' }),
+        valueType: 'option',
+        width: 280,
+        render: (_, row) => (
+          <Space wrap>
+            <Button type="link" size="small" icon={<EyeOutlined />} onClick={() => void openDetail(row.id)}>
+              {formatMessage({ id: 'page.artifacts.detail' })}
+            </Button>
+            {access.canWrite ? (
+              <>
+                <Button
+                  type="link"
+                  size="small"
+                  onClick={() => {
+                    restoreForm.setFieldsValue({
+                      artifact_id: row.id,
+                      target_path: '',
+                      confirm: '',
+                      overwrite: false,
+                    });
+                    setRestoreOpen(true);
+                  }}
+                >
+                  {formatMessage({ id: 'page.artifacts.restore' })}
+                </Button>
+                <Button
+                  type="link"
+                  size="small"
+                  onClick={() => {
+                    drillForm.setFieldsValue({
+                      artifact_id: row.id,
+                      drill_base_path: '',
+                      confirm: '',
+                    });
+                    setDrillOpen(true);
+                  }}
+                >
+                  {formatMessage({ id: 'page.artifacts.drill' })}
+                </Button>
+              </>
+            ) : null}
+          </Space>
+        ),
+      },
+    ],
+    [access.canWrite, drillForm, formatMessage, restoreForm],
+  );
 
   const patchLegalHold = async (next: boolean) => {
     if (!detail) return;
@@ -108,17 +111,15 @@ const ArtifactsPage: React.FC = () => {
       method: 'PATCH',
       data: { legal_hold: next },
     });
-    message.success('已更新 Legal hold');
+    message.success(formatMessage({ id: 'page.artifacts.legalHoldUpdated' }));
     const row = await request<API.ArtifactOut>(`/api/v1/artifacts/${detail.id}`);
     setDetail(row);
     actionRef.current?.reload();
   };
 
   return (
-    <PageContainer title="制品">
-      <Typography.Paragraph type="secondary">
-        列表使用 <code>limit</code> / <code>offset</code> 分页；恢复与演练为危险操作，需二次确认文案。
-      </Typography.Paragraph>
+    <PageContainer title={formatMessage({ id: 'page.artifacts.title' })}>
+      <Typography.Paragraph type="secondary">{formatMessage({ id: 'page.artifacts.intro' })}</Typography.Paragraph>
       <ProTable<API.ArtifactOut>
         rowKey="id"
         actionRef={actionRef}
@@ -142,7 +143,11 @@ const ArtifactsPage: React.FC = () => {
       />
 
       <Drawer
-        title={detail ? `制品 ${detail.id}` : '详情'}
+        title={
+          detail
+            ? formatMessage({ id: 'page.artifacts.drawerTitle' }, { artifactId: detail.id })
+            : formatMessage({ id: 'page.artifacts.detail' })
+        }
         width={640}
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
@@ -152,13 +157,15 @@ const ArtifactsPage: React.FC = () => {
           <Space direction="vertical" style={{ width: '100%' }} size="middle">
             {access.canAdmin ? (
               <div>
-                <Typography.Text strong>Legal hold（管理员）</Typography.Text>
+                <Typography.Text strong>{formatMessage({ id: 'page.artifacts.legalHold' })}</Typography.Text>
                 <div style={{ marginTop: 8 }}>
                   <Switch
                     checked={detail.legal_hold}
                     onChange={(checked) => {
                       Modal.confirm({
-                        title: checked ? '启用 Legal hold？' : '解除 Legal hold？',
+                        title: checked
+                          ? formatMessage({ id: 'page.artifacts.legalHoldOn' })
+                          : formatMessage({ id: 'page.artifacts.legalHoldOff' }),
                         onOk: () => patchLegalHold(checked),
                       });
                     }}
@@ -174,14 +181,14 @@ const ArtifactsPage: React.FC = () => {
       </Drawer>
 
       <Modal
-        title="发起恢复作业"
+        title={formatMessage({ id: 'page.artifacts.restoreModalTitle' })}
         open={restoreOpen}
         onCancel={() => setRestoreOpen(false)}
-        okText="确认入队"
+        okText={formatMessage({ id: 'page.artifacts.restoreOk' })}
         onOk={async () => {
           const v = await restoreForm.validateFields();
           if (String(v.confirm).trim() !== 'RESTORE') {
-            message.error('请在确认框输入 RESTORE（大写）');
+            message.error(formatMessage({ id: 'page.artifacts.restoreConfirmErr' }));
             throw new Error('confirm');
           }
           await request('/api/v1/jobs/restore', {
@@ -192,7 +199,7 @@ const ArtifactsPage: React.FC = () => {
               confirm_overwrite_non_empty: Boolean(v.overwrite),
             },
           });
-          message.success('已入队恢复作业');
+          message.success(formatMessage({ id: 'page.artifacts.restoreQueued' }));
           setRestoreOpen(false);
           restoreForm.resetFields();
         }}
@@ -200,23 +207,23 @@ const ArtifactsPage: React.FC = () => {
         width={520}
       >
         <Form form={restoreForm} layout="vertical">
-          <Form.Item name="artifact_id" label="artifact_id" hidden>
+          <Form.Item name="artifact_id" hidden>
             <Input />
           </Form.Item>
           <Form.Item
             name="target_path"
-            label="目标绝对目录 target_path"
-            rules={[{ required: true, message: '必填' }]}
+            label={formatMessage({ id: 'page.artifacts.restoreTarget' })}
+            rules={[{ required: true, message: formatMessage({ id: 'page.artifacts.restoreTargetRequired' }) }]}
           >
             <Input placeholder="/restore/here" />
           </Form.Item>
-          <Form.Item name="overwrite" label="允许覆盖非空目录" valuePropName="checked">
+          <Form.Item name="overwrite" label={formatMessage({ id: 'page.artifacts.restoreOverwrite' })} valuePropName="checked">
             <Switch />
           </Form.Item>
           <Form.Item
             name="confirm"
-            label='确认：输入大写 "RESTORE"'
-            rules={[{ required: true, message: '必填' }]}
+            label={formatMessage({ id: 'page.artifacts.restoreTypeConfirm' })}
+            rules={[{ required: true, message: formatMessage({ id: 'page.artifacts.requiredField' }) }]}
           >
             <Input autoComplete="off" placeholder="RESTORE" />
           </Form.Item>
@@ -224,14 +231,14 @@ const ArtifactsPage: React.FC = () => {
       </Modal>
 
       <Modal
-        title="发起恢复演练作业"
+        title={formatMessage({ id: 'page.artifacts.drillModalTitle' })}
         open={drillOpen}
         onCancel={() => setDrillOpen(false)}
-        okText="确认入队"
+        okText={formatMessage({ id: 'page.artifacts.drillOk' })}
         onOk={async () => {
           const v = await drillForm.validateFields();
           if (String(v.confirm).trim() !== 'DRILL') {
-            message.error('请在确认框输入 DRILL（大写）');
+            message.error(formatMessage({ id: 'page.artifacts.drillConfirmErr' }));
             throw new Error('confirm');
           }
           await request('/api/v1/jobs/restore-drill', {
@@ -241,7 +248,7 @@ const ArtifactsPage: React.FC = () => {
               drill_base_path: v.drill_base_path,
             },
           });
-          message.success('已入队恢复演练作业');
+          message.success(formatMessage({ id: 'page.artifacts.drillQueued' }));
           setDrillOpen(false);
           drillForm.resetFields();
         }}
@@ -252,17 +259,13 @@ const ArtifactsPage: React.FC = () => {
           <Form.Item name="artifact_id" hidden>
             <Input />
           </Form.Item>
-          <Form.Item
-            name="drill_base_path"
-            label="Agent 上绝对路径前缀 drill_base_path"
-            rules={[{ required: true }]}
-          >
+          <Form.Item name="drill_base_path" label={formatMessage({ id: 'page.artifacts.drillPathLabel' })} rules={[{ required: true }]}>
             <Input placeholder="/var/tmp/devault-drills" />
           </Form.Item>
           <Form.Item
             name="confirm"
-            label='确认：输入大写 "DRILL"'
-            rules={[{ required: true }]}
+            label={formatMessage({ id: 'page.artifacts.drillConfirm' })}
+            rules={[{ required: true, message: formatMessage({ id: 'page.artifacts.requiredField' }) }]}
           >
             <Input autoComplete="off" placeholder="DRILL" />
           </Form.Item>

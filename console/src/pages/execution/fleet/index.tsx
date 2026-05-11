@@ -1,42 +1,56 @@
 import type { ProColumns } from '@ant-design/pro-components';
 import { PageContainer, ProTable } from '@ant-design/pro-components';
-import { Link, request } from '@umijs/max';
+import { Link, request, useIntl } from '@umijs/max';
 import { Tag } from 'antd';
-import React from 'react';
+import React, { useMemo } from 'react';
 
 const FleetPage: React.FC = () => {
-  const columns: ProColumns<API.EdgeAgentOut>[] = [
-    {
-      title: 'Agent ID',
-      dataIndex: 'id',
-      copyable: true,
-      render: (_, r) => <Link to={`/execution/fleet/${r.id}`}>{r.id}</Link>,
-    },
-    { title: '主机名', dataIndex: 'hostname', ellipsis: true },
-    { title: '版本', dataIndex: 'agent_release', width: 120 },
-    {
-      title: '登记租户',
-      dataIndex: 'allowed_tenant_ids',
-      ellipsis: true,
-      render: (_, r) =>
-        r.allowed_tenant_ids?.length ? `${r.allowed_tenant_ids.length} 个` : '—',
-    },
-    {
-      title: '门槛/Proto',
-      key: 'gates',
-      width: 140,
-      render: (_, r) => (
-        <span>
-          {r.meets_min_supported_version ? <Tag color="green">版本</Tag> : <Tag>版本</Tag>}
-          {r.proto_matches_control_plane ? <Tag color="blue">Proto</Tag> : <Tag color="orange">Proto</Tag>}
-        </span>
-      ),
-    },
-    { title: '最近心跳', dataIndex: 'last_seen_at', valueType: 'dateTime', width: 170 },
-  ];
+  const { formatMessage } = useIntl();
+  const columns: ProColumns<API.EdgeAgentOut>[] = useMemo(
+    () => [
+      {
+        title: formatMessage({ id: 'page.fleet.colAgentId' }),
+        dataIndex: 'id',
+        copyable: true,
+        render: (_, r) => <Link to={`/execution/fleet/${r.id}`}>{r.id}</Link>,
+      },
+      { title: formatMessage({ id: 'page.fleet.colHostname' }), dataIndex: 'hostname', ellipsis: true },
+      { title: formatMessage({ id: 'page.fleet.colVersion' }), dataIndex: 'agent_release', width: 120 },
+      {
+        title: formatMessage({ id: 'page.fleet.colTenants' }),
+        dataIndex: 'allowed_tenant_ids',
+        ellipsis: true,
+        render: (_, r) =>
+          r.allowed_tenant_ids?.length
+            ? formatMessage({ id: 'page.fleet.tenantCount' }, { count: r.allowed_tenant_ids.length })
+            : '—',
+      },
+      {
+        title: formatMessage({ id: 'page.fleet.colCompat' }),
+        key: 'gates',
+        width: 200,
+        render: (_, r) => (
+          <span>
+            {r.meets_min_supported_version ? (
+              <Tag color="green">{formatMessage({ id: 'page.fleet.tagVersionOk' })}</Tag>
+            ) : (
+              <Tag>{formatMessage({ id: 'page.fleet.tagVersionWarn' })}</Tag>
+            )}
+            {r.proto_matches_control_plane ? (
+              <Tag color="blue">{formatMessage({ id: 'page.fleet.tagProtoOk' })}</Tag>
+            ) : (
+              <Tag color="orange">{formatMessage({ id: 'page.fleet.tagProtoWarn' })}</Tag>
+            )}
+          </span>
+        ),
+      },
+      { title: formatMessage({ id: 'page.fleet.colHeartbeat' }), dataIndex: 'last_seen_at', valueType: 'dateTime', width: 170 },
+    ],
+    [formatMessage],
+  );
 
   return (
-    <PageContainer title="全舰队 Agents">
+    <PageContainer title={formatMessage({ id: 'page.fleet.title' })}>
       <ProTable<API.EdgeAgentOut>
         rowKey="id"
         columns={columns}

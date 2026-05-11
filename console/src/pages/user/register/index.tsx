@@ -1,6 +1,6 @@
 import { LockOutlined, UserOutlined } from '@ant-design/icons';
 import { LoginForm, ProFormText } from '@ant-design/pro-components';
-import { history, Link, request, useModel } from '@umijs/max';
+import { history, Link, request, useIntl, useModel } from '@umijs/max';
 import { Alert, Card, theme, Typography } from 'antd';
 import React, { useState } from 'react';
 
@@ -16,8 +16,8 @@ type IamTokenOut = {
   permissions: string[];
 };
 
-/** 自助注册：IAM 模式下走 IAM API；否则为历史占位（控制面不再提供 `/auth/register`）。 */
 const SelfRegister: React.FC = () => {
+  const { formatMessage } = useIntl();
   const { token } = theme.useToken();
   const { setInitialState } = useModel('@@initialState');
   const [ok, setOk] = useState<string | null>(null);
@@ -36,27 +36,26 @@ const SelfRegister: React.FC = () => {
     >
       <Card style={{ width: 'min(440px, 100%)' }} bordered={false}>
         <Typography.Title level={4} style={{ textAlign: 'center' }}>
-          注册控制台账号
+          {formatMessage({ id: 'page.register.title' })}
         </Typography.Title>
         <Typography.Paragraph type="secondary" style={{ textAlign: 'center' }}>
-          {isIamConsoleEnabled() ? (
-            <>使用独立 IAM 注册后将直接进入控制台（需 DeVault 已配置 <code>DEVAULT_IAM_JWT_*</code>）。 </>
-          ) : (
-            <>成功后需平台管理员分配租户成员资格。 </>
-          )}
-          返回 <Link to="/user/login">密码登录</Link>
+          {isIamConsoleEnabled()
+            ? formatMessage({ id: 'page.register.subtitleIam' })
+            : formatMessage({ id: 'page.register.subtitleLegacy' })}{' '}
+          {formatMessage({ id: 'page.register.backPrefix' })}{' '}
+          <Link to="/user/login">{formatMessage({ id: 'page.register.passwordLogin' })}</Link>
         </Typography.Paragraph>
         {ok ? <Alert type="success" message={ok} style={{ marginBottom: 16 }} /> : null}
         {err ? <Alert type="error" message={err} style={{ marginBottom: 16 }} /> : null}
         <LoginForm
-          submitter={{ searchConfig: { submitText: '注册' } }}
+          submitter={{ searchConfig: { submitText: formatMessage({ id: 'page.register.submit' }) } }}
           onFinish={async (values) => {
             setErr(null);
             setOk(null);
             const email = (values as { email?: string }).email?.trim();
             const password = (values as { password?: string }).password;
             if (!email || !password) {
-              setErr('请输入邮箱与密码');
+              setErr(formatMessage({ id: 'page.register.emailPasswordRequired' }));
               return;
             }
             try {
@@ -96,26 +95,26 @@ const SelfRegister: React.FC = () => {
                 },
                 skipErrorHandler: true,
               });
-              setOk('账号已创建。请联系管理员分配租户权限后使用密码登录。');
+              setOk(formatMessage({ id: 'page.register.createdPending' }));
             } catch (e) {
               const st = (e as { response?: { status?: number; data?: { detail?: string } } })?.response?.status;
               const d = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
-              if (st === 403) setErr(typeof d === 'string' ? d : '未开放自助注册');
-              else if (st === 409) setErr('该邮箱已注册');
-              else setErr(typeof d === 'string' ? d : '注册失败');
+              if (st === 403) setErr(typeof d === 'string' ? d : formatMessage({ id: 'page.register.closed' }));
+              else if (st === 409) setErr(formatMessage({ id: 'page.register.conflict' }));
+              else setErr(typeof d === 'string' ? d : formatMessage({ id: 'page.register.failed' }));
             }
           }}
         >
           <ProFormText
             name="email"
             fieldProps={{ prefix: <UserOutlined /> }}
-            placeholder="邮箱"
+            placeholder={formatMessage({ id: 'page.register.emailPh' })}
             rules={[{ required: true }]}
           />
           <ProFormText.Password
             name="password"
             fieldProps={{ prefix: <LockOutlined /> }}
-            placeholder="密码（至少 12 位）"
+            placeholder={formatMessage({ id: 'page.register.passwordPh' })}
             rules={[{ required: true, min: 12 }]}
           />
         </LoginForm>

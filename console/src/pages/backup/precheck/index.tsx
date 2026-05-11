@@ -1,9 +1,10 @@
 import { PageContainer } from '@ant-design/pro-components';
-import { request, useAccess } from '@umijs/max';
+import { request, useAccess, useIntl } from '@umijs/max';
 import { App, Button, Card, Form, Select } from 'antd';
 import React, { useEffect, useState } from 'react';
 
 const PrecheckPage: React.FC = () => {
+  const { formatMessage } = useIntl();
   const { message } = App.useApp();
   const access = useAccess();
   const [form] = Form.useForm();
@@ -15,18 +16,16 @@ const PrecheckPage: React.FC = () => {
 
   if (!access.canWrite) {
     return (
-      <PageContainer title="路径预检">
-        <Card>当前角色无写权限。</Card>
+      <PageContainer title={formatMessage({ id: 'page.backupPrecheck.title' })}>
+        <Card>{formatMessage({ id: 'page.backupPrecheck.noWrite' })}</Card>
       </PageContainer>
     );
   }
 
   return (
-    <PageContainer title="路径预检">
+    <PageContainer title={formatMessage({ id: 'page.backupPrecheck.title' })}>
       <Card>
-        <p style={{ marginBottom: 16, color: 'rgba(0,0,0,0.45)' }}>
-          对所选策略的 <code>paths</code> 在已租约 Agent 上执行只读存在性检查（<code>POST /api/v1/jobs/path-precheck</code>）。
-        </p>
+        <p style={{ marginBottom: 16, color: 'rgba(0,0,0,0.45)' }}>{formatMessage({ id: 'page.backupPrecheck.intro' })}</p>
         <Form
           form={form}
           layout="vertical"
@@ -35,11 +34,11 @@ const PrecheckPage: React.FC = () => {
               method: 'POST',
               data: { policy_id: v.policy_id },
             });
-            message.success(`已入队预检作业 ${res.job_id}`);
+            message.success(formatMessage({ id: 'page.backupPrecheck.queued' }, { jobId: res.job_id }));
             form.resetFields();
           }}
         >
-          <Form.Item name="policy_id" label="策略" rules={[{ required: true }]}>
+          <Form.Item name="policy_id" label={formatMessage({ id: 'page.backupPrecheck.policy' })} rules={[{ required: true }]}>
             <Select
               showSearch
               optionFilterProp="label"
@@ -51,7 +50,7 @@ const PrecheckPage: React.FC = () => {
           </Form.Item>
           <Form.Item>
             <Button type="primary" htmlType="submit">
-              提交预检
+              {formatMessage({ id: 'page.backupPrecheck.submit' })}
             </Button>
           </Form.Item>
         </Form>

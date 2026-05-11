@@ -1,11 +1,11 @@
 import { LockOutlined } from '@ant-design/icons';
 import { LoginForm, ProFormText } from '@ant-design/pro-components';
-import { history, Link, request } from '@umijs/max';
+import { history, Link, request, useIntl } from '@umijs/max';
 import { Alert, Card, theme, Typography } from 'antd';
 import React, { useMemo, useState } from 'react';
 
-/** §十六-10：通过邮件中的 token 重置密码。 */
 const ResetPassword: React.FC = () => {
+  const { formatMessage } = useIntl();
   const { token } = theme.useToken();
   const [err, setErr] = useState<string | null>(null);
   const [done, setDone] = useState(false);
@@ -26,24 +26,24 @@ const ResetPassword: React.FC = () => {
       }}
     >
       <Card style={{ width: 'min(440px, 100%)' }} bordered={false}>
-        <Typography.Title level={4}>重置密码</Typography.Title>
+        <Typography.Title level={4}>{formatMessage({ id: 'page.resetPassword.title' })}</Typography.Title>
         <Typography.Paragraph type="secondary">
-          <Link to="/user/login">返回登录</Link>
+          <Link to="/user/login">{formatMessage({ id: 'page.resetPassword.back' })}</Link>
         </Typography.Paragraph>
         {!urlToken ? (
-          <Alert type="warning" message="链接缺少 token 参数" />
+          <Alert type="warning" message={formatMessage({ id: 'page.resetPassword.missingToken' })} />
         ) : done ? (
-          <Alert type="success" message="密码已更新，请使用新密码登录。" />
+          <Alert type="success" message={formatMessage({ id: 'page.resetPassword.success' })} />
         ) : (
           <>
             {err ? <Alert type="error" message={err} style={{ marginBottom: 16 }} /> : null}
             <LoginForm
-              submitter={{ searchConfig: { submitText: '保存新密码' } }}
+              submitter={{ searchConfig: { submitText: formatMessage({ id: 'page.resetPassword.submit' }) } }}
               onFinish={async (values) => {
                 setErr(null);
                 const np = (values as { new_password?: string }).new_password;
                 if (!np || np.length < 12) {
-                  setErr('新密码至少 12 位');
+                  setErr(formatMessage({ id: 'page.resetPassword.short' }));
                   return;
                 }
                 try {
@@ -56,14 +56,14 @@ const ResetPassword: React.FC = () => {
                   setTimeout(() => history.push('/user/login'), 2000);
                 } catch (e) {
                   const d = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
-                  setErr(typeof d === 'string' ? d : '链接无效或已过期');
+                  setErr(typeof d === 'string' ? d : formatMessage({ id: 'page.resetPassword.failed' }));
                 }
               }}
             >
               <ProFormText.Password
                 name="new_password"
                 fieldProps={{ prefix: <LockOutlined /> }}
-                placeholder="新密码（≥12 位）"
+                placeholder={formatMessage({ id: 'page.resetPassword.newPasswordPh' })}
                 rules={[{ required: true, min: 12 }]}
               />
             </LoginForm>

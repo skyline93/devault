@@ -1,27 +1,28 @@
 import { PageContainer, ProCard } from '@ant-design/pro-components';
-import { useLocation } from '@umijs/max';
+import { useIntl, useLocation } from '@umijs/max';
 import { Typography } from 'antd';
-import React from 'react';
+import React, { useMemo } from 'react';
 
-const TITLES: Record<string, string> = {
-  '/backup': '备份与恢复',
-  '/execution': '执行面',
-  '/compliance': '合规与演练',
-  '/platform': '平台管理',
+const GROUP: Record<string, string> = {
+  '/backup': 'backup',
+  '/execution': 'execution',
+  '/compliance': 'compliance',
+  '/platform': 'platform',
 };
 
-/**
- * 侧栏五大分组中尚未落地的分区占位（十五-09 壳 + 十五-11 起迭代）。
- */
 const Section: React.FC = () => {
+  const { formatMessage } = useIntl();
   const { pathname } = useLocation();
-  const title = TITLES[pathname] ?? '子模块';
+  const titleKey = useMemo(() => {
+    const k = GROUP[pathname];
+    return k ? `page.placeholder.${k}` : 'page.placeholder.generic';
+  }, [pathname]);
 
   return (
-    <PageContainer title={title}>
+    <PageContainer title={formatMessage({ id: titleKey })}>
       <ProCard>
         <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
-          该分区具体页面将在后续 backlog（十五-11 起）中按 REST 竖切交付。当前路由用于信息架构与导航验收。
+          {formatMessage({ id: 'page.placeholder.body' })}
         </Typography.Paragraph>
       </ProCard>
     </PageContainer>
