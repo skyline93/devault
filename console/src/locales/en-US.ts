@@ -1,5 +1,5 @@
 export default {
-  lang: { en: 'English', zh: 'Simplified Chinese' },
+  lang: { en: 'English', zh: '简体中文' },
   menu: {
     overview: 'Overview',
     'overview.welcome': 'Welcome',
