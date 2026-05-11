@@ -16,7 +16,7 @@ description: 数据模型、HTTP 作用域、RBAC、OIDC 与计费相关指标
   - **`s3_assume_role_arn`** / **`s3_assume_role_external_id`** — STS **AssumeRole** 到客户账号；若设置则**优先于** **`DEVAULT_S3_ASSUME_ROLE_ARN`** 构造该租户的 S3 客户端。
 - **`policies` / `jobs` / `schedules` / `artifacts`** 均带有 **`tenant_id`** 外键。
 - **`artifacts.legal_hold`** — **true** 时保留清理不删除该行及对象。
-- 迁移 **`0005`** 会创建 slug 为 **`default`** 的初始租户，并把现有行归属到该租户。
+- 迁移 **`0005`** 会创建一条初始租户行（历史上 slug 常为 **`default`**），并把现有行归属到该租户；**不**再依赖环境变量隐式选租户。
 
 ## HTTP API 与 Web UI
 
@@ -24,14 +24,17 @@ description: 数据模型、HTTP 作用域、RBAC、OIDC 与计费相关指标
 
 - `/api/v1/policies`、`/schedules`、`/jobs`、`/artifacts`
 
-**选择租户：**
+**选择租户（必选）：**
 
-1. 请求头 **`X-DeVault-Tenant-Id: <uuid>`**。
-2. 省略时使用 **`DEVAULT_DEFAULT_TENANT_SLUG`**（默认 **`default`**）解析租户。
+- 每个租户作用域请求必须携带 **`X-DeVault-Tenant-Id: <uuid>`**；缺失返回 **400**（不再按 slug 回落）。
 
 跨租户访问不存在的资源返回 **404**（不区分「不存在」与「无权访问」），避免 ID 枚举。
 
-Web UI 与未带头部的 REST 使用相同默认 slug 解析。
+Web UI 通过顶栏租户选择与 **`localStorage`** 写入该头；REST/自动化须显式传入。
+
+### 与 IAM 对齐租户主键
+
+在 **IAM** 中创建租户后，可在 DeVault **`POST /api/v1/tenants`** 的请求体中传入 **`id`**（与 IAM 返回的租户 UUID 相同），以便 JWT `tid` / 成员关系与 **`tenants.id`** 一致。可选编排见 **`deploy/scripts/bootstrap_demo_stack.py`** 与 Compose **`with-console`** profile（**`make demo-stack-up`** 会运行 **`demo-stack-init`**）。
 
 ### 创建额外租户
 

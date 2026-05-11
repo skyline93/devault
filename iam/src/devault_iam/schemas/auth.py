@@ -5,12 +5,6 @@ import uuid
 from pydantic import BaseModel, EmailStr, Field
 
 
-class RegisterIn(BaseModel):
-    email: EmailStr
-    password: str = Field(min_length=12, max_length=256)
-    name: str | None = Field(default=None, max_length=255)
-
-
 class LoginIn(BaseModel):
     email: EmailStr
     password: str
@@ -32,8 +26,14 @@ class TokenOut(BaseModel):
     refresh_token: str
     token_type: str = "bearer"
     expires_in: int
-    tenant_id: uuid.UUID
+    tenant_id: uuid.UUID | None = None
     permissions: list[str]
+    must_change_password: bool = False
+
+
+class ChangePasswordIn(BaseModel):
+    current_password: str
+    new_password: str = Field(min_length=12)
 
 
 class MfaEnrollStartOut(BaseModel):

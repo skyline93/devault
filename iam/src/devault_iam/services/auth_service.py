@@ -7,13 +7,13 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 import pyotp
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from devault_iam.db.models import Session as UserSession
-from devault_iam.db.models import TenantMember, User
+from devault_iam.db.models import User
 from devault_iam.security.jwt_tokens import AccessTokenClaims, issue_access_token
-from devault_iam.security.passwords import hash_password, verify_password
+from devault_iam.security.passwords import verify_password
 from devault_iam.services import permissions as perm_svc
 from devault_iam.settings import Settings
 
@@ -24,56 +24,6 @@ def _refresh_hash(raw: str) -> str:
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
-
-
-def count_users(db: Session) -> int:
-    return int(db.scalar(select(func.count()).select_from(User)) or 0)
-
-
-def register_user(
-    db: Session,
-    settings: Settings,
-    *,
-    email: str,
-    password: str,
-    name: str | None,
-) -> User:
-    email_n = email.strip().lower()
-    if db.scalar(select(User.id).where(User.email == email_n)) is not None:
-        raise ValueError("email_taken")
-    n_users = count_users(db)
-    if not settings.self_registration_enabled and n_users > 0:
-        raise ValueError("registration_disabled")
-
-    role_name = "platform_admin" if n_users == 0 else "operator"
-    role = perm_svc.get_template_role(db, role_name)
-    if role is None:
-        raise RuntimeError("rbac_seed_missing")
-    default_tenant = perm_svc.get_default_tenant(db)
-    if default_tenant is None:
-        raise RuntimeError("default_tenant_missing")
-
-    user = User(
-        email=email_n,
-        password_hash=hash_password(password),
-        name=(name or "").strip() or email_n.split("@")[0],
-        status="active",
-    )
-    db.add(user)
-    db.flush()
-    db.add(
-        TenantMember(
-            tenant_id=default_tenant.id,
-            user_id=user.id,
-            role_id=role.id,
-            status="active",
-        )
-    )
-    if n_users == 0 and default_tenant.owner_user_id is None:
-        default_tenant.owner_user_id = user.id
-    db.commit()
-    db.refresh(user)
-    return user
 
 
 def _mfa_satisfied(user: User, mfa_code: str | None) -> bool:
@@ -94,7 +44,7 @@ def login_user(
     tenant_id: uuid.UUID | None,
     client_ip: str | None,
     user_agent: str | None,
-) -> tuple[User, str]:
+) -> tuple[User, str, uuid.UUID | None]:
     email_n = email.strip().lower()
     user = db.scalar(select(User).where(User.email == email_n))
     if user is None or not verify_password(user.password_hash, password):
@@ -104,7 +54,7 @@ def login_user(
     if not _mfa_satisfied(user, mfa_code):
         raise ValueError("mfa_required" if not (mfa_code or "").strip() else "mfa_invalid")
 
-    tid = perm_svc.resolve_effective_tenant_id(db, user.id, requested_tenant_id=tenant_id)
+    eff = perm_svc.resolve_effective_tenant_for_login(db, user, tenant_id)
 
     raw_refresh = secrets.token_urlsafe(48)
     h = _refresh_hash(raw_refresh)
@@ -120,7 +70,7 @@ def login_user(
     )
     db.commit()
     db.refresh(user)
-    return user, raw_refresh
+    return user, raw_refresh, eff
 
 
 def revoke_refresh_token(db: Session, raw_refresh: str) -> int:
@@ -137,7 +87,7 @@ def revoke_refresh_token(db: Session, raw_refresh: str) -> int:
 class RefreshResult:
     user: User
     refresh_token: str
-    effective_tenant_id: uuid.UUID
+    effective_tenant_id: uuid.UUID | None
 
 
 def refresh_session(
@@ -163,7 +113,7 @@ def refresh_session(
         db.commit()
         raise ValueError("invalid_refresh")
 
-    effective_tid = perm_svc.resolve_effective_tenant_id(db, user.id, requested_tenant_id=tenant_id)
+    effective_tid = perm_svc.resolve_effective_tenant_for_login(db, user, tenant_id)
 
     db.delete(row)
     db.flush()
@@ -185,11 +135,26 @@ def refresh_session(
     return RefreshResult(user=user, refresh_token=new_raw, effective_tenant_id=effective_tid)
 
 
-def build_access_claims(db: Session, user: User, effective_tenant_id: uuid.UUID) -> AccessTokenClaims:
+def build_access_claims(db: Session, user: User, effective_tenant_id: uuid.UUID | None) -> AccessTokenClaims:
+    mfa_ok = (not user.mfa_enabled) or (user.totp_confirmed_at is not None)
+    if user.is_platform_admin:
+        role = perm_svc.get_template_role(db, "platform_admin")
+        perms = perm_svc.permission_keys_for_role(db, role.id) if role else []
+        return AccessTokenClaims(
+            sub=str(user.id),
+            tid=None,
+            tids=[],
+            perm=sorted(perms),
+            pk="platform",
+            mfa=mfa_ok,
+            email=user.email,
+            name=(user.name or "").strip(),
+        )
+    if effective_tenant_id is None:
+        raise RuntimeError("effective_tenant_id required for non-platform users")
     tids = perm_svc.tenant_ids_for_user(db, user.id)
     perms = perm_svc.union_permission_keys_for_user(db, user.id)
     pk = perm_svc.principal_kind_for_user(db, user.id)
-    mfa_ok = (not user.mfa_enabled) or (user.totp_confirmed_at is not None)
     return AccessTokenClaims(
         sub=str(user.id),
         tid=effective_tenant_id,
@@ -208,7 +173,7 @@ def issue_access_for_user(
     private_key_pem: str,
     settings: Settings,
     user: User,
-    effective_tenant_id: uuid.UUID,
+    effective_tenant_id: uuid.UUID | None,
 ) -> str:
     claims = build_access_claims(db, user, effective_tenant_id)
     return issue_access_token(

@@ -14,6 +14,8 @@ from devault_iam.db.session import SessionLocal, reset_engine_for_tests
 from devault_iam.services import permissions as perm_svc
 from devault_iam.settings import clear_settings_cache, get_settings
 
+from support_users import create_user_with_tenant_membership
+
 
 @pytest.fixture
 def client() -> TestClient:
@@ -47,16 +49,44 @@ def _promote_member_to_platform_admin(user_id: uuid.UUID, tenant_id: uuid.UUID) 
         db.close()
 
 
-def _register(client: TestClient) -> tuple[str, str, uuid.UUID, uuid.UUID]:
-    email = f"p2_{uuid.uuid4().hex[:16]}@example.com"
-    r = client.post(
-        "/v1/auth/register",
-        json={"email": email, "password": _password(), "name": "P2 User"},
+def _tenant_user_promoted_to_platform_jwt(
+    client: TestClient,
+    plat_email: str,
+    plat_password: str,
+) -> tuple[str, str, uuid.UUID, uuid.UUID]:
+    """Create a tenant via platform JWT, seed a user, promote membership to ``platform_admin`` role, login."""
+    pr = client.post("/v1/auth/login", json={"email": plat_email, "password": plat_password})
+    assert pr.status_code == 200, pr.text
+    plat_access = pr.json()["access_token"]
+    slug = f"p2-{uuid.uuid4().hex[:10]}"
+    rt = client.post(
+        "/v1/tenants",
+        json={"name": "P2 Org", "slug": slug},
+        headers={"Authorization": f"Bearer {plat_access}"},
     )
-    assert r.status_code == 201, r.text
+    assert rt.status_code == 201, rt.text
+    tenant_id = uuid.UUID(rt.json()["id"])
+    email = f"p2_{uuid.uuid4().hex[:16]}@example.com"
+    db = SessionLocal()
+    try:
+        u = create_user_with_tenant_membership(
+            db,
+            email=email,
+            password_plain=_password(),
+            tenant_id=tenant_id,
+            role_name="operator",
+            display_name="P2 User",
+        )
+        _promote_member_to_platform_admin(u.id, tenant_id)
+    finally:
+        db.close()
+
+    r = client.post("/v1/auth/login", json={"email": email, "password": _password()})
+    assert r.status_code == 200, r.text
     body = r.json()
     access = body["access_token"]
-    tid = uuid.UUID(body["tenant_id"])
+    tid_out = uuid.UUID(str(body["tenant_id"]))
+    assert tid_out == tenant_id
     pub = client.app.state.jwt_public_pem
     payload = jwt.decode(
         access,
@@ -66,12 +96,14 @@ def _register(client: TestClient) -> tuple[str, str, uuid.UUID, uuid.UUID]:
         issuer=get_settings().jwt_issuer,
     )
     uid = uuid.UUID(str(payload["sub"]))
-    _promote_member_to_platform_admin(uid, tid)
-    return access, email, tid, uid
+    return access, email, tid_out, uid
 
 
-def test_api_key_token_decode_and_authorize(client: TestClient) -> None:
-    access, _email, tid, _uid = _register(client)
+def test_api_key_token_decode_and_authorize(
+    client: TestClient,
+    iam_platform_credentials: tuple[str, str],
+) -> None:
+    access, _email, tid, _uid = _tenant_user_promoted_to_platform_jwt(client, *iam_platform_credentials)
     headers = {"Authorization": f"Bearer {access}"}
 
     cr = client.post(
@@ -129,12 +161,15 @@ def test_api_key_token_decode_and_authorize(client: TestClient) -> None:
     assert deny.json() == {"allowed": False}
 
 
-def test_authorize_internal_header_when_token_configured(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_authorize_internal_header_when_token_configured(
+    monkeypatch: pytest.MonkeyPatch,
+    iam_platform_credentials: tuple[str, str],
+) -> None:
     monkeypatch.setenv("IAM_INTERNAL_API_TOKEN", "internal-test-token")
     clear_settings_cache()
     reset_engine_for_tests()
     with TestClient(create_app()) as c:
-        access, _email, tid, uid = _register(c)
+        access, _email, tid, uid = _tenant_user_promoted_to_platform_jwt(c, *iam_platform_credentials)
         body = {
             "subject": {"type": "user", "id": str(uid)},
             "tenant_id": str(tid),
@@ -154,8 +189,11 @@ def test_authorize_internal_header_when_token_configured(monkeypatch: pytest.Mon
         assert me.status_code == 200
 
 
-def test_api_key_disabled_rejects_token_exchange(client: TestClient) -> None:
-    access, _email, tid, _uid = _register(client)
+def test_api_key_disabled_rejects_token_exchange(
+    client: TestClient,
+    iam_platform_credentials: tuple[str, str],
+) -> None:
+    access, _email, tid, _uid = _tenant_user_promoted_to_platform_jwt(client, *iam_platform_credentials)
     headers = {"Authorization": f"Bearer {access}"}
 
     cr = client.post(

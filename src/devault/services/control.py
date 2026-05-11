@@ -46,7 +46,8 @@ def validate_backup_config_for_tenant(db: Session, tenant_id: uuid.UUID, cfg: Fi
 
 
 def create_tenant(db: Session, body: TenantCreate) -> Tenant:
-    t = Tenant(name=body.name.strip(), slug=body.slug)
+    tid = body.id or uuid.uuid4()
+    t = Tenant(id=tid, name=body.name.strip(), slug=body.slug)
     db.add(t)
     try:
         db.commit()

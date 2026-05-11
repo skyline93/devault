@@ -1,4 +1,4 @@
-"""P0: IAM core schema + RBAC seed + default tenant.
+"""P0: IAM core schema + RBAC seed (no default tenant).
 
 Revision ID: p0_001
 Revises:
@@ -229,30 +229,6 @@ def upgrade() -> None:
     op.bulk_insert(
         rp,
         rp_rows("platform_admin", all_perms + [p_platform_admin]),
-    )
-
-    tenant_default_id = _nid("tenant.default")
-    tenants_t = sa.table(
-        "tenants",
-        sa.column("id", sa.UUID()),
-        sa.column("name", sa.String()),
-        sa.column("slug", sa.String()),
-        sa.column("plan", sa.String()),
-        sa.column("status", sa.String()),
-        sa.column("owner_user_id", sa.UUID()),
-    )
-    op.bulk_insert(
-        tenants_t,
-        [
-            {
-                "id": tenant_default_id,
-                "name": "Default",
-                "slug": "default",
-                "plan": "standard",
-                "status": "active",
-                "owner_user_id": None,
-            }
-        ],
     )
 
 

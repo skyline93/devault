@@ -146,7 +146,8 @@ def auth_context_from_iam_payload(payload: dict[str, Any]) -> AuthContext:
             iam_perm=perm_f,
         )
 
-    if pk == "platform" or "devault.platform.admin" in perm_f:
+    # Platform scope must match IAM ``pk=platform`` (not merely holding ``devault.platform.admin`` on a tenant JWT).
+    if pk == "platform":
         return AuthContext(
             role="admin",
             allowed_tenant_ids=None,

@@ -17,7 +17,7 @@ docker compose pull && docker compose up -d
 
 ## 控制台 + IAM（本地手测，接近生产链路）
 
-仓库根目录执行 **`make demo-stack-up`**（或 `cd deploy` 后设置 **`DEVAULT_IMAGE=devault:local`** 并 **`docker compose --profile with-console up -d --build`**）：会构建当前代码中的控制面镜像并拉起 **postgres-iam / redis-iam / iam**、**api**（`DEVAULT_IAM_JWKS_URL` 指向容器内 **iam**）、**console**（同源 **`/iam-api`** 反代）。环境变量示例：**`deploy/.env.stack.example`**（可复制为 **`deploy/.env`**）。
+仓库根目录执行 **`make demo-stack-up`**（或 `cd deploy` 后设置 **`DEVAULT_IMAGE=devault:local`** 并 **`docker compose --profile with-console up -d --build`**）：会构建当前代码中的控制面镜像并拉起 **postgres-iam / redis-iam / iam**（默认 **`IAM_DEMO_AUTO_BOOTSTRAP`** 下迁移后幂等创建演示平台用户）、**api**（`DEVAULT_IAM_JWKS_URL` 指向容器内 **iam**）、**`demo-stack-init`**（用默认 **`DEMO_STACK_PLATFORM_*`** 将 IAM **`demo`** 租户镜像到 DeVault）、**console**（在 init 成功退出后启动；同源 **`/iam-api`** 反代）。默认演示平台账号与覆盖方式见 **`deploy/docker-compose.yml`** 文件头注释及 **`deploy/.env.stack.example`**（可复制为 **`deploy/.env`**）。
 
 - 控制台：<http://127.0.0.1:8080/>  
 - IAM OpenAPI：<http://127.0.0.1:8100/docs>  

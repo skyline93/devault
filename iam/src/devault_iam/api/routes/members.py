@@ -11,6 +11,7 @@ from devault_iam.api.principal import Principal, ensure_tenant_scope, get_curren
 from devault_iam.db.models import Role, TenantMember, User
 from devault_iam.schemas.tenants import MemberCreateIn, MemberOut, MemberPatchIn
 from devault_iam.services import permissions as perm_svc
+from devault_iam.services.platform_user_rules import ensure_user_may_receive_tenant_membership
 from devault_iam.services.audit_service import record_audit_event
 from devault_iam.services.permission_cache import invalidate_user_tenant
 from devault_iam.settings import get_settings
@@ -65,6 +66,10 @@ def add_member(
     user = db.scalar(select(User).where(User.email == email))
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="user_not_found")
+    try:
+        ensure_user_may_receive_tenant_membership(user)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     role = perm_svc.get_template_role(db, body.role)
     if role is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_role")
@@ -107,6 +112,9 @@ def patch_member(
     m = db.get(TenantMember, member_id)
     if m is None or m.tenant_id != tenant_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="member_not_found")
+    target = db.get(User, m.user_id)
+    if target is not None and target.is_platform_admin:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="platform_user_cannot_join_tenant")
     role = perm_svc.get_template_role(db, body.role)
     if role is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_role")
@@ -141,6 +149,9 @@ def delete_member(
     m = db.get(TenantMember, member_id)
     if m is None or m.tenant_id != tenant_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="member_not_found")
+    target = db.get(User, m.user_id)
+    if target is not None and target.is_platform_admin:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="platform_user_cannot_join_tenant")
     if m.user_id == principal.user_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="cannot_remove_self")
     uid = m.user_id

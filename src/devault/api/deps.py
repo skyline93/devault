@@ -4,7 +4,6 @@ import uuid
 from collections.abc import Generator
 
 from fastapi import Depends, Header, HTTPException, status
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from devault.db.models import Tenant
@@ -12,7 +11,7 @@ from devault.db.session import SessionLocal
 from devault.security.auth_context import AuthContext, dev_open_auth_context
 from devault.security.iam_jwt import try_decode_iam_bearer
 from devault.security.policy import authentication_enabled
-from devault.settings import Settings, get_settings
+from devault.settings import get_settings
 
 
 def get_db() -> Generator[Session, None, None]:
@@ -87,29 +86,24 @@ def _resolve_tenant_row(
     db: Session,
     *,
     x_devault_tenant_id: str | None,
-    settings: Settings,
 ) -> Tenant:
-    if x_devault_tenant_id is not None:
-        raw = x_devault_tenant_id.strip()
-        if not raw:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="empty X-DeVault-Tenant-Id")
-        try:
-            tid = uuid.UUID(raw)
-        except ValueError as e:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="invalid X-DeVault-Tenant-Id",
-            ) from e
-        t = db.get(Tenant, tid)
-        if t is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="tenant not found")
-        return t
-    t = db.scalar(select(Tenant).where(Tenant.slug == settings.default_tenant_slug))
-    if t is None:
+    """Resolve tenant **only** from ``X-DeVault-Tenant-Id`` (no slug / default fallback)."""
+    if x_devault_tenant_id is None or not str(x_devault_tenant_id).strip():
         raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"no tenant with slug {settings.default_tenant_slug!r}; run migrations",
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="X-DeVault-Tenant-Id header is required",
         )
+    raw = x_devault_tenant_id.strip()
+    try:
+        tid = uuid.UUID(raw)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="invalid X-DeVault-Tenant-Id",
+        ) from e
+    t = db.get(Tenant, tid)
+    if t is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="tenant not found")
     return t
 
 
@@ -118,7 +112,6 @@ def get_effective_tenant(
     x_devault_tenant_id: str | None = Header(None, alias="X-DeVault-Tenant-Id"),
     auth: AuthContext = Depends(get_auth_context),
 ) -> Tenant:
-    settings = get_settings()
-    t = _resolve_tenant_row(db, x_devault_tenant_id=x_devault_tenant_id, settings=settings)
+    t = _resolve_tenant_row(db, x_devault_tenant_id=x_devault_tenant_id)
     auth.ensure_tenant_access(t.id)
     return t

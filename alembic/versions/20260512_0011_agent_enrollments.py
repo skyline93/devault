@@ -44,7 +44,7 @@ def upgrade() -> None:
                    now(),
                    now()
             FROM tenants t
-            WHERE t.slug = 'default'
+            ORDER BY t.created_at ASC
             LIMIT 1
             """,
         ),

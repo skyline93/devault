@@ -7,16 +7,17 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from devault_iam.api.deps import get_db
-from devault_iam.api.principal import get_jwt_pem, parse_optional_tenant_header
+from devault_iam.api.principal import Principal, get_current_principal, get_jwt_pem, parse_optional_tenant_header
 from devault_iam.db.models import ApiKeyScope, User
-from devault_iam.schemas.auth import LoginIn, LogoutIn, RefreshIn, RegisterIn, TokenOut
+from devault_iam.schemas.auth import ChangePasswordIn, LoginIn, LogoutIn, RefreshIn, TokenOut
 from devault_iam.schemas.p2 import ApiKeyGrantIn, ApiKeyTokenOut
 from devault_iam.security.rate_limit import check_sliding_login_rate_limit, check_sliding_rate_limit
 from devault_iam.services import api_key_service
 from devault_iam.services import auth_service
 from devault_iam.services import permissions as perm_svc
 from devault_iam.services.audit_service import mask_email, record_audit_event
-from devault_iam.services.auth_service import issue_access_for_user, login_user, refresh_session, register_user
+from devault_iam.security.passwords import assert_password_policy, hash_password, verify_password
+from devault_iam.services.auth_service import issue_access_for_user, login_user, refresh_session
 from devault_iam.settings import Settings, get_settings
 
 router = APIRouter(prefix="/v1/auth", tags=["auth"])
@@ -46,7 +47,7 @@ def _issue_token_bundle(
     settings: Settings,
     *,
     user: User,
-    effective_tid: uuid.UUID,
+    effective_tid: uuid.UUID | None,
     refresh_raw: str,
 ) -> TokenOut:
     priv, _pub = get_jwt_pem(request)
@@ -64,67 +65,8 @@ def _issue_token_bundle(
         expires_in=settings.access_token_ttl_seconds,
         tenant_id=effective_tid,
         permissions=perms,
+        must_change_password=bool(user.must_change_password),
     )
-
-
-@router.post("/register", response_model=TokenOut, status_code=status.HTTP_201_CREATED)
-def post_register(
-    request: Request,
-    body: RegisterIn,
-    db: Session = Depends(get_db),
-    settings: Settings = Depends(get_settings),
-    x_devault_tenant_id: str | None = Header(default=None, alias="X-DeVault-Tenant-Id"),
-    x_tenant_id: str | None = Header(default=None, alias="X-Tenant-Id"),
-) -> TokenOut:
-    try:
-        register_user(
-            db,
-            settings,
-            email=str(body.email),
-            password=body.password,
-            name=body.name,
-        )
-    except ValueError as e:
-        code = str(e)
-        record_audit_event(
-            action="auth.register",
-            outcome="failure",
-            detail=code,
-            context={"email_masked": mask_email(str(body.email))},
-            **_audit_req(request),
-        )
-        if code == "email_taken":
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="email_taken") from e
-        if code == "registration_disabled":
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="registration_disabled") from e
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=code) from e
-
-    hdr_tid = parse_optional_tenant_header(x_devault_tenant_id, x_tenant_id)
-    try:
-        u2, refresh = login_user(
-            db,
-            settings,
-            email=str(body.email),
-            password=body.password,
-            mfa_code=None,
-            tenant_id=hdr_tid,
-            client_ip=_client_ip(request),
-            user_agent=request.headers.get("user-agent"),
-        )
-    except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="login_after_register_failed",
-        )
-    tid = perm_svc.resolve_effective_tenant_id(db, u2.id, requested_tenant_id=hdr_tid)
-    record_audit_event(
-        action="auth.register",
-        outcome="success",
-        actor_user_id=u2.id,
-        tenant_id=tid,
-        **_audit_req(request),
-    )
-    return _issue_token_bundle(request, db, settings, user=u2, effective_tid=tid, refresh_raw=refresh)
 
 
 @router.post("/login", response_model=TokenOut)
@@ -157,7 +99,7 @@ def post_login(
     requested = body.tenant_id or hdr_tid
 
     try:
-        user, refresh = login_user(
+        user, refresh, eff_tid = login_user(
             db,
             settings,
             email=str(body.email),
@@ -185,17 +127,58 @@ def post_login(
             ) from e
         if code == "mfa_invalid":
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="mfa_invalid") from e
+        if code == "platform_user_tenant_disallowed":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="platform_user_tenant_disallowed",
+            ) from e
+        if code in ("tenant not allowed for user", "user has no tenant memberships"):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="tenant_not_allowed") from e
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid_credentials") from e
 
-    tid = perm_svc.resolve_effective_tenant_id(db, user.id, requested_tenant_id=requested)
     record_audit_event(
         action="auth.login",
         outcome="success",
         actor_user_id=user.id,
-        tenant_id=tid,
+        tenant_id=eff_tid,
         **_audit_req(request),
     )
-    return _issue_token_bundle(request, db, settings, user=user, effective_tid=tid, refresh_raw=refresh)
+    return _issue_token_bundle(request, db, settings, user=user, effective_tid=eff_tid, refresh_raw=refresh)
+
+
+@router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT)
+def post_change_password(
+    request: Request,
+    body: ChangePasswordIn,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_current_principal),
+) -> None:
+    user = db.get(User, principal.user_id)
+    if user is None or user.status != "active":
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid_token")
+    if not verify_password(user.password_hash, body.current_password):
+        record_audit_event(
+            action="auth.password_change",
+            outcome="failure",
+            actor_user_id=principal.user_id,
+            detail="invalid_password",
+            **_audit_req(request),
+        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_current_password")
+    try:
+        assert_password_policy(body.new_password)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+    user.password_hash = hash_password(body.new_password)
+    user.must_change_password = False
+    db.add(user)
+    db.commit()
+    record_audit_event(
+        action="auth.password_change",
+        outcome="success",
+        actor_user_id=principal.user_id,
+        **_audit_req(request),
+    )
 
 
 @router.post("/refresh", response_model=TokenOut)
@@ -218,14 +201,24 @@ def post_refresh(
             client_ip=_client_ip(request),
             user_agent=request.headers.get("user-agent"),
         )
-    except ValueError:
+    except ValueError as e:
+        code = str(e)
         record_audit_event(
             action="auth.refresh",
             outcome="failure",
-            detail="invalid_refresh",
+            detail=code,
             **_audit_req(request),
         )
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid_refresh") from None
+        if code == "invalid_refresh":
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid_refresh") from e
+        if code == "platform_user_tenant_disallowed":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="platform_user_tenant_disallowed",
+            ) from e
+        if code in ("tenant not allowed for user", "user has no tenant memberships"):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="tenant_not_allowed") from e
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid_refresh") from e
 
     record_audit_event(
         action="auth.refresh",

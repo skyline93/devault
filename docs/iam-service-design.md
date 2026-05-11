@@ -146,10 +146,12 @@ IAM **只识别 permission `key` 字符串**，不解析 DeVault 内部资源类
 
 | 分组 | 方法 | 路径 | 说明 |
 |------|------|------|------|
-| Auth | POST | `/v1/auth/register` | 可选：自助注册 |
-| | POST | `/v1/auth/login` | 邮箱密码 → access + refresh |
+| Auth | POST | `/v1/auth/login` | 邮箱密码 → access + refresh（平台员可无租户上下文；租户用户多租户时需显式租户）；响应含 `must_change_password` |
 | | POST | `/v1/auth/refresh` | 刷新 access |
 | | POST | `/v1/auth/logout` | 吊销 refresh |
+| | POST | `/v1/auth/change-password` | Bearer：当前密码 + 新密码；成功后清除 `must_change_password` |
+| Platform | POST | `/v1/platform/users` | 平台 JWT：创建普通用户（可选 `must_change_password`） |
+| | PATCH | `/v1/platform/users/{id}` | 平台 JWT：重置密码 / 改 `must_change_password` |
 | | POST | `/v1/auth/token` | `grant_type=api_key` 换 JWT |
 | | … | `/v1/auth/mfa/*` | MFA 注册/校验 |
 | Tenants | GET/POST | `/v1/tenants` | 创建/列举（按平台策略约束） |
@@ -161,7 +163,9 @@ IAM **只识别 permission `key` 字符串**，不解析 DeVault 内部资源类
 | Authorize | POST | `/v1/authorize` | 统一授权判定 |
 | JWKS | GET | `/.well-known/jwks.json` 或 `/v1/jwks` | 公钥发布 |
 
-除 login/register/jwks 等公开端点外，需 **`Authorization: Bearer`**。
+**DeVault 控制面（对齐）**：除 **`GET/POST /api/v1/tenants`** 等外，REST 须 **`X-DeVault-Tenant-Id`**（无默认 slug）；**`POST /api/v1/tenants`** 可选 **`id`** 与 IAM 租户 UUID 一致；脚本见仓库 **`deploy/scripts/bootstrap_demo_stack.py`**。
+
+除 login/jwks 等公开端点外，需 **`Authorization: Bearer`**。
 
 ---
 

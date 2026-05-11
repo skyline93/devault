@@ -16,6 +16,7 @@ from devault_iam.api.routes import auth as auth_routes
 from devault_iam.api.routes import authorize as authorize_routes
 from devault_iam.api.routes import me as me_routes
 from devault_iam.api.routes import members as members_routes
+from devault_iam.api.routes import platform_users as platform_users_routes
 from devault_iam.api.routes import mfa as mfa_routes
 from devault_iam.api.routes import ready as ready_routes
 from devault_iam.api.routes import tenants as tenants_routes
@@ -69,6 +70,7 @@ def create_app() -> FastAPI:
     app.include_router(tenants_routes.router)
     app.include_router(members_routes.router)
     app.include_router(me_routes.router)
+    app.include_router(platform_users_routes.router)
     app.include_router(api_keys_routes.router)
     app.include_router(authorize_routes.router)
     app.include_router(audit_logs_routes.router)

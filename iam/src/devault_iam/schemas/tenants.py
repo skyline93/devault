@@ -38,8 +38,8 @@ class MemberOut(BaseModel):
 
 class MemberCreateIn(BaseModel):
     email: str = Field(min_length=3, max_length=255)
-    role: str = Field(pattern=r"^(tenant_admin|operator|auditor|platform_admin)$")
+    role: str = Field(pattern=r"^(tenant_admin|operator|auditor)$")
 
 
 class MemberPatchIn(BaseModel):
-    role: str = Field(pattern=r"^(tenant_admin|operator|auditor|platform_admin)$")
+    role: str = Field(pattern=r"^(tenant_admin|operator|auditor)$")

@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from devault_iam.api.deps import get_db
 from devault_iam.api.principal import Principal, ensure_tenant_scope, get_current_principal, require_permission
-from devault_iam.db.models import Tenant, TenantMember
+from devault_iam.db.models import Tenant, TenantMember, User
 from devault_iam.services import permissions as perm_svc
 from devault_iam.schemas.tenants import TenantCreateIn, TenantOut, TenantPatchIn
 
@@ -20,6 +20,9 @@ def list_tenants(
     db: Session = Depends(get_db),
     principal: Principal = Depends(get_current_principal),
 ) -> list[Tenant]:
+    if principal.is_platform_admin:
+        require_permission(principal, "devault.platform.admin")
+        return list(db.scalars(select(Tenant).order_by(Tenant.slug)).all())
     if not principal.tenant_ids:
         return []
     rows = list(
@@ -41,17 +44,21 @@ def create_tenant(
     t = Tenant(name=body.name.strip(), slug=slug, plan="standard", status="active", owner_user_id=principal.user_id)
     db.add(t)
     db.flush()
-    admin_role = perm_svc.get_template_role(db, "tenant_admin")
-    if admin_role is None:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="rbac_seed_missing")
-    db.add(
-        TenantMember(
-            tenant_id=t.id,
-            user_id=principal.user_id,
-            role_id=admin_role.id,
-            status="active",
+    owner = db.get(User, principal.user_id)
+    if owner is None:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="user_missing")
+    if not owner.is_platform_admin:
+        admin_role = perm_svc.get_template_role(db, "tenant_admin")
+        if admin_role is None:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="rbac_seed_missing")
+        db.add(
+            TenantMember(
+                tenant_id=t.id,
+                user_id=principal.user_id,
+                role_id=admin_role.id,
+                status="active",
+            )
         )
-    )
     db.commit()
     db.refresh(t)
     return t

@@ -20,7 +20,7 @@ Authorization: Bearer <DEVAULT_API_TOKEN>
 X-DeVault-Tenant-Id: <tenant-uuid>
 ```
 
-省略时使用 **`DEVAULT_DEFAULT_TENANT_SLUG`**（默认 `default`）。详见 [租户与访问控制](../admin/tenants-and-rbac.md)。
+**必须**显式提供；省略返回 **400**。详见 [租户与访问控制](../admin/tenants-and-rbac.md)。
 
 ## RBAC 与数据库 API 密钥
 

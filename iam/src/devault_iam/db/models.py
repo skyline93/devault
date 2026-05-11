@@ -22,6 +22,8 @@ class User(Base):
     mfa_enabled: Mapped[bool] = mapped_column(Boolean(), nullable=False, default=False)
     totp_secret: Mapped[str | None] = mapped_column(Text(), nullable=True)
     totp_confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    is_platform_admin: Mapped[bool] = mapped_column(Boolean(), nullable=False, default=False, index=True)
+    must_change_password: Mapped[bool] = mapped_column(Boolean(), nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

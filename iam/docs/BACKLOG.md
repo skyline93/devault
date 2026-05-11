@@ -7,7 +7,7 @@
 
 **范围说明（`iam-service-design`）**：本服务 **不包含** `docs-old/iam.md` 中的 **Service Account / Agent** 数据面；机器身份与 gRPC enrollment **留在 DeVault**。`docs-old` 中的 **Policy Engine / SSO / JIT** 列入 **低优先级或后续 Epic**，不在首版阻塞项。
 
-**当前代码基线**：`iam/` 为独立 FastAPI 服务（Alembic 至 **`p3_001`**：人类认证、租户与成员、API Key、`/v1/authorize`、Redis 限流与权限缓存、**审计表**、**Prometheus `/metrics`**、访问日志与 **`X-Request-Id`**）；细节以 OpenAPI 与测试为准。
+**当前代码基线**：`iam/` 为独立 FastAPI 服务（Alembic 至 **`p4_001`**：在 **`p3_001`** 之上增加 ``users.is_platform_admin`` / ``must_change_password``；**`iam-admin bootstrap`** CLI，见 **[`docs/iam-tenant-lifecycle-and-bootstrap.md`](../../docs/iam-tenant-lifecycle-and-bootstrap.md)**）。成员 API **拒绝**将 ``is_platform_admin`` 用户加入租户；成员 JSON **不得**使用 ``platform_admin`` 角色（平台身份仅用标志位 + 后续 JWT 分支）。其余：人类认证、租户与成员、API Key、`/v1/authorize`、Redis 限流与权限缓存、**审计表**、**Prometheus `/metrics`**、访问日志与 **`X-Request-Id`**；细节以 OpenAPI 与测试为准。
 
 ---
 
@@ -31,7 +31,7 @@
    - [x] `sessions`（refresh 吊销、可选与 Redis 黑名单联动）— 对齐 `docs-old/iam.md` §sessions（表结构已就绪；Redis 黑名单为后续）  
    - [x] `tenants`、`tenant_members`（代理主键 `id`、`role_id` FK）  
    - [x] `roles`（`tenant_id` nullable 平台角色）、`permissions`、`role_permissions`（含 PG14 部分唯一索引）  
-   - [x] **种子数据**：6 条 `permissions`、`tenant_admin` / `operator` / `auditor` / `platform_admin` 及 `role_permissions`；默认租户 `slug=default`  
+   - [x] **种子数据**：6 条 `permissions`、`tenant_admin` / `operator` / `auditor` / `platform_admin` 及 `role_permissions`；**不**再插入占位租户（首迁 `p0_001` 仅 schema + RBAC 模板）  
    - [x] 占位 revision `0001_initial` 已移除，基线为 **`p0_001`**（`alembic/versions/p0_001_schema_and_seed.py`）  
 
 2. **数据库会话与仓库层**  
@@ -54,7 +54,7 @@
 
 5. **密码与账户**  
    - [x] Argon2id 哈希与校验（`security/passwords.py`，最少 12 位，与 DeVault 对齐）  
-   - [x] `POST /v1/auth/register`（`IAM_SELF_REGISTRATION_ENABLED`；首用户 `platform_admin`，其余 `operator` 入默认租户）  
+   - [x] ~~`POST /v1/auth/register`~~（**已删除**；首用户由 **`iam-admin bootstrap`** 创建，见 `docs/iam-tenant-lifecycle-and-bootstrap.md`）  
    - [x] `POST /v1/auth/login` → **access JWT** + **refresh**（`sessions.refresh_token_hash`）  
    - [x] `POST /v1/auth/refresh`、`POST /v1/auth/logout`（吊销 refresh；refresh 旋转）  
    - [x] 登录限流（Redis `INCR`，不可用时 fail-open；`IAM_LOGIN_RATE_LIMIT_PER_MINUTE`）  

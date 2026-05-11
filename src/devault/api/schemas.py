@@ -8,6 +8,10 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 
 class TenantCreate(BaseModel):
+    id: uuid.UUID | None = Field(
+        default=None,
+        description="Optional stable UUID when mirroring a tenant created in IAM (see deploy/scripts).",
+    )
     name: str = Field(..., min_length=1, max_length=255)
     slug: str = Field(
         ...,
@@ -106,7 +110,7 @@ class AuthSessionOut(BaseModel):
 
     role: Literal["admin", "operator", "auditor"] = Field(
         ...,
-        description="Effective RBAC role for the current `X-DeVault-Tenant-Id` / default tenant context.",
+        description="Effective RBAC role for the current `X-DeVault-Tenant-Id` tenant context.",
     )
     principal_label: str = Field(
         ...,

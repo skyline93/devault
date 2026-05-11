@@ -55,7 +55,7 @@ _OPENAPI_TAGS = [
     },
     {
         "name": "tenants",
-        "description": "List and create tenants; other resources are scoped per `X-DeVault-Tenant-Id` (or default slug).",
+        "description": "List and create tenants; other resources require `X-DeVault-Tenant-Id` (UUID) on each tenant-scoped request.",
     },
     {
         "name": "auth",

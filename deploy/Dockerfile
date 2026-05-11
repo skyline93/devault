@@ -12,6 +12,7 @@ ENV PIP_DISABLE_PIP_VERSION_CHECK=1
 COPY pyproject.toml README.md alembic.ini /app/
 COPY alembic /app/alembic
 COPY src /app/src
+COPY deploy/scripts /app/deploy/scripts
 
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install --upgrade pip setuptools wheel \

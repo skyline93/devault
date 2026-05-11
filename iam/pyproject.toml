@@ -36,6 +36,7 @@ dev = [
 
 [project.scripts]
 devault-iam-serve = "devault_iam.cli:main"
+iam-admin = "devault_iam.cli_admin:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -34,7 +34,28 @@ export IAM_DATABASE_URL=...
 alembic upgrade head
 ```
 
-若本地曾应用过已删除的占位 revision **`0001_initial`**，请先 `alembic downgrade base` 或手动清理 `alembic_version` 后再执行 `upgrade head`（当前链为 **`p0_001` → `p2_001` → `p3_001`**，以 `alembic heads` 为准）。
+若本地曾应用过已删除的占位 revision **`0001_initial`**，请先 `alembic downgrade base` 或手动清理 `alembic_version` 后再执行 `upgrade head`（当前链为 **`p0_001` → `p2_001` → `p3_001` → `p4_001`**，以 `alembic heads` 为准）。
+
+## 平台引导 CLI（`iam-admin`）
+
+在 **`alembic upgrade head`** 之后，于**空库或尚无 `is_platform_admin` 用户**时，使用独立 CLI 创建首个平台运维账号（**不**经过 HTTP 自助注册；**不**随 `uvicorn` 启动）：
+
+```bash
+cd iam
+pip install -e .
+export IAM_DATABASE_URL=postgresql+psycopg://...
+# 交互输入密码（TTY）
+iam-admin bootstrap create-platform-user --email admin@example.com --name "Admin"
+# 或从文件读首行密码（适合 CI / 无 TTY）
+printf '%s\n' 'YourLongPasswordHere' > /tmp/iam-bootstrap.pw
+iam-admin bootstrap create-platform-user --email admin@example.com --password-file /tmp/iam-bootstrap.pw
+rm /tmp/iam-bootstrap.pw
+
+# 查看是否已有平台员
+iam-admin bootstrap status
+```
+
+第二次执行 `create-platform-user` 会因「已存在平台员」而失败（幂等）。详见 **[`docs/iam-tenant-lifecycle-and-bootstrap.md`](../docs/iam-tenant-lifecycle-and-bootstrap.md)**。
 
 ## Docker
 
@@ -62,7 +83,6 @@ docker compose -f deploy/docker-compose.iam.yml up --build
 | `IAM_CORS_ORIGINS` | 逗号分隔的 Console origin，可为空 |
 | `IAM_ENVIRONMENT` | `development`（默认）或 `production`；生产环境会强制校验 JWT 与 HTTPS issuer |
 | `IAM_TEST_DATABASE_URL` | 仅测试：覆盖默认的 `postgresql+psycopg://iam:iam@127.0.0.1:5433/iam` |
-| `IAM_SELF_REGISTRATION_ENABLED` | 默认 `true`；为 `false` 时除「库中无任何用户」外的自助注册返回 403 |
 | `IAM_ACCESS_TOKEN_TTL_SECONDS` | 默认 `900` |
 | `IAM_REFRESH_TOKEN_TTL_SECONDS` | 默认 `604800`（7 天） |
 | `IAM_LOGIN_RATE_LIMIT_PER_MINUTE` | 默认 `60`（依赖 Redis；不可用时跳过限流） |
@@ -76,14 +96,21 @@ docker compose -f deploy/docker-compose.iam.yml up --build
 
 ### P1 HTTP 接口摘要
 
-- `POST /v1/auth/register` · `POST /v1/auth/login` · `POST /v1/auth/refresh` · `POST /v1/auth/logout`
+- `POST /v1/auth/login` · `POST /v1/auth/refresh` · `POST /v1/auth/logout` · `POST /v1/auth/change-password`（Bearer；成功后清除 `must_change_password`）
 - `POST /v1/auth/mfa/enroll/start` · `POST /v1/auth/mfa/enroll/confirm` · `POST /v1/auth/mfa/disable`（后两者需 Bearer）
 - `GET /.well-known/jwks.json`
 - `GET /v1/me`（Bearer）
 - `GET/POST /v1/tenants` · `GET/PATCH /v1/tenants/{id}`（Bearer + 权限见 OpenAPI）
 - `GET/POST/PATCH/DELETE /v1/tenants/{tenant_id}/members/...`（Bearer）
+- `POST /v1/platform/users` · `PATCH /v1/platform/users/{id}`（**仅** `users.is_platform_admin` 的平台 JWT；创建/维护普通用户，可选 `must_change_password`）
 
-登录/注册/刷新可带 **`X-DeVault-Tenant-Id`** 或 **`X-Tenant-Id`** 选择当前租户（须为成员）。
+登录/刷新可带 **`X-DeVault-Tenant-Id`** 或 **`X-Tenant-Id`** 选择当前租户（须为成员；平台管理员 JWT 无 `tid` 时不得指定业务租户头）。  
+登录/刷新响应体含 **`must_change_password`**（与 `users.must_change_password` 一致）。
+
+### 集成测试（`pytest`）
+
+- CI 在空库上执行 **`alembic upgrade head`** 后跑 **`pytest`**；会话级夹具会 **`iam-admin bootstrap`** 一次并把凭据写入 **`/tmp/devault_iam_plat_<hash>.json`**（由 `IAM_TEST_DATABASE_URL` 派生）。  
+- 若本地 Postgres **已有平台员**且不存在该缓存文件，相关用例会 **skip**：请设置 **`IAM_TEST_PLATFORM_EMAIL`** / **`IAM_TEST_PLATFORM_PASSWORD`**，或清空库后重跑，或按 `iam/tests/conftest.py` 说明手写 JSON 缓存文件。
 
 ### P2 HTTP 接口摘要
 

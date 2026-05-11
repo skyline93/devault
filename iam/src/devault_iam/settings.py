@@ -25,7 +25,6 @@ class Settings(BaseSettings):
 
     environment: Literal["development", "production"] = "development"
 
-    self_registration_enabled: bool = True
     access_token_ttl_seconds: int = 900
     refresh_token_ttl_seconds: int = 604800
     login_rate_limit_per_minute: int = 60

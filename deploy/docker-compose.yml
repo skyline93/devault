@@ -1,13 +1,17 @@
 # 默认控制面镜像：Docker Hub ``glf9832/devault``；本仓库在 ``api`` / ``scheduler`` / ``agent`` 上声明了 ``build``，
 # 使用 ``docker compose up --build`` 时会从 ``deploy/Dockerfile`` 构建并打上 ``DEVAULT_IMAGE`` 标签（含最新 Alembic）。
 #
-# 模拟生产 + Web 控制台（IAM JWT、同源 /iam-api、默认租户与 IAM uuid 对齐迁移 **0019**）推荐一条命令：
+# 模拟生产 + Web 控制台（IAM JWT、同源 /iam-api）一条命令（仓库根 **``make demo-stack-up``**）：
+#
+#   - **IAM**：迁移后自动 **幂等** ``iam-admin bootstrap``（默认邮箱 ``demo@devault.com``、密码 ``Devault12345``，仅演示；``IAM_DEMO_AUTO_BOOTSTRAP=false`` 可关闭）。
+#   - **demo-stack-init**：将 IAM ``demo`` 租户镜像到 DeVault（与上同一组 ``DEMO_STACK_PLATFORM_*`` 环境变量）。
+#   - **Console**：在 ``demo-stack-init`` **成功退出后**再启动，避免登录后无租户可选。
 #
 #   cd deploy && cp -n .env.stack.example .env 2>/dev/null; \\
 #     DOCKER_BUILDKIT=1 DEVAULT_IMAGE=devault:local docker compose --profile with-console up -d --build
 #
 # 浏览器：<http://127.0.0.1:8080/> 控制台；<http://127.0.0.1:8100/docs> IAM；<http://127.0.0.1:8000/docs> API。
-# 首次注册 IAM 的用户为 **platform_admin**，可在控制台创建租户；默认租户 slug ``default`` 与 JWT 内 tid 一致。
+# 控制面 REST 须带 **``X-DeVault-Tenant-Id``**（UUID）；无默认 slug 回落。覆盖默认平台账号：设置 **``DEMO_STACK_PLATFORM_EMAIL``** / **``DEMO_STACK_PLATFORM_PASSWORD``**（见 **``deploy/.env.stack.example``**）。
 #
 # 等价快捷方式（仓库根目录）：``make demo-stack-up``
 #
@@ -48,14 +52,27 @@ services:
     build:
       context: ../iam
       dockerfile: Dockerfile
-    command: >
-      sh -c "alembic upgrade head &&
-             uvicorn devault_iam.api.main:app --host 0.0.0.0 --port 8100"
     environment:
       IAM_DATABASE_URL: postgresql+psycopg://iam:iam@postgres-iam:5432/iam
       IAM_REDIS_URL: redis://redis-iam:6379/0
       IAM_JWT_ISSUER: ${IAM_JWT_ISSUER:-http://127.0.0.1:8100}
       IAM_JWT_AUDIENCE: ${IAM_JWT_AUDIENCE:-devault-api}
+      # 演示栈默认平台员（与 demo-stack-init 一致）；生产部署请改写或设 IAM_DEMO_AUTO_BOOTSTRAP=false
+      IAM_DEMO_AUTO_BOOTSTRAP: ${IAM_DEMO_AUTO_BOOTSTRAP:-true}
+      DEMO_STACK_PLATFORM_EMAIL: ${DEMO_STACK_PLATFORM_EMAIL:-demo@devault.com}
+      DEMO_STACK_PLATFORM_PASSWORD: ${DEMO_STACK_PLATFORM_PASSWORD:-Devault12345}
+    command:
+      - sh
+      - -c
+      - |
+        set -e
+        alembic upgrade head
+        if [ "$${IAM_DEMO_AUTO_BOOTSTRAP:-true}" = "true" ]; then
+          printf '%s' "$${DEMO_STACK_PLATFORM_PASSWORD}" > /tmp/iam_demo_pw.txt
+          iam-admin bootstrap create-platform-user --email "$${DEMO_STACK_PLATFORM_EMAIL}" --password-file /tmp/iam_demo_pw.txt || true
+          rm -f /tmp/iam_demo_pw.txt
+        fi
+        exec uvicorn devault_iam.api.main:app --host 0.0.0.0 --port 8100
     ports:
       - "8100:8100"
     depends_on:
@@ -225,7 +242,7 @@ services:
       dockerfile: deploy/Dockerfile
     command: devault-agent
     environment:
-      # Stable id so migration 0011 can seed agent_enrollments → default tenant before first Register.
+      # Stable id so migration 0011 can seed agent_enrollments → first tenant row before first Register.
       DEVAULT_AGENT_ID: ${DEVAULT_AGENT_ID:-00000000-0000-4000-8000-000000000001}
       DEVAULT_GRPC_REGISTRATION_SECRET: ${DEVAULT_GRPC_REGISTRATION_SECRET:-devault-docker-register-secret}
       DEVAULT_GRPC_TARGET: api:50051
@@ -242,10 +259,30 @@ services:
       minio-init:
         condition: service_completed_successfully
 
-  # Ant Design Pro 控制台（十五-08 / 十五-21）：多阶段镜像内置 `dist` + nginx 模板反代 API / IAM。
-  #   docker compose --profile with-console build console && docker compose --profile with-console up -d
-  # 访问 http://127.0.0.1:8080/ ；运行时覆盖反代目标见 **DEVAULT_CONSOLE_*_UPSTREAM**，构建期 IAM 前缀见 **UMI_APP_IAM_PREFIX**。
-  # 认证排查日志：构建期 **UMI_APP_AUTH_DEBUG** 默认 **1** → 浏览器 ``[devault:auth]`` 使用 ``console.log``。
+  # ``with-console`` profile（``make demo-stack-up``）：先 **demo-stack-init**（IAM ``demo`` → DeVault），再 **console**（Ant Design Pro，反代 API / IAM）。
+  # 构建 console：`docker compose --profile with-console build console`；访问 <http://127.0.0.1:8080/>；**DEVAULT_CONSOLE_*_UPSTREAM** / **UMI_APP_IAM_PREFIX**；**UMI_APP_AUTH_DEBUG** 默认 **1**。
+  demo-stack-init:
+    profiles: ["with-console"]
+    image: ${DEVAULT_IMAGE:-glf9832/devault:latest}
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    environment:
+      DEMO_STACK_IAM_BASE: ${DEMO_STACK_IAM_BASE:-http://iam:8100}
+      DEMO_STACK_DEVAULT_API: ${DEMO_STACK_DEVAULT_API:-http://api:8000}
+      DEMO_STACK_PLATFORM_EMAIL: ${DEMO_STACK_PLATFORM_EMAIL:-demo@devault.com}
+      DEMO_STACK_PLATFORM_PASSWORD: ${DEMO_STACK_PLATFORM_PASSWORD:-Devault12345}
+      DEMO_STACK_TENANT_SLUG: ${DEMO_STACK_TENANT_SLUG:-demo}
+      DEMO_STACK_TENANT_NAME: ${DEMO_STACK_TENANT_NAME:-Demo}
+      PYTHONPATH: /app/src
+    entrypoint: ["python3", "/app/deploy/scripts/bootstrap_demo_stack.py"]
+    depends_on:
+      api:
+        condition: service_healthy
+      iam:
+        condition: service_healthy
+    restart: "no"
+
   console:
     profiles: ["with-console"]
     build:
@@ -267,6 +304,8 @@ services:
         condition: service_healthy
       iam:
         condition: service_healthy
+      demo-stack-init:
+        condition: service_completed_successfully
 
 volumes:
   pgdata: {}

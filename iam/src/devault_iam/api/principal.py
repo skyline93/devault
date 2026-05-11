@@ -19,10 +19,11 @@ _http_bearer = HTTPBearer(auto_error=False)
 @dataclass(frozen=True, slots=True)
 class Principal:
     user_id: uuid.UUID
-    tenant_id: uuid.UUID
+    tenant_id: uuid.UUID | None
     tenant_ids: frozenset[uuid.UUID]
     permissions: frozenset[str]
     principal_kind: Literal["platform", "tenant_user"]
+    is_platform_admin: bool
     mfa_satisfied: bool
     email: str
 
@@ -66,9 +67,6 @@ def get_current_principal(
             )
         uid = uuid.UUID(sub_raw)
         tid_raw = payload.get("tid")
-        if tid_raw is None:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid_token")
-        tid = uuid.UUID(str(tid_raw))
     except HTTPException:
         raise
     except (KeyError, ValueError, TypeError):
@@ -78,9 +76,23 @@ def get_current_principal(
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="user_inactive")
 
-    allowed_tids = perm_svc.tenant_ids_for_user(db, uid)
-    if tid not in allowed_tids:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="tenant_not_allowed")
+    is_plat = bool(user.is_platform_admin)
+
+    if tid_raw is None:
+        if not is_plat:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid_token")
+        tid = None
+        allowed_tids: list[uuid.UUID] = []
+    else:
+        if is_plat:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid_token")
+        try:
+            tid = uuid.UUID(str(tid_raw))
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid_token") from None
+        allowed_tids = perm_svc.tenant_ids_for_user(db, uid)
+        if tid not in allowed_tids:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="tenant_not_allowed")
 
     tids = frozenset(allowed_tids)
     perms = frozenset(perm_svc.union_permission_keys_for_user(db, uid))
@@ -93,6 +105,7 @@ def get_current_principal(
         tenant_ids=tids,
         permissions=perms,
         principal_kind=pk,
+        is_platform_admin=is_plat,
         mfa_satisfied=mfa_sat,
         email=user.email,
     )
@@ -119,6 +132,14 @@ def require_permission(principal: Principal, key: str) -> None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden")
 
 
+def require_platform_admin_identity(principal: Principal) -> None:
+    """True platform admins only (``users.is_platform_admin``), not tenant template ``platform_admin`` role."""
+    if not principal.is_platform_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden")
+
+
 def ensure_tenant_scope(principal: Principal, tenant_id: uuid.UUID) -> None:
+    if principal.is_platform_admin and "devault.platform.admin" in principal.permissions:
+        return
     if tenant_id not in principal.tenant_ids:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="tenant_not_allowed")

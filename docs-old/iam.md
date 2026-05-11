@@ -1,66 +1,113 @@
-# SaaS IAM 服务详细设计方案（适用于备份平台）
 
-你现在实际上是在设计：
+# 企业级 SaaS 备份平台组织与 IAM 体系设计方案
 
-```text id="y5d5h8"
-企业级 SaaS 的核心基础设施
+# 1. 文档目标
+
+本文档用于定义：
+
+- 企业级 SaaS 备份平台的组织模型
+- IAM（Identity & Access Management）体系
+- 用户注册登录流程
+- Tenant（租户）生命周期
+- 权限模型
+- 平台管理员模型
+- 业务服务与 IAM 的交互边界
+
+目标：
+
+1. 支持企业级多租户
+2. 支持后续平台化扩展
+3. 支持多个业务系统复用 IAM
+4. 支持企业安全能力扩展
+5. 避免早期设计导致后期重构
+
+---
+
+# 2. 核心设计原则
+
+## 2.1 Platform ≠ Tenant
+
+系统必须区分：
+
+| 概念 | 含义 |
+|---|---|
+| Platform | 整个 SaaS 平台 |
+| Tenant | 客户组织/工作空间 |
+| User | 用户身份 |
+| Membership | 用户在某组织中的角色 |
+
+关系：
+
+```text
+Platform
+ └── Tenants
+       └── Users
+````
+
+---
+
+## 2.2 用户不是租户
+
+错误模型：
+
+```text
+User -> Tenant
 ```
 
-不是“登录模块”。
+正确模型：
 
-而是：
+```text
+User <-> Membership <-> Tenant
+```
 
-# Identity & Access Platform（IAM）
+原因：
 
-这是：
-
-* 用户体系
-* 租户体系
-* 权限体系
-* API 安全体系
-* 审计体系
-
-的统一核心。
-
-如果这里设计好：
-
-后面所有产品都能复用。
+* 一个用户可能属于多个组织
+* MSP/代理商/顾问场景常见
+* 企业协作必须支持
 
 ---
 
-# 一、IAM 的职责边界（极其重要）
+## 2.3 权限属于租户上下文
 
-先明确：
+同一个用户：
 
-# IAM 不负责业务
+| Tenant    | Role     |
+| --------- | -------- |
+| Company A | admin    |
+| Company B | readonly |
 
-IAM 不应该知道：
+因此：
 
-* Backup Job
-* Restore Logic
-* Storage Bucket
-* Agent Scheduler
-
-这些属于业务。
-
----
-
-# IAM 只负责：
-
-```text id="zjlwm6"
-1. 你是谁（Authentication）
-2. 你属于谁（Tenant）
-3. 你能做什么（Authorization）
-4. 你做过什么（Audit）
+```text
+权限 = 用户在某租户中的身份
 ```
 
 ---
 
-# 二、推荐整体架构（核心）
+## 2.4 IAM 与业务解耦
 
-推荐：
+IAM 不负责：
 
-```text id="g7skjr"
+* Backup
+* Restore
+* Storage
+* Job
+
+IAM 只负责：
+
+```text
+Authentication
+Authorization
+Tenant Context
+Audit
+```
+
+---
+
+# 3. 系统整体架构
+
+```text
                     ┌─────────────────┐
                     │   Frontend UI   │
                     └────────┬────────┘
@@ -80,847 +127,749 @@ IAM 不应该知道：
 
 ---
 
-# 三、IAM 服务内部结构
+# 4. IAM 服务职责
 
-建议：
+IAM 负责：
 
-```text id="xwv1h3"
-IAM Service
- ├── Auth Module
- ├── Tenant Module
- ├── RBAC Module
- ├── API Key Module
- ├── Service Account Module
- ├── Session Module
- ├── MFA Module
- ├── Audit Module
- └── Policy Module (future)
+```text
+Identity
+Tenant
+Membership
+RBAC
+Session
+JWT
+API Key
+Service Account
+Authorize
+Audit
+```
+
+业务服务负责：
+
+```text
+Backup
+Restore
+Storage
+Agent
+Policy
+Scheduler
 ```
 
 ---
 
-# 四、IAM 的核心数据模型
+# 5. 组织模型
 
-# 1. Identity Layer
+# 5.1 Platform（平台层）
 
----
+表示：
 
-## users
-
-```sql id="7mu5d5"
-users
-------
-id
-email
-password_hash
-name
-status
-mfa_enabled
-created_at
+```text
+整个 SaaS 平台
 ```
 
----
+由平台运营方管理。
 
-## sessions
+例如：
 
-```sql id="vjlwm7"
-sessions
----------
-id
-user_id
-refresh_token_hash
-ip
-user_agent
-expires_at
-created_at
-```
+* 平台运维
+* 系统监控
+* Tenant 管理
+* 套餐管理
 
 ---
 
-# 2. Tenant Layer
+# 5.2 Tenant（租户层）
 
----
+表示：
 
-## tenants
-
-```sql id="w4btbj"
-tenants
---------
-id
-name
-slug
-plan
-status
-owner_user_id
-created_at
-```
-
----
-
-## tenant_members
-
-```sql id="jlwm8y"
-tenant_members
----------------
-id
-tenant_id
-user_id
-role_id
-status
-created_at
-```
-
----
-
-# 3. RBAC Layer
-
----
-
-## roles
-
-```sql id="jjlwm9"
-roles
-------
-id
-tenant_id nullable
-name
-is_system
-```
-
----
-
-## permissions
-
-```sql id="jlwm0a"
-permissions
-------------
-id
-key
-description
-```
-
----
-
-## role_permissions
-
-```sql id="3sruvg"
-role_permissions
-----------------
-role_id
-permission_id
-```
-
----
-
-# 4. API Security Layer
-
----
-
-## api_keys
-
-```sql id="jlwm1b"
-api_keys
----------
-id
-tenant_id
-name
-key_hash
-created_by
-expires_at
-```
-
----
-
-## api_key_scopes
-
-```sql id="jlwm2c"
-api_key_scopes
----------------
-api_key_id
-permission_key
-```
-
----
-
-# 5. Machine Identity Layer
-
----
-
-## service_accounts
-
-```sql id="jlwm3d"
-service_accounts
-----------------
-id
-tenant_id
-name
-role_id
-token_hash
-```
-
----
-
-# 6. Audit Layer
-
----
-
-## audit_logs
-
-```sql id="jlwm4e"
-audit_logs
------------
-id
-tenant_id
-actor_type
-actor_id
-action
-resource_type
-resource_id
-metadata
-created_at
-```
-
----
-
-# 五、IAM 与业务服务的关系（重点）
-
-很多人这里会设计错。
-
----
-
-# 错误做法
-
-```text id="jlwm5f"
-IAM 知道 backup.restore
-IAM 知道 backup.job
-IAM 知道 storage.bucket
-```
-
-这是错误耦合。
-
----
-
-# 正确做法
-
-IAM：
-
-只知道：
-
-```text id="jlwm6g"
-permission key
+```text
+客户组织
 ```
 
 例如：
 
-```text id="jlwm7h"
-backup.restore
-backup.create
-backup.read
-```
+* 腾讯
+* 字节
+* 某创业公司
 
-但：
+每个 Tenant：
 
-## 不知道 backup 长什么样。
-
----
-
-# 六、真正的权限判断在哪里？
-
-# 在业务服务
-
-这是关键。
+* 数据独立
+* 权限独立
+* 配置独立
 
 ---
 
-# IAM：
+# 5.3 User（用户身份）
 
-负责：
+表示：
 
-```text id="jlwm8i"
-“用户拥有什么权限”
+```text
+一个全局身份
 ```
+
+User 不直接属于 Tenant。
 
 ---
 
-# Backup Service：
+# 5.4 Membership（组织关系）
 
-负责：
+表示：
 
-```text id="jlwm9j"
-“这个权限是否允许操作当前资源”
+```text
+用户在某 Tenant 中的角色
 ```
-
----
-
-# 七、完整交互流程（核心）
-
-# 场景：
-
-用户恢复备份。
-
----
-
-## Step 1：用户登录
-
-Frontend：
-
-```http id="jlwm0k"
-POST /auth/login
-```
-
-IAM：
-
-返回：
-
-```json id="jlwm1l"
-{
-  "access_token": "...",
-  "refresh_token": "...",
-  "tenant_id": "t_123"
-}
-```
-
----
-
-# Step 2：调用 Backup API
-
-```http id="jlwm2m"
-POST /backups/restore
-Authorization: Bearer xxx
-```
-
----
-
-# Step 3：Gateway 校验 JWT
-
-Gateway：
-
-验证：
-
-* 签名
-* 过期时间
-
-然后透传：
-
-```text id="jlwm3n"
-uid
-tenant_id
-```
-
----
-
-# Step 4：Backup Service 请求 IAM
-
-Backup Service：
-
-调用：
-
-```http id="jlwm4o"
-POST /authorize
-```
-
-请求：
-
-```json id="jlwm5p"
-{
-  "subject": {
-    "type": "user",
-    "id": "u_123"
-  },
-  "tenant_id": "t_123",
-  "action": "backup.restore"
-}
-```
-
----
-
-# Step 5：IAM 返回
-
-```json id="jlwm6q"
-{
-  "allowed": true
-}
-```
-
----
-
-# Step 6：Backup Service 做业务校验
 
 例如：
 
-```text id="jlwm7r"
-这个备份是否属于 tenant_id=t_123
-```
-
-然后：
-
-真正执行 restore。
+| User  | Tenant    | Role     |
+| ----- | --------- | -------- |
+| Alice | Company A | admin    |
+| Alice | Company B | readonly |
 
 ---
 
-# 八、最重要的边界（一定记住）
+# 6. 平台初始化流程
 
-# IAM 不做资源 ownership 判断
+# 6.1 系统首次部署
 
-例如：
+系统启动后：
 
-```text id="jlwm8s"
-backup_789 是否属于 tenant_123
-```
-
-这是：
-
-# Backup Service 的职责
-
----
-
-# IAM 只做：
-
-```text id="jlwm9t"
-是否具备 backup.restore 权限
+```text
+Platform 存在
+Platform Admin 存在
+Tenant 不存在
 ```
 
 ---
 
-# 九、推荐的授权模式
+# 6.2 Bootstrap Platform Admin
+
+通过环境变量初始化：
+
+```env
+BOOTSTRAP_ADMIN_EMAIL=admin@yourapp.com
+BOOTSTRAP_ADMIN_PASSWORD=xxxx
+```
+
+系统首次启动时：
+
+自动创建：
+
+```text
+platform_admin
+```
+
+---
+
+# 6.3 Platform Admin 特点
+
+Platform Admin：
+
+* 不属于任何 Tenant
+* 不走 tenant_members
+* 属于 platform scope
+
+用于：
+
+* Tenant 管理
+* 系统维护
+* 平台运营
+
+---
+
+# 7. 注册与组织创建流程
+
+系统支持两种模式：
+
+---
+
+# 7.1 自助注册（Self-Serve）
+
+适用于：
+
+* 官网试用
+* 自助 SaaS
+
+流程：
+
+```text
+用户注册
+  ↓
+创建 User
+  ↓
+创建 Tenant
+  ↓
+创建 Membership(owner)
+  ↓
+登录系统
+```
+
+结果：
+
+```text
+注册用户自动成为 Tenant Owner
+```
+
+---
+
+# 7.2 邀请注册（Enterprise）
+
+适用于：
+
+* 企业协作
+* 团队成员加入
+
+流程：
+
+```text
+Admin Invite User
+  ↓
+生成 invite token
+  ↓
+用户打开邀请链接
+  ↓
+创建 User（如不存在）
+  ↓
+加入已有 Tenant
+```
+
+注意：
+
+```text
+邀请注册不会创建 Tenant
+```
+
+---
+
+# 8. 登录流程
+
+# 8.1 登录入口
 
 推荐：
 
-# “粗权限 + 业务细校验”
+```text
+统一登录入口
+```
+
+例如：
+
+```text
+/login
+```
+
+Platform Admin 与 Tenant User 使用同一入口。
 
 ---
 
-# IAM
+# 8.2 登录流程
 
-做：
+```text
+输入邮箱密码
+  ↓
+验证身份
+  ↓
+查询所属 tenants
+  ↓
+选择 active tenant
+  ↓
+签发 JWT
+```
 
-```text id="jlwm0u"
+---
+
+# 8.3 JWT 内容
+
+```json
+{
+  "uid": "u_123",
+  "tid": "t_456",
+  "role": "admin",
+  "session_id": "s_789"
+}
+```
+
+---
+
+# 8.4 登录后跳转
+
+根据 scope：
+
+---
+
+## Platform Admin
+
+进入：
+
+```text
+/platform
+```
+
+---
+
+## Tenant User
+
+进入：
+
+```text
+/app
+```
+
+---
+
+# 9. Tenant 生命周期
+
+# 9.1 创建 Tenant
+
+创建方式：
+
+| 方式   | 创建者            |
+| ---- | -------------- |
+| 自助注册 | 用户             |
+| 平台创建 | Platform Admin |
+
+---
+
+# 9.2 删除 Tenant
+
+仅：
+
+```text
+Tenant Owner
+```
+
+或：
+
+```text
+Platform Admin
+```
+
+可执行。
+
+---
+
+# 9.3 Tenant Ownership
+
+默认：
+
+```text
+创建 Tenant 的用户
+```
+
+自动成为：
+
+```text
+owner
+```
+
+---
+
+# 10. RBAC 权限模型
+
+# 10.1 模型
+
+```text
+User
+ -> Membership
+   -> Role
+      -> Permissions
+```
+
+---
+
+# 10.2 系统角色
+
+## owner
+
+最高组织权限。
+
+可：
+
+* 删除 Tenant
+* 管理 Billing
+* 配置 SSO
+* 转移 Ownership
+
+---
+
+## admin
+
+组织管理员。
+
+可：
+
+* 管理成员
+* 创建 API Key
+* 管理 Backup
+
+不可：
+
+* 删除 Tenant
+* 管理 Billing
+
+---
+
+## operator
+
+运维角色。
+
+可：
+
+* Backup
+* Restore
+* 查看任务
+
+---
+
+## readonly
+
+只读角色。
+
+---
+
+# 10.3 Permission 命名
+
+规范：
+
+```text
+resource.action
+```
+
+例如：
+
+```text
+backup.create
+backup.read
+backup.restore
+backup.delete
+
+apikey.create
+apikey.delete
+
+user.invite
+user.remove
+```
+
+---
+
+# 11. 授权流程
+
+# 11.1 IAM 负责什么
+
+IAM 负责：
+
+```text
+用户是否拥有某权限
+```
+
+例如：
+
+```text
 backup.restore
 ```
 
 ---
 
-# Backup Service
+# 11.2 Backup Service 负责什么
 
-做：
+Backup Service 负责：
 
-```text id="jlwm1v"
-是否属于该 tenant
-是否属于该 project
-是否符合恢复策略
+```text
+资源是否允许被当前 tenant 操作
 ```
-
----
-
-# 十、为什么这样设计最好
-
-因为：
-
-# IAM 生命周期远长于业务
-
-业务会变：
-
-* Backup
-* Monitoring
-* AI Ops
-
-都会变。
-
-但：
-
-* User
-* Tenant
-* Permission
-
-不会变。
-
----
-
-# 十一、推荐的 Authorize API（核心）
-
-# 统一授权接口
-
----
-
-## 请求
-
-```http id="jlwm2w"
-POST /authorize
-```
-
----
-
-## body
-
-```json id="jlwm3x"
-{
-  "subject": {
-    "type": "user",
-    "id": "u_123"
-  },
-  "tenant_id": "t_123",
-  "action": "backup.restore",
-  "resource": {
-    "type": "backup",
-    "id": "b_456"
-  }
-}
-```
-
----
-
-## 返回
-
-```json id="jlwm4y"
-{
-  "allowed": true
-}
-```
-
----
-
-# 十二、为什么 resource 要传
-
-虽然 IAM 早期不用。
-
-但后期：
-
-## Resource-level Permission
-
-就能扩展。
 
 例如：
 
-```text id="jlwm5z"
-只能恢复某些备份
+```text
+backup_123 是否属于 tenant_456
 ```
 
 ---
 
-# 十三、推荐权限缓存（非常重要）
+# 11.3 完整授权流程
 
-不要：
-
-每次请求都查数据库。
-
----
-
-# 推荐：
-
-## IAM 内部：
-
-```text id="jlwm6a"
-Redis Permission Cache
-```
-
-缓存：
-
-```text id="jlwm7b"
-tenant_id:user_id -> permissions[]
+```text
+用户请求 Restore
+  ↓
+Gateway 验证 JWT
+  ↓
+Backup Service 调用 IAM Authorize
+  ↓
+IAM 返回 allow/deny
+  ↓
+Backup Service 校验资源归属
+  ↓
+执行恢复
 ```
 
 ---
 
-# 十四、推荐权限加载方式
+# 12. API Key 模型
 
-# 登录时加载一次
+# 12.1 原则
+
+API Key：
+
+```text
+不继承用户全部权限
+```
+
+---
+
+# 12.2 API Key Scope
+
+每个 API Key 拥有独立 scopes。
 
 例如：
 
-```json id="jlwm8c"
-{
-  "permissions": [
-    "backup.read",
-    "backup.restore"
-  ]
-}
+```text
+backup.read
+backup.create
 ```
 
 ---
 
-# 然后：
+# 12.3 API 调用流程
 
-Gateway：
-
-透传：
-
-```text id="jlwm9d"
-X-Permissions
-```
-
----
-
-# 十五、推荐的最终架构（最佳实践）
-
-# 推荐：
-
-```text id="jlwm0e"
-JWT
+```text
+API Key
   ↓
-Gateway
+验证 hash
   ↓
-Business Service
+加载 scopes
   ↓
-Authorize Middleware
-  ↓
-IAM Permission Cache
+权限判断
 ```
 
 ---
 
-# 十六、推荐的权限中间件
+# 13. Service Account 模型
 
-例如：
+用于：
 
-```go id="jlwm1f"
-RequirePermission("backup.restore")
+* Agent
+* Scheduler
+* 自动任务
+
+原则：
+
+```text
+机器身份 ≠ 用户身份
 ```
 
 ---
 
-# Middleware：
+# 14. 审计日志
 
-自动：
+# 14.1 原则
 
-```text id="jlwm2g"
-1. 读取 JWT
-2. 获取 tenant
-3. 获取 permissions
-4. 判断
-```
-
----
-
-# 十七、IAM 与 Backup Service 的真正交互
-
-# IAM 不应该操作备份
-
-不要：
-
-```text id="jlwm3h"
-IAM 删除 backup
-```
-
----
-
-# Backup Service：
-
-才拥有：
-
-```text id="jlwm4i"
-backup domain
-```
-
----
-
-# IAM：
-
-只是：
-
-```text id="jlwm5j"
-access decision service
-```
-
----
-
-# 十八、推荐的 Audit 设计（重要）
-
-# 业务服务写审计
+业务服务负责写审计。
 
 不是 IAM。
 
 ---
 
-# 为什么
+# 14.2 审计内容
 
-因为：
-
-IAM 不知道：
-
-```text id="jlwm6k"
-恢复了哪个 backup
+```text
+谁
+在什么时间
+对什么资源
+执行了什么操作
 ```
 
 ---
 
-# 正确：
+# 14.3 高危操作必须审计
 
-Backup Service：
+例如：
 
-调用：
+* Restore
+* Delete Backup
+* Export Data
+* Rotate Credential
 
-```http id="jlwm7l"
-POST /audit/log
+---
+
+# 15. 多租户隔离
+
+# 15.1 推荐方案
+
+```text
+Shared DB + tenant_id
 ```
 
 ---
 
-# 内容
+# 15.2 所有业务表必须包含
 
-```json id="jlwm8m"
-{
-  "tenant_id": "t_123",
-  "actor_id": "u_123",
-  "action": "backup.restore",
-  "resource_type": "backup",
-  "resource_id": "b_789"
-}
+```sql
+tenant_id
 ```
 
 ---
 
-# 十九、推荐的服务边界（关键）
+# 15.3 所有查询必须自动注入
 
-# IAM：
-
-负责：
-
-```text id="jlwm9n"
-Identity
-Tenant
-Role
-Permission
-Session
-Token
-Authorize
-Audit
+```sql
+WHERE tenant_id = ?
 ```
 
 ---
 
-# Backup：
+# 16. 推荐阶段性演进
 
-负责：
+# Phase 1（MVP）
 
-```text id="jlwm0o"
-Backup
-Restore
-Storage
-Retention
-Snapshot
-Policy
-```
+必须：
 
----
-
-# 二十、未来扩展能力（现在就该预留）
-
-你现在应该预留：
+* User
+* Tenant
+* Membership
+* RBAC
+* JWT
+* API Key
+* Service Account
+* Audit Log
 
 ---
 
-# 1. SSO
+# Phase 2（企业增强）
 
-未来：
+增加：
 
-```text id="jlwm1p"
-Google
-GitHub
-SAML
-OIDC
-```
-
----
-
-# 2. Policy Engine
-
-未来：
-
-```text id="jlwm2q"
-恢复必须审批
-```
+* SSO/SAML
+* SCIM
+* 自定义角色
+* Resource-level Permission
+* IP Allowlist
 
 ---
 
-# 3. Approval Workflow
+# Phase 3（平台化）
 
-未来：
+增加：
 
-```text id="jlwm3r"
-生产恢复需要双人确认
-```
-
----
-
-# 4. JIT Access
-
-未来：
-
-```text id="jlwm4s"
-临时权限
-```
+* MSP
+* Organization Tree
+* Approval Workflow
+* Policy Engine
+* JIT Access
 
 ---
 
-# 二十一、你现在真正应该做的
+# 17. 推荐目录结构（单体阶段）
 
-# 第一阶段（最优）
-
----
-
-## 架构
-
-```text id="jlwm5t"
-单体应用
-+ 独立 IAM 模块
-```
-
----
-
-## 逻辑隔离
-
-不要：
-
-```text id="jlwm6u"
-一开始微服务
-```
-
----
-
-# 代码目录建议
-
-```text id="jlwm7v"
+```text
 /internal
   /iam
   /backup
   /agent
 ```
 
----
+建议：
 
-# 二十二、什么时候拆成真正 IAM Service
-
-当你出现：
-
-* 多产品
-* 多团队
-* 多网关
-* 独立登录中心
-
-时再拆。
-
----
-
-# 二十三、最后给你一句真正关键的话
-
-成熟 SaaS 的核心不是：
-
-```text id="jlwm8w"
-功能多
+```text
+逻辑模块化
+而不是立即微服务化
 ```
 
-而是：
+---
 
-# “边界稳定”
+# 18. 推荐最终架构
 
-尤其：
+```text
+Identity Layer
+ ├── User
+ ├── Session
+ ├── MFA
+ └── SSO
 
-* Identity
-* Tenant
-* Authorization
+Organization Layer
+ ├── Tenant
+ ├── Membership
+ └── Invitation
 
-这三个边界。
+Access Layer
+ ├── Role
+ ├── Permission
+ ├── API Key
+ └── Service Account
 
-一旦设计正确：
+Security Layer
+ ├── Audit
+ ├── Approval
+ ├── IP Restriction
+ └── Policy Engine
 
-你后面所有产品都能复用。
+Business Layer
+ ├── Backup
+ ├── Restore
+ ├── Storage
+ └── Agent
+```
+
+---
+
+# 19. 最终设计原则总结
+
+必须牢记：
+
+---
+
+## Platform ≠ Tenant
+
+---
+
+## User ≠ Membership
+
+---
+
+## 登录 ≠ 授权
+
+---
+
+## IAM 不负责业务资源
+
+---
+
+## 权限属于租户上下文
+
+---
+
+## API Key 必须有独立 Scope
+
+---
+
+## Restore 属于高危权限
+
+---
+
+## 审计日志必须完整
+
+---
+
+## 多租户隔离优先级高于功能
+
+---
+
+# 20. 最终目标
+
+最终形成：
+
+```text
+统一 IAM 平台
++
+多个业务平台复用
+```
+
+包括：
+
+* Backup Platform
+* Monitoring Platform
+* DevOps Platform
+* AI Ops Platform
+* Internal Tools
+
+```
+```

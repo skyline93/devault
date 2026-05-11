@@ -7,8 +7,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 from devault_iam.api.main import create_app
-from devault_iam.db.session import reset_engine_for_tests
+from devault_iam.db.session import SessionLocal, reset_engine_for_tests
 from devault_iam.settings import clear_settings_cache, get_settings
+from support_users import create_user_with_tenant_membership
 
 
 @pytest.fixture
@@ -23,17 +24,47 @@ def _password() -> str:
     return "ValidPassword123"
 
 
-def test_register_login_jwks_me_refresh_logout(client: TestClient) -> None:
-    email = f"p1_{uuid.uuid4().hex[:16]}@example.com"
-    pw = _password()
-    r = client.post("/v1/auth/register", json={"email": email, "password": pw, "name": "P1 User"})
-    assert r.status_code == 201, r.text
+def test_login_platform_and_tenant_user_jwks_me_refresh_logout(
+    client: TestClient,
+    iam_platform_credentials: tuple[str, str],
+) -> None:
+    plat_email, plat_pw = iam_platform_credentials
+
+    rp = client.post("/v1/auth/login", json={"email": plat_email, "password": plat_pw})
+    assert rp.status_code == 200, rp.text
+    plat_body = rp.json()
+    assert plat_body.get("tenant_id") is None
+    plat_access = plat_body["access_token"]
+
+    slug = f"p1-{uuid.uuid4().hex[:10]}"
+    rt = client.post(
+        "/v1/tenants",
+        json={"name": "P1 Org", "slug": slug},
+        headers={"Authorization": f"Bearer {plat_access}"},
+    )
+    assert rt.status_code == 201, rt.text
+    new_tid = uuid.UUID(rt.json()["id"])
+
+    db = SessionLocal()
+    try:
+        uemail = f"p1mem_{uuid.uuid4().hex[:12]}@example.com"
+        create_user_with_tenant_membership(
+            db,
+            email=uemail,
+            password_plain=_password(),
+            tenant_id=new_tid,
+            role_name="tenant_admin",
+            display_name="P1 Member",
+        )
+    finally:
+        db.close()
+
+    r = client.post("/v1/auth/login", json={"email": uemail, "password": _password()})
+    assert r.status_code == 200, r.text
     body = r.json()
-    assert "access_token" in body and "refresh_token" in body
-    assert body["token_type"] == "bearer"
-    assert len(body["permissions"]) >= 1
-    tid = body["tenant_id"]
-    assert tid
+    assert body.get("tenant_id")
+    tid = uuid.UUID(str(body["tenant_id"]))
+    assert tid == new_tid
 
     rj = client.get("/.well-known/jwks.json")
     assert rj.status_code == 200
@@ -50,14 +81,14 @@ def test_register_login_jwks_me_refresh_logout(client: TestClient) -> None:
         issuer=get_settings().jwt_issuer,
     )
     assert payload["sub"]
-    assert payload["tid"] == tid
+    assert payload["tid"] == str(tid)
     assert "perm" in payload and len(payload["perm"]) >= 1
 
     rme = client.get("/v1/me", headers={"Authorization": f"Bearer {body['access_token']}"})
     assert rme.status_code == 200
     me = rme.json()
-    assert me["email"] == email
-    assert tid in me["tenant_ids"]
+    assert me["email"] == uemail
+    assert str(tid) in me["tenant_ids"]
 
     rr = client.post("/v1/auth/refresh", json={"refresh_token": body["refresh_token"]})
     assert rr.status_code == 200

@@ -21,7 +21,7 @@ export default defineConfig({
     'process.env.UMI_APP_ENV_LABEL': JSON.stringify(process.env.UMI_APP_ENV_LABEL || ''),
     /** 可选：部署了 Grafana 时写入完整 URL，工作台显示跳转（十五-24） */
     'process.env.UMI_APP_GRAFANA_URL': JSON.stringify(process.env.UMI_APP_GRAFANA_URL || ''),
-    /** 非空时登录/注册走独立 IAM；开发用 ``UMI_DEV_IAM_ORIGIN`` 反代 ``/iam-api``，生产用 nginx ``/iam-api`` → ``DEVAULT_CONSOLE_IAM_UPSTREAM`` */
+    /** 非空时登录走独立 IAM；开发用 ``UMI_DEV_IAM_ORIGIN`` 反代 ``/iam-api``，生产用 nginx ``/iam-api`` → ``DEVAULT_CONSOLE_IAM_UPSTREAM`` */
     'process.env.UMI_APP_IAM_PREFIX': JSON.stringify(process.env.UMI_APP_IAM_PREFIX || ''),
     /** 仅 `'0'|'1'` 两值，见上 `umiAuthDebugInject`。 */
     'process.env.UMI_APP_AUTH_DEBUG': JSON.stringify(umiAuthDebugInject),
@@ -53,7 +53,6 @@ export default defineConfig({
   routes: [
     { path: '/user/login', layout: false, component: './user/login' },
     { path: '/user/integration', layout: false, component: './user/integration' },
-    { path: '/user/register', layout: false, component: './user/register' },
     { path: '/user/reset-password', layout: false, component: './user/reset-password' },
     { path: '/user/accept-invite', layout: false, component: './user/accept-invite' },
     /**

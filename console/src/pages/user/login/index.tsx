@@ -9,13 +9,20 @@ import { IAM_API_PREFIX, isIamConsoleEnabled } from '@/config/iam';
 import { authDebug } from '@/utils/auth-debug';
 import { waitNextPaint } from '@/utils/wait-next-paint';
 
+/** 本地 / 演示栈默认平台账号（与 deploy `DEMO_STACK_PLATFORM_*` 对齐，仅省开发输入）。 */
+const DEFAULT_LOGIN_EMAIL = 'demo@devault.com';
+const DEFAULT_LOGIN_PASSWORD = 'Devault12345';
+
 type IamTokenOut = {
   access_token: string;
   refresh_token: string;
   token_type: string;
   expires_in: number;
-  tenant_id: string;
+  /** 平台管理员 JWT 可能为 `null` / 省略 */
+  tenant_id?: string | null;
   permissions: string[];
+  /** IAM：管理员创建账户后需改密 */
+  must_change_password?: boolean;
 };
 
 const Login: React.FC = () => {
@@ -104,8 +111,6 @@ const Login: React.FC = () => {
           </p>
           <Typography.Paragraph type="secondary" style={{ marginBottom: 0, marginTop: 8 }}>
             <Link to="/user/integration">{formatMessage({ id: 'page.login.linkIntegration' })}</Link>
-            {' · '}
-            <Link to="/user/register">{formatMessage({ id: 'page.login.linkRegister' })}</Link>
           </Typography.Paragraph>
         </div>
         {err ? (
@@ -156,6 +161,7 @@ const Login: React.FC = () => {
           </>
         ) : (
           <LoginForm
+            initialValues={{ email: DEFAULT_LOGIN_EMAIL, password: DEFAULT_LOGIN_PASSWORD }}
             submitter={{ searchConfig: { submitText: formatMessage({ id: 'page.login.signIn' }) } }}
             onFinish={async (values) => {
               const email = (values as { email?: string }).email?.trim();

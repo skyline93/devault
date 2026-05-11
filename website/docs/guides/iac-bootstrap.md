@@ -10,7 +10,7 @@ description: OpenAPI 顺序、curl 与可选 Terraform 最小示例（§十四-1
 
 ## 推荐顺序
 
-1. 租户已存在（迁移种子 **`default`** 或 **`POST /api/v1/tenants`**）。
+1. 租户已存在（迁移 **`0005`** 种子行或 **`POST /api/v1/tenants`**；与 IAM 联调时可传 **`id`** 与 IAM 租户 UUID 对齐）。
 2. **`PUT /api/v1/agents/{agent_id}/enrollment`**（**admin**）：非空 **`allowed_tenant_ids`**。
 3. （可选）**`POST /api/v1/agent-pools`**、**`PUT .../members`**。
 4. **`POST /api/v1/policies`**（写角色）：文件策略 **`config.paths`** 等；若租户 **`policy_paths_allowlist_mode=enforce`**，路径须落在已登记 Agent 的 Heartbeat allowlist 并集内。

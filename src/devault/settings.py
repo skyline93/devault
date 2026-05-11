@@ -79,11 +79,6 @@ class Settings(BaseSettings):
 
     env_name: str = Field(default="dev", description="Key prefix segment dev|prod")
 
-    default_tenant_slug: str = Field(
-        default="default",
-        description="When HTTP header X-DeVault-Tenant-Id is omitted, resolve tenant by this slug",
-    )
-
     allowed_path_prefixes: str | None = Field(
         default=None,
         description="Comma-separated absolute path prefixes; if set, backup paths must match one",
