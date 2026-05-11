@@ -53,17 +53,17 @@ export default defineConfig({
     { path: '/user/register', layout: false, component: './user/register' },
     { path: '/user/reset-password', layout: false, component: './user/reset-password' },
     { path: '/user/accept-invite', layout: false, component: './user/accept-invite' },
-    /** 与 `src/constants/auth-routes.ts` 白名单互补；新建需登录的顶级路由请放在此 `routes` 下。 */
+    /**
+     * 需登录的业务路由与根重定向并列在顶层（不再包一层无 `name` 的 `path: '/'`）。
+     * 否则 ProLayout `clearMenuItem` 会丢掉该壳节点，侧栏 `menuData` 为空（mix 下无菜单）。
+     * 会话守卫在 `app.tsx` 的 `layout.childrenRender`（`RequireSession`）；勿用 `wrappers`，以免 layout 插件扁平化破坏 mix 侧栏。
+     */
+    { path: '/', redirect: '/overview/welcome' },
     {
-      path: '/',
-      wrappers: ['@/wrappers/require-session'],
+      path: '/overview',
+      name: '概览',
+      icon: 'DashboardOutlined',
       routes: [
-        { path: '/', redirect: '/overview/welcome' },
-        {
-          path: '/overview',
-          name: '概览',
-          icon: 'DashboardOutlined',
-          routes: [
         {
           path: '/overview/welcome',
           name: '欢迎',
@@ -202,8 +202,6 @@ export default defineConfig({
           icon: 'BankOutlined',
           component: './platform/tenants',
         },
-      ],
-    },
       ],
     },
   ],

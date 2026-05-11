@@ -2,7 +2,7 @@ import { LockOutlined, SafetyCertificateOutlined, UserOutlined } from '@ant-desi
 import { LoginForm, ProFormText } from '@ant-design/pro-components';
 import { history, Link, request, useModel } from '@umijs/max';
 import { Alert, Card, theme, Typography } from 'antd';
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 
 import { STORAGE_BEARER_KEY } from '@/constants/storage';
 import { IAM_API_PREFIX, isIamConsoleEnabled } from '@/config/iam';
@@ -24,6 +24,8 @@ const Login: React.FC = () => {
   const [err, setErr] = useState<string | null>(null);
   const [mfaStep, setMfaStep] = useState(false);
   const [pendingIam, setPendingIam] = useState<{ email: string; password: string } | null>(null);
+  /** 防止 LoginForm / 导航竞态导致 IAM 登录链路被触发两次（重复 session 与双次 push）。 */
+  const authSubmitLock = useRef(false);
 
   const finishLogin = async (currentUser: API.CurrentUser) => {
     const canWrite = !currentUser.needs_mfa && (currentUser.role === 'admin' || currentUser.role === 'operator');
@@ -54,22 +56,31 @@ const Login: React.FC = () => {
   };
 
   const loginViaIam = async (email: string, password: string, mfaCode?: string) => {
-    const data: Record<string, string> = { email, password };
-    if (mfaCode) data.mfa_code = mfaCode;
-    const tok = await request<IamTokenOut>(`${IAM_API_PREFIX}/v1/auth/login`, {
-      method: 'POST',
-      data,
-      skipErrorHandler: true,
-    });
-    localStorage.setItem(STORAGE_BEARER_KEY, tok.access_token);
-    authDebug('loginViaIam:afterIamLogin', { tenantId: tok.tenant_id });
-    const currentUser = await request<API.CurrentUser>('/api/v1/auth/session', {
-      method: 'GET',
-      skipErrorHandler: true,
-    });
-    authDebug('loginViaIam:afterDevaultSession', { principal: currentUser.principal_label });
-    setPendingIam(null);
-    await finishLogin(currentUser);
+    if (authSubmitLock.current) {
+      authDebug('loginViaIam:skippedDuplicate', {});
+      return;
+    }
+    authSubmitLock.current = true;
+    try {
+      const data: Record<string, string> = { email, password };
+      if (mfaCode) data.mfa_code = mfaCode;
+      const tok = await request<IamTokenOut>(`${IAM_API_PREFIX}/v1/auth/login`, {
+        method: 'POST',
+        data,
+        skipErrorHandler: true,
+      });
+      localStorage.setItem(STORAGE_BEARER_KEY, tok.access_token);
+      authDebug('loginViaIam:afterIamLogin', { tenantId: tok.tenant_id });
+      const currentUser = await request<API.CurrentUser>('/api/v1/auth/session', {
+        method: 'GET',
+        skipErrorHandler: true,
+      });
+      authDebug('loginViaIam:afterDevaultSession', { principal: currentUser.principal_label });
+      setPendingIam(null);
+      await finishLogin(currentUser);
+    } finally {
+      authSubmitLock.current = false;
+    }
   };
 
   return (
