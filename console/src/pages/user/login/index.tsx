@@ -7,6 +7,7 @@ import React, { useState } from 'react';
 import { STORAGE_BEARER_KEY } from '@/constants/storage';
 import { IAM_API_PREFIX, isIamConsoleEnabled } from '@/config/iam';
 import { authDebug } from '@/utils/auth-debug';
+import { waitNextPaint } from '@/utils/wait-next-paint';
 
 type IamTokenOut = {
   access_token: string;
@@ -47,6 +48,8 @@ const Login: React.FC = () => {
       redirect && redirect.startsWith('/') && !redirect.startsWith('//') && !redirect.includes(':');
     const target = safe ? redirect : '/overview/welcome';
     authDebug('finishLogin:afterSetInitialState', { target });
+    await waitNextPaint();
+    authDebug('finishLogin:beforeHistoryPush', { target });
     history.push(target);
   };
 

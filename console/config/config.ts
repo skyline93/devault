@@ -7,6 +7,16 @@ import defaultSettings from './defaultSettings';
 const devApiOrigin = (process.env.UMI_DEV_API_ORIGIN || 'http://127.0.0.1:8000').replace(/\/$/, '');
 const devIamOrigin = (process.env.UMI_DEV_IAM_ORIGIN || 'http://127.0.0.1:8100').replace(/\/$/, '');
 
+/**
+ * 打入 SPA 的 `[devault:auth]` 调试开关：仅当显式 `UMI_APP_AUTH_DEBUG=0|false|off|no` 时为关，否则为开。
+ * Docker 构建阶段常为 `NODE_ENV=production` 且若未传 ARG 则 env 为空，旧逻辑会导致 **authDebug 永远不输出**。
+ */
+const umiAuthDebugInject = ['0', 'false', 'off', 'no'].includes(
+  String(process.env.UMI_APP_AUTH_DEBUG || '').trim().toLowerCase(),
+)
+  ? '0'
+  : '1';
+
 export default defineConfig({
   define: {
     'process.env.UMI_APP_ENV_LABEL': JSON.stringify(process.env.UMI_APP_ENV_LABEL || ''),
@@ -14,6 +24,8 @@ export default defineConfig({
     'process.env.UMI_APP_GRAFANA_URL': JSON.stringify(process.env.UMI_APP_GRAFANA_URL || ''),
     /** 非空时登录/注册走独立 IAM；开发用 ``UMI_DEV_IAM_ORIGIN`` 反代 ``/iam-api``，生产用 nginx ``/iam-api`` → ``DEVAULT_CONSOLE_IAM_UPSTREAM`` */
     'process.env.UMI_APP_IAM_PREFIX': JSON.stringify(process.env.UMI_APP_IAM_PREFIX || ''),
+    /** 仅 `'0'|'1'` 两值，见上 `umiAuthDebugInject`。 */
+    'process.env.UMI_APP_AUTH_DEBUG': JSON.stringify(umiAuthDebugInject),
   },
   title: 'DeVault',
   antd: {

@@ -52,6 +52,7 @@ help:
 	@echo "  make demo-stack-up"
 	@echo "      Build devault:local + compose (profile with-console): Postgres/Redis/MinIO/IAM/API/"
 	@echo "      scheduler/agent/console. Open http://127.0.0.1:8080/ for the SPA."
+	@echo "      Passes UMI_APP_AUTH_DEBUG=1 so console shows [devault:auth] logs (console.info)."
 	@echo ""
 	@echo "  make demo-stack-down"
 	@echo "      docker compose -f deploy/docker-compose.yml --profile with-console down"
@@ -85,7 +86,7 @@ agent-dist: py-dist
 demo-stack-up:
 	@test -f deploy/.env || cp deploy/.env.stack.example deploy/.env
 	DOCKER_BUILDKIT=1 docker build -f $(DOCKERFILE) -t devault:local $(CONTEXT)
-	cd deploy && DOCKER_BUILDKIT=1 DEVAULT_IMAGE=devault:local DEVAULT_CONSOLE_IMAGE=devault-console:local docker compose --profile with-console up -d --build
+	cd deploy && UMI_APP_AUTH_DEBUG=1 DOCKER_BUILDKIT=1 DEVAULT_IMAGE=devault:local DEVAULT_CONSOLE_IMAGE=devault-console:local docker compose --profile with-console up -d --build
 
 demo-stack-down:
 	cd deploy && docker compose --profile with-console down

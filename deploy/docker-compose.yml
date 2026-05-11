@@ -245,6 +245,7 @@ services:
   # Ant Design Pro 控制台（十五-08 / 十五-21）：多阶段镜像内置 `dist` + nginx 模板反代 API / IAM。
   #   docker compose --profile with-console build console && docker compose --profile with-console up -d
   # 访问 http://127.0.0.1:8080/ ；运行时覆盖反代目标见 **DEVAULT_CONSOLE_*_UPSTREAM**，构建期 IAM 前缀见 **UMI_APP_IAM_PREFIX**。
+  # 认证排查日志：构建期 **UMI_APP_AUTH_DEBUG** 默认 **1** → 浏览器 ``[devault:auth]`` 使用 ``console.log``。
   console:
     profiles: ["with-console"]
     build:
@@ -254,6 +255,7 @@ services:
         UMI_APP_ENV_LABEL: ${UMI_APP_ENV_LABEL:-}
         UMI_APP_GRAFANA_URL: ${UMI_APP_GRAFANA_URL:-}
         UMI_APP_IAM_PREFIX: ${UMI_APP_IAM_PREFIX:-/iam-api}
+        UMI_APP_AUTH_DEBUG: ${UMI_APP_AUTH_DEBUG:-1}
     image: ${DEVAULT_CONSOLE_IMAGE:-devault-console:local}
     environment:
       DEVAULT_CONSOLE_API_UPSTREAM: ${DEVAULT_CONSOLE_API_UPSTREAM:-api:8000}

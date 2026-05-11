@@ -7,10 +7,11 @@ import React from 'react';
 
 import { Footer, RightContent } from '@/components';
 import defaultSettings from '../config/defaultSettings';
-import { STORAGE_BEARER_KEY, STORAGE_TENANT_ID_KEY } from '@/constants/storage';
+import { STORAGE_BEARER_KEY } from '@/constants/storage';
+import { ensureTenantSelection } from '@/utils/ensure-tenant-selection';
 import { openapiAuthSessionContract } from '@/openapi/contract';
 import { errorConfig } from '@/requestErrorConfig';
-import { authDebug } from '@/utils/auth-debug';
+import { authDebug, authDebugBootProbe } from '@/utils/auth-debug';
 
 const isDev = process.env.NODE_ENV === 'development';
 
@@ -18,22 +19,8 @@ void openapiAuthSessionContract;
 
 /** Ant Design 5：`App.useApp()` 的 message/modal 等依赖此包裹，否则部分页成功提示不显示。 */
 export function rootContainer(container: React.ReactNode) {
+  authDebugBootProbe('rootContainer', {});
   return <AntdApp>{container}</AntdApp>;
-}
-
-async function ensureTenantSelection(user: API.CurrentUser): Promise<void> {
-  try {
-    const rows = await maxRequest<API.TenantRow[]>('/api/v1/tenants', { skipErrorHandler: true });
-    const allow = user.allowed_tenant_ids;
-    const visible =
-      allow === null ? rows : rows.filter((t: API.TenantRow) => allow.includes(t.id));
-    if (!visible.length) return;
-    const cur = localStorage.getItem(STORAGE_TENANT_ID_KEY);
-    const ok = cur && visible.some((t: API.TenantRow) => t.id === cur);
-    if (!ok) localStorage.setItem(STORAGE_TENANT_ID_KEY, visible[0].id);
-  } catch {
-    /* ignore */
-  }
 }
 
 export async function getInitialState(): Promise<{
@@ -44,6 +31,11 @@ export async function getInitialState(): Promise<{
   canInviteMembers?: boolean;
   fetchUserInfo?: () => Promise<API.CurrentUser | undefined>;
 }> {
+  authDebugBootProbe('getInitialState:entry', {
+    pathname: typeof window !== 'undefined' ? window.location.pathname : '(ssr)',
+    hasBearer: typeof window !== 'undefined' && Boolean(localStorage.getItem(STORAGE_BEARER_KEY)),
+  });
+
   const fetchUserInfo = async () => {
     try {
       return await maxRequest<API.CurrentUser>('/api/v1/auth/session', {
