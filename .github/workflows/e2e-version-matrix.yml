@@ -65,6 +65,7 @@ jobs:
         run: |
           set -eux
           docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.e2e-matrix.override.yml \
+            --profile with-control-plane --profile with-agent \
             up -d --no-build --wait --wait-timeout 300
 
       - name: Install Python client (host smoke uses repo protobufs)
@@ -78,13 +79,13 @@ jobs:
       - name: Copy smoke script into agent container and run (matrix agent image)
         run: |
           set -eux
-          aid="$(docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.e2e-matrix.override.yml ps -q agent)"
+          aid="$(docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.e2e-matrix.override.yml --profile with-control-plane --profile with-agent ps -q agent)"
           docker cp scripts/e2e_grpc_register_heartbeat.py "$aid":/tmp/e2e_grpc_register_heartbeat.py
-          docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.e2e-matrix.override.yml exec -T \
+          docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.e2e-matrix.override.yml --profile with-control-plane --profile with-agent exec -T \
             -e DEVAULT_E2E_GRPC_TARGET=api:50051 \
             agent python /tmp/e2e_grpc_register_heartbeat.py
 
       - name: Compose down
         if: always()
         run: |
-          docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.e2e-matrix.override.yml down -v --remove-orphans || true
+          docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.e2e-matrix.override.yml --profile with-control-plane --profile with-agent down -v --remove-orphans || true

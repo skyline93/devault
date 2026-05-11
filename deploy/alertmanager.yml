@@ -1,4 +1,4 @@
-# DeVault demo / lab: route all alerts to the webhook receiver (see docker-compose.prometheus.yml).
+# DeVault demo / lab: route all alerts to the webhook receiver (Compose profile with-monitoring in docker-compose.yml).
 # Replace `receivers.demo.webhook_configs` with Slack / PagerDuty / email in production.
 
 global:

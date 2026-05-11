@@ -43,7 +43,7 @@
 
 | 波次 | 名称 | 未完成条目（§ 指向） |
 |------|------|------------------------|
-| **1** | M1 基础设施与运维闭环 | **已收敛**：Helm（`deploy/helm/devault`）+ **告警路由**（`deploy/alertmanager.yml`、`deploy/docker-compose.prometheus.yml`、`monitoring.enabled`、文档 **`website/docs/install/observability.md`**） |
+| **1** | M1 基础设施与运维闭环 | **已收敛**：Helm（`deploy/helm/devault`）+ **告警路由**（`deploy/alertmanager.yml`、Compose profile **`with-monitoring`**（`deploy/docker-compose.yml`）、`monitoring.enabled`、文档 **`website/docs/admin/observability.md`**） |
 | **2** | 发布工程与数据面韧性 | **已收敛**：§二 Multipart×加密；§三 CI 多版本镜像 E2E；§三 **`bump_release` ↔ `compatibility.json`**；§三 Agent **`server_capabilities`** 降级 |
 | **3** | 网关与身份演进 | **已收敛**：§一 Envoy **`local_rate_limit`**；§一 Register **每 Agent Redis 会话** + **`POST …/revoke-grpc-sessions`** |
 | **4** | 合规与统一存储 \| **控制台与 API 对等** | **§五**：已从迁移 **`0010`** 等落地（详见 **§五**、**§十**）；**§八**：**八-04～八-09**（Jinja `/ui`）已落地；**企业交付控制台**见 **§十五**（Ant Design Pro，`console/`，与 REST 对等；**十五-19** 下线旧 `/ui` 与 CI 模板闸门迁移）。 |

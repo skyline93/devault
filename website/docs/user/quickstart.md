@@ -10,12 +10,27 @@ description: 使用 Docker Compose 最短路径跑通备份与恢复
 
 ## 1. 启动栈
 
+仅内置 **Postgres / Redis / MinIO / minio-init**（无 profile）：
+
 ```bash
 cd deploy
 docker compose pull && docker compose up -d
 ```
 
-Compose 会拉起 PostgreSQL、Redis、MinIO、一次性 **minio-init** 建桶、**api**（含 HTTP 与 gRPC）、**scheduler**、**agent** 等；应用镜像为预构建 **`DEVAULT_IMAGE`**（默认见 `docker-compose.yml`）。`api` 启动时会执行 `alembic upgrade head`。
+要启动 **IAM + api + scheduler**（及按需 **agent**、**控制台**），需启用 [Docker Compose profiles](https://docs.docker.com/compose/how-tos/profiles/)，例如与历史一键安装等价的控制面 + Agent：
+
+```bash
+cd deploy
+docker compose pull && docker compose --profile with-control-plane --profile with-agent up -d
+```
+
+带官方 **Web 控制台** 与演示租户初始化（**`make demo-stack-up`** 等同启用 **with-control-plane**、**with-agent**、**with-console**）：
+
+```bash
+docker compose --profile with-control-plane --profile with-agent --profile with-console up -d --build
+```
+
+应用镜像为预构建 **`DEVAULT_IMAGE`**（默认见 `docker-compose.yml`）。`api` 启动时会执行 `alembic upgrade head`。profile 说明见 [Docker Compose 管理文档](../admin/docker-compose.md)。
 
 **Agent 与多租户**：`Register` 前必须在控制面为 **`agent_id`** 配置 **`agent_enrollments`**（REST **`PUT /api/v1/agents/{agent_id}/enrollment`**）。演示栈中 **agent** 使用固定 **`DEVAULT_AGENT_ID`**，迁移 **`0011`** 会将其绑定到 **当前库中最早创建的一条租户**（开箱 Compose 下通常为迁移 **`0005`** 种子租户）。自建环境见 [Agent 舰队](../admin/agent-fleet.md)。**Heartbeat** 默认上报主机快照与可选 **`DEVAULT_ALLOWED_PATH_PREFIXES`**（逗号分隔路径前缀），供 **`GET /api/v1/tenant-agents`** 与租户级策略路径校验使用；详见 [gRPC（Agent）](../reference/grpc-services.md）。可在写入策略后用 **`POST /api/v1/jobs/path-precheck`**（或 Web UI 策略页的 **Run path precheck**）让 Agent 只读校验 **`paths`** 是否存在、可读，再上真实备份。
 
@@ -62,7 +77,7 @@ curl -sS -H "Authorization: Bearer ${DEVAULT_API_TOKEN}" \
 在 agent 容器内准备空目录（路径须在允许前缀下，如 `/restore`）：
 
 ```bash
-docker compose exec agent mkdir -p /restore/out
+docker compose --profile with-control-plane --profile with-agent exec agent mkdir -p /restore/out
 ```
 
 发起恢复：

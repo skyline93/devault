@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **`deploy/docker-compose.yml`**：默认无 profile 仅 **postgres / redis / minio / minio-init**；**`with-control-plane`** / **`with-agent`** / **`with-console`** 按需启用；**`with-monitoring`**；**`with-grpc-tls`**（**grpc-gateway**）。**Agent TLS** 片段迁至 **`deploy/compose.include/grpc-tls-agent.yml`**；**`docker-compose.grpc-tls.yml`** 仅 **`include`** 该片段（兼容既有 **`-f`**）。**`docker-compose.iam.yml`** 仍为独立 IAM 栈。**`install.sh`** 默认 **`COMPOSE_PROFILES=with-control-plane,with-agent`**；**`make demo-stack-up`** / **down**、CI 矩阵、HA 脚本与文档已同步。
 - **console 布局**：对齐 [Ant Design Pro](https://github.com/ant-design/ant-design-pro) 官方 **`defaultSettings` + `RunTimeLayoutConfig`**（**`mix`**、拂晓蓝 **`#1890ff`**、**`menuItemRender` + `Link`**、**`RightContent` / `AvatarDropdown` / `DefaultFooter`**）；精简无 **`bgLayoutImgList`** / **`SettingDrawer`**；新增 **`/overview/welcome`**，登录后默认进入欢迎页。
 
 ### Deprecated

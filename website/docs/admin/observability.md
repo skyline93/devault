@@ -8,7 +8,7 @@ description: Prometheus、Alertmanager、健康检查与日志
 
 ## Prometheus
 
-控制面 **`GET /metrics`**。Compose 示例 **`deploy/docker-compose.prometheus.yml`** 抓取 **`api:8000`**。
+控制面 **`GET /metrics`**。Compose 在主 **`deploy/docker-compose.yml`** 中启用 profile **`with-monitoring`**（与 **`with-control-plane`** 等同开）即可抓取 **`api:8000`**。
 
 常用租户/用量指标：**`devault_http_requests_total`**、**`devault_billing_committed_backup_bytes_total`**（详见 [租户与访问控制](./tenants-and-rbac.md)）。
 

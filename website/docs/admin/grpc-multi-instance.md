@@ -41,7 +41,7 @@ description: 水平扩展 api、scheduler 单副本、Envoy LB
 ./deploy/scripts/compose-grpc-ha-demo.sh
 ```
 
-或手动叠加 `grpc-tls.yml` 与 `grpc-ha-example.yml` 后 `up --scale api=3`。
+或手动叠加 **`compose.include/grpc-tls-agent.yml`**（或 **`docker-compose.grpc-tls.yml`**）与 **`grpc-ha-example.yml`**，并加上 **`--profile with-control-plane --profile with-agent --profile with-grpc-tls`**，再 `up --scale api=3`。
 
 ## Envoy 上游与 HTTP
 

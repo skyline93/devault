@@ -17,19 +17,22 @@ docker compose \
   -f docker-compose.yml \
   -f docker-compose.grpc-tls.yml \
   -f docker-compose.grpc-ha-example.yml \
+  --profile with-control-plane --profile with-agent --profile with-grpc-tls \
   pull
 docker compose \
   -f docker-compose.yml \
   -f docker-compose.grpc-tls.yml \
   -f docker-compose.grpc-ha-example.yml \
+  --profile with-control-plane --profile with-agent --profile with-grpc-tls \
   up -d --scale api=3
 
 docker compose \
   -f docker-compose.yml \
   -f docker-compose.grpc-tls.yml \
   -f docker-compose.grpc-ha-example.yml \
+  --profile with-control-plane --profile with-agent --profile with-grpc-tls \
   ps
 
 echo ""
 echo "api scaled to 3 replicas (no localhost:8000 on host). Example health check inside one api:"
-echo "  cd deploy && docker compose -f docker-compose.yml -f docker-compose.grpc-tls.yml -f docker-compose.grpc-ha-example.yml exec api curl -sS http://127.0.0.1:8000/healthz"
+echo "  cd deploy && docker compose -f docker-compose.yml -f docker-compose.grpc-tls.yml -f docker-compose.grpc-ha-example.yml --profile with-control-plane --profile with-agent --profile with-grpc-tls exec api curl -sS http://127.0.0.1:8000/healthz"

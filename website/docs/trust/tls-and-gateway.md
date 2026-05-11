@@ -12,11 +12,15 @@ description: gRPC TLS、mTLS 与 Envoy 示例路径
 bash scripts/gen_grpc_dev_tls.sh
 ```
 
-## Compose 叠加
+## Compose（Envoy 在主文件；Agent TLS 为薄叠加）
+
+**`grpc-gateway`** 已在 **`deploy/docker-compose.yml`** 中，启用 profile **`with-grpc-tls`**。栈内 Agent 改走 TLS 时，再叠加 **`deploy/compose.include/grpc-tls-agent.yml`**（或薄包装 **`deploy/docker-compose.grpc-tls.yml`**，其内 `include` 该片段），仅覆盖 **agent** 的 `DEVAULT_GRPC_*` 与 CA 挂载。
 
 ```bash
-docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.grpc-tls.yml pull
-docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.grpc-tls.yml up -d
+docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.grpc-tls.yml \
+  --profile with-control-plane --profile with-agent --profile with-grpc-tls pull
+docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.grpc-tls.yml \
+  --profile with-control-plane --profile with-agent --profile with-grpc-tls up -d
 ```
 
 典型：**Agent → 网关 TLS**，网关 → **`api:50051` 明文 gRPC**。

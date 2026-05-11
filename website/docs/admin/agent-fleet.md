@@ -25,7 +25,7 @@ description: edge_agents 登记、租户 enrollment、HTTP API、强制升级与
 
 **`LeaseJobs` / 存储授权 / 完成**：对 **Register 会话** 以及 **带租户限制的 API Key**，仅允许 **`job.tenant_id`** ∈ 授权集合；与 REST **`allowed_tenant_ids`** 语义一致（见 [租户与 RBAC](./tenants-and-rbac.md)）。平台级 **`DEVAULT_API_TOKEN`**（未限制租户）仍可按既有方式运维全租户作业。
 
-**Compose 演示**：迁移 **`0011`** 为固定 **`DEVAULT_AGENT_ID`**（默认 **`00000000-0000-4000-8000-000000000001`**）与 **`slug=default`** 租户写入一条种子登记；**`deploy/docker-compose.yml`** 中 **agent** 服务默认注入同一 **`DEVAULT_AGENT_ID`**。
+**Compose 演示**：迁移 **`0011`** 为固定 **`DEVAULT_AGENT_ID`**（默认 **`00000000-0000-4000-8000-000000000001`**）与 **`slug=default`** 租户写入一条种子登记；**`deploy/docker-compose.yml`** 中 **agent** 在 profile **`with-agent`** 下默认注入同一 **`DEVAULT_AGENT_ID`**。
 
 ## 跨租户隔离复核（十四-03，摘要）
 

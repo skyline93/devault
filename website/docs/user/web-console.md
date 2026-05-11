@@ -10,7 +10,7 @@ description: 入口、认证与能力范围
 
 **主入口（企业交付）**：仓库 **`console/`**（**Ant Design Pro**；人机 **Cookie 会话**，可选 **Bearer** + **`X-DeVault-Tenant-Id`**）。在 **`console/`** 执行 **`npm run dev`**（默认 **`http://localhost:8010`**，**`/api`**、**`/docs`**、**`/version`** 等代理到 **`127.0.0.1:8000`**）。**登录**：**`/user/login`**（**邮箱 + 密码** 走 IAM 或历史 Cookie 路径，若策略要求则 **TOTP 第二步**）；**Bearer / 自动化**：**`/user/integration`**；**重置密码** **`/user/reset-password`**、**邮件邀请接受** **`/user/accept-invite?token=`**（§十六-11）。**自助注册已移除**（账号由 IAM 引导 CLI / 平台 API 创建）。默认进入 **`/overview/welcome`**；顶栏 **租户选择器** 将所选租户 UUID 写入 **`localStorage`**（**`devault_tenant_id`**）并由请求拦截器注入 **`X-DeVault-Tenant-Id`**（业务 API **必填**）。**租户管理员** 在 **概览 · 成员邀请** 向邮箱发送 **`POST /api/v1/tenants/{tenant_id}/invitations`**。主要路由示例：**`/backup/jobs`**、**`/backup/policies`**、**`/backup/artifacts`**、**`/compliance/schedules`**、**`/execution/fleet`**、**`/platform/tenants`**（仅 admin 菜单）。
 
-**容器 / K8s**：见 **`deploy/docker-compose.yml`**（**`--profile with-console`**，镜像 **`deploy/Dockerfile.console`**）与 **`deploy/helm/devault`**（**`console.enabled`**）。详见 [Web 控制台与 REST 交付节奏](../guides/web-console.md)。
+**容器 / K8s**：见 **`deploy/docker-compose.yml`**（需 **`--profile with-control-plane`**（及按需 **`with-agent`**）并加 **`--profile with-console`**；镜像 **`deploy/Dockerfile.console`**）与 **`deploy/helm/devault`**（**`console.enabled`**）。详见 [Web 控制台与 REST 交付节奏](../guides/web-console.md)。
 
 ## 认证
 

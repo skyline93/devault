@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """Mirror an IAM tenant into DeVault (UUID + slug) after stacks are up.
 
-Typical use (Docker Compose, **profile** ``with-console`` — e.g. ``make demo-stack-up``):
+Typical use (Docker Compose: **with-control-plane** + **with-console**, e.g. ``make demo-stack-up`` which also enables **with-agent**):
 
 1. IAM runs ``iam-admin bootstrap create-platform-user`` when ``IAM_DEMO_AUTO_BOOTSTRAP`` is true (Compose default).
 2. ``demo-stack-init`` runs with default platform email/password (same as IAM); override with ``DEMO_STACK_PLATFORM_*``.
 3. ``console`` starts after ``demo-stack-init`` exits successfully.
 
-Standalone: ``docker compose --profile with-console up demo-stack-init`` (or set env and run this script).
+Standalone: ``docker compose --profile with-control-plane --profile with-console up demo-stack-init`` (or set env and run this script).
 
 Environment (defaults suit in-network Compose service names):
 

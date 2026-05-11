@@ -1,19 +1,34 @@
 # 默认控制面镜像：Docker Hub ``glf9832/devault``；本仓库在 ``api`` / ``scheduler`` / ``agent`` 上声明了 ``build``，
 # 使用 ``docker compose up --build`` 时会从 ``deploy/Dockerfile`` 构建并打上 ``DEVAULT_IMAGE`` 标签（含最新 Alembic）。
 #
-# 模拟生产 + Web 控制台（IAM JWT、同源 /iam-api）一条命令（仓库根 **``make demo-stack-up``**）：
+# ## Profiles（按需启用）
 #
-#   - **IAM**：迁移后自动 **幂等** ``iam-admin bootstrap``（默认邮箱 ``demo@devault.com``、密码 ``Devault12345``，仅演示；``IAM_DEMO_AUTO_BOOTSTRAP=false`` 可关闭）。
-#   - **demo-stack-init**：将 IAM ``demo`` 租户镜像到 DeVault（与上同一组 ``DEMO_STACK_PLATFORM_*`` 环境变量）。
-#   - **Console**：在 ``demo-stack-init`` **成功退出后**再启动，避免登录后无租户可选。
+# 无 profile 时仅启动 **内置数据面**：``postgres``、``redis``、``minio``、``minio-init``。
 #
-#   cd deploy && cp -n .env.stack.example .env 2>/dev/null; \\
-#     DOCKER_BUILDKIT=1 DEVAULT_IMAGE=devault:local docker compose --profile with-console up -d --build
+# | Profile | 服务 |
+# |---------|------|
+# | **with-control-plane** | ``iam``、``api``、``scheduler``（IAM 与 DeVault 控制面） |
+# | **with-agent** | ``agent``（需与控制面同时启用，因依赖 ``api``） |
+# | **with-console** | ``demo-stack-init``、``console``（演示租户镜像 + 官方 Web 控制台；需 **with-control-plane**） |
+# | **with-grpc-tls** | ``grpc-gateway``（Envoy 对外 TLS :50052 → ``api:50051``；需 **with-control-plane**） |
+# | **with-monitoring** | ``alertdump``、``alertmanager``、``prometheus``（需 **with-control-plane** 以便抓取 ``api``） |
+#
+# **Agent 经 TLS 连网关**：再叠加 **``compose.include/grpc-tls-agent.yml``**，或 **``-f docker-compose.grpc-tls.yml``**（仅 ``include`` 上述片段）。
+#
+# 常用示例：
+#
+#   # 控制面 + 节点 Agent（无 UI）
+#   docker compose --profile with-control-plane --profile with-agent up -d
+#
+#   # 完整演示栈（IAM + API + scheduler + agent + 控制台）
+#   docker compose --profile with-control-plane --profile with-agent --profile with-console up -d --build
+#
+# 仓库根 **``make demo-stack-up``**：本地构建 ``devault:local`` / ``devault-console:local`` 并启用 **with-control-plane**、**with-agent**、**with-console**。
+#
+# **with-console** 时：``demo-stack-init`` 在 ``api``/``iam`` 健康后运行；**Console** 在其 **成功退出后** 再启动。``IAM_DEMO_AUTO_BOOTSTRAP`` 下 **IAM** 迁移后幂等 ``iam-admin bootstrap``（默认 ``demo@devault.com`` / ``Devault12345``，仅演示）。
 #
 # 浏览器：<http://127.0.0.1:8080/> 控制台；<http://127.0.0.1:8100/docs> IAM；<http://127.0.0.1:8000/docs> API。
-# 控制面 REST 须带 **``X-DeVault-Tenant-Id``**（UUID）；无默认 slug 回落。覆盖默认平台账号：设置 **``DEMO_STACK_PLATFORM_EMAIL``** / **``DEMO_STACK_PLATFORM_PASSWORD``**（见 **``deploy/.env.stack.example``**）。
-#
-# 等价快捷方式（仓库根目录）：``make demo-stack-up``
+# 控制面 REST 须带 **``X-DeVault-Tenant-Id``**（UUID）；无默认 slug 回落。覆盖默认平台账号：**``DEMO_STACK_PLATFORM_EMAIL``** / **``DEMO_STACK_PLATFORM_PASSWORD``**（见 **``deploy/.env.stack.example``**）。
 #
 # Override: DEVAULT_IMAGE=registry.example.com/acme/devault:tag
 # Playwright 专用栈：`docker compose -f deploy/docker-compose.console-e2e.yml up -d --build`
@@ -24,12 +39,13 @@
 #   DEVAULT_S3_ENDPOINT=http://host.docker.internal:9000   # Docker Desktop: api reaches host-published :9000
 # Use the same host:port from api, scheduler, and every agent. Minio already publishes 9000:9000.
 #
-# IAM（可选内嵌）：与控制面共用 **postgres / redis**（同一 database `devault`，表前缀分别为 **devault_*** / **iam_***；Redis IAM 使用 **db 1**）。`api` 默认 **DEVAULT_IAM_JWKS_URL=http://iam:8100/...**
+# IAM（profile **with-control-plane**）：与控制面共用 **postgres / redis**（同一 database `devault`，表前缀分别为 **devault_*** / **iam_***；Redis IAM 使用 **db 1**）。`api` 默认 **DEVAULT_IAM_JWKS_URL=http://iam:8100/...**
 # 与 **DEVAULT_IAM_JWT_ISSUER/AUDIENCE**（与 IAM 默认 `IAM_JWT_*` 对齐），启动后 HTTP 走 IAM JWT 校验（非 dev-open）。
 # 浏览器访问 IAM：**http://127.0.0.1:8100**；issuer 仍为 **http://127.0.0.1:8100**，与令牌内 `iss` 一致。生产可仍为独立 Postgres/Redis，仅改连接串。
 
 services:
   iam:
+    profiles: ["with-control-plane"]
     build:
       context: ../iam
       dockerfile: Dockerfile
@@ -128,6 +144,7 @@ services:
     restart: "no"
 
   api:
+    profiles: ["with-control-plane"]
     image: ${DEVAULT_IMAGE:-glf9832/devault:latest}
     build:
       context: ..
@@ -178,6 +195,7 @@ services:
       start_period: 120s
 
   scheduler:
+    profiles: ["with-control-plane"]
     image: ${DEVAULT_IMAGE:-glf9832/devault:latest}
     build:
       context: ..
@@ -217,6 +235,7 @@ services:
   #
   # Auth: the agent obtains a gRPC bearer via Register using DEVAULT_GRPC_REGISTRATION_SECRET (must match api).
   agent:
+    profiles: ["with-agent"]
     image: ${DEVAULT_IMAGE:-glf9832/devault:latest}
     build:
       context: ..
@@ -240,8 +259,8 @@ services:
       minio-init:
         condition: service_completed_successfully
 
-  # ``with-console`` profile（``make demo-stack-up``）：先 **demo-stack-init**（IAM ``demo`` → DeVault），再 **console**（Ant Design Pro，反代 API / IAM）。
-  # 构建 console：`docker compose --profile with-console build console`；访问 <http://127.0.0.1:8080/>；**DEVAULT_CONSOLE_*_UPSTREAM** / **UMI_APP_IAM_PREFIX**；**UMI_APP_AUTH_DEBUG** 默认 **1**。
+  # **with-console**（需同时启用 **with-control-plane**）：先 **demo-stack-init**（IAM ``demo`` → DeVault），再 **console**（Ant Design Pro，反代 API / IAM）。
+  # 构建 console：`docker compose --profile with-control-plane --profile with-console build console`；访问 <http://127.0.0.1:8080/>；**DEVAULT_CONSOLE_*_UPSTREAM** / **UMI_APP_IAM_PREFIX**；**UMI_APP_AUTH_DEBUG** 默认 **1**。
   demo-stack-init:
     profiles: ["with-console"]
     image: ${DEVAULT_IMAGE:-glf9832/devault:latest}
@@ -287,6 +306,61 @@ services:
         condition: service_healthy
       demo-stack-init:
         condition: service_completed_successfully
+
+  # Envoy TLS 终结（:50052）→ 内网明文 gRPC ``api:50051``。证书：仓库根 ``bash scripts/gen_grpc_dev_tls.sh`` → ``deploy/tls/dev/``。
+  grpc-gateway:
+    profiles: ["with-grpc-tls"]
+    image: envoyproxy/envoy:v1.31.0
+    command: ["-c", "/etc/envoy/envoy.yaml", "--log-level", "info"]
+    volumes:
+      - ./envoy/envoy-grpc-tls.yaml:/etc/envoy/envoy.yaml:ro
+      - ./tls/dev/server.crt:/etc/ssl/grpc/server.crt:ro
+      - ./tls/dev/server.key:/etc/ssl/grpc/server.key:ro
+    ports:
+      - "50052:50052"
+      - "9901:9901"
+    depends_on:
+      api:
+        condition: service_healthy
+
+  alertdump:
+    profiles: ["with-monitoring"]
+    image: mendhak/http-https-echo:35
+    expose:
+      - "8080"
+
+  alertmanager:
+    profiles: ["with-monitoring"]
+    image: prom/alertmanager:v0.27.0
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --web.external-url=http://127.0.0.1:9093
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    depends_on:
+      alertdump:
+        condition: service_started
+
+  prometheus:
+    profiles: ["with-monitoring"]
+    image: prom/prometheus:v2.55.1
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.console.libraries=/usr/share/prometheus/console_libraries
+      - --web.console.templates=/usr/share/prometheus/consoles
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+    depends_on:
+      api:
+        condition: service_healthy
+      alertmanager:
+        condition: service_started
 
 volumes:
   pgdata: {}

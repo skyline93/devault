@@ -147,7 +147,7 @@
 | 状态 | 优先级 | 待办项 | 说明与验收要点 |
 |------|--------|--------|----------------|
 | [x] | P0 | **gRPC 传输加密** | Agent `grpc.secure_channel` + CA/可选客户端证书；控制面 `grpc.ssl_server_credentials`（`DEVAULT_GRPC_SERVER_TLS_*`）。见 [`docs/grpc-tls.md`](./grpc-tls.md)。 |
-| [x] | P0 | **独立 gRPC 网关或等价物** | **Envoy** 可复现示例：`deploy/envoy/envoy-grpc-tls.yaml`、`deploy/docker-compose.grpc-tls.yml`；文档区分内网明文与对外 TLS。 |
+| [x] | P0 | **独立 gRPC 网关或等价物** | **Envoy** 可复现示例：`deploy/envoy/envoy-grpc-tls.yaml`、主 **`docker-compose.yml`**（**`with-grpc-tls`**）+ **`compose.include/grpc-tls-agent.yml`**（Agent TLS）；文档区分内网明文与对外 TLS。 |
 | [x] | P0 | **网关层限流与连接治理** | 控制面 **每 peer 令牌桶**（`DEVAULT_GRPC_RPS_PER_PEER` / `DEVAULT_GRPC_RPS_BURST_PER_PEER`）；网关侧 Envoy 限流可在后续加 `local_rate_limit` filter。 |
 | [x] | P1 | **网关与审计日志** | 每 RPC 一行 JSON → logger **`devault.grpc.audit`**（`rpc`、`peer`、`grpc_code`、`elapsed_ms`、`extra`）；不含密钥。 |
 | [x] | P1 | **Register / 令牌模型（相对共享 API Token）** | **`Register` RPC**：引导式认证（现为 **Redis 每 Agent 会话**，见 **一-09**）；HTTP 侧仍可用 **`DEVAULT_API_TOKEN`** / API Key。 |
@@ -276,7 +276,7 @@
 | [x] | P1 | **Agent 批量管理** | 版本查询、强制升级策略、与控制面协议版本协商（`.proto` 版本号）。**`edge_agents`** 表；**`GET /api/v1/agents`**；**`LeaseJobs`** 可选二次校验 **`DEVAULT_GRPC_ENFORCE_VERSION_ON_LEASE`**；文档 **`website/docs/reference/agent-fleet.md`**。 |
 | [x] | P2 | **Agent 舰队 Web UI** | 简易控制台 **`/ui/agents`**（HTTP Basic，与 API 同源数据）；导航 **`agents.html`**；展示 SemVer / proto 合规列。 |
 | [x] | P2 | **Helm Chart / K8s 清单** | Chart：`deploy/helm/devault`；文档站 **`website/docs/install/kubernetes-helm.md`**；CI **`helm lint`**。Operator 可作为更后阶段。 |
-| [x] | P2 | **告警路由** | Prometheus **`rule_files`** + **Alertmanager**（`deploy/alertmanager.yml`）；Compose 叠加 **`deploy/docker-compose.prometheus.yml`**（`alertdump` 演示 Webhook）；Helm **`monitoring.enabled`**；规则含备份/完整性/锁争用/保留清理；**存储配额**见云侧监控说明（`observability.md`）。 |
+| [x] | P2 | **告警路由** | Prometheus **`rule_files`** + **Alertmanager**（`deploy/alertmanager.yml`）；Compose profile **`with-monitoring`**（`deploy/docker-compose.yml`，`alertdump` 演示 Webhook）；Helm **`monitoring.enabled`**；规则含备份/完整性/锁争用/保留清理；**存储配额**见云侧监控说明（`observability.md`）。 |
 
 ---
 
@@ -426,7 +426,7 @@
 | 2026-05-09 | **文档**：**`website/docs/intro/target-architecture.md`** 承接原 **`docs-old/target-architecture.md`** 正文；旧文件改为迁移占位；全站引用改为文档站内链；**`observability.md`** 使用 HTML 标题锚点以兼容 MDX。 |
 | 2026-05-09 | **清单重组**：新增 **排期波次（1～6）**、**全量待办索引**（§零～§九 + §三.3 注，共 73 行，与分节表一一对应）；**整体实施路线** 补充排期原则；**如何使用** 增加「排期波次」列说明；**§十** 增加 Epic→波次映射；**§十三** 与全量索引互链。（**注**：后续 **§十四** 追加后索引行数递增，以当前主文件 **全量待办索引（活跃）** 为准。） |
 | 2026-05-09 | **M1·六 P2**：**Helm Chart** 落地（`deploy/helm/devault`、CI `helm lint`、文档 **`website/docs/install/kubernetes-helm.md`**）；**§六** 与全量索引 **六-05** 勾选；**波次 1** 表更新。 |
-| 2026-05-09 | **M1·六 P2**：**告警路由** 落地（`deploy/alertmanager.yml`、`deploy/docker-compose.prometheus.yml` 扩展、**`deploy/prometheus/alerts.yml`** 增补策略锁/保留清理；Helm **`templates/monitoring.yaml`** + **`prometheus-alerts.yml`**；**`website/docs/install/observability.md`** 重写 Alertmanager 章节；**§六** 与全量索引 **六-06** 勾选；**波次 1** 标为已收敛）。 |
+| 2026-05-09 | **M1·六 P2**：**告警路由** 落地（`deploy/alertmanager.yml`、Compose Prometheus 叠加、**`deploy/prometheus/alerts.yml`** 增补策略锁/保留清理；Helm **`templates/monitoring.yaml`** + **`prometheus-alerts.yml`**；**`website/docs/install/observability.md`** 重写 Alertmanager 章节；**§六** 与全量索引 **六-06** 勾选；**波次 1** 标为已收敛）。 |
 | 2026-05-09 | **M1·二 P3**：**Multipart×Artifact 加密** 联调落地（Agent **`multipart_resume`** 校验、checkpoint **`encrypt_artifacts`**、**`devault_multipart_encrypted_mpu_completes_total`**、文档与单测；**§二**、全量索引 **二-07**、**§十三**、**波次 2** 表更新）。 |
 | 2026-05-09 | **M1·三 P2**：**CI 多版本镜像 E2E 矩阵**（**`e2e-version-matrix.yml`**、**`ci_e2e`** / **`matrix_definitions`**、Compose override、gRPC 冒烟脚本、**`verify_compatibility_matrix`** 扩展、**`compatibility.md`**；全量索引 **三-11**、**§三.2**、**§十三**、**波次 2** 表更新）。 |
 | 2026-05-09 | **M1·三 P3**：**`bump_release` ↔ `compatibility.json`**（**`sync_compatibility_current_release`**、文档与单测）；**Agent `server_capabilities` 降级**（**`gate_multipart_*`**、**`AgentCapabilityState`**、全量索引 **三-12 / 三-13**、**§十三**、**波次 2** 收敛）。 |

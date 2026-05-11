@@ -42,7 +42,7 @@
 
 - **开发**：见 **`config/config.ts`** **`proxy`**。
 - **生产同域**：**`deploy/nginx/console-spa.conf.template`**（Docker 镜像用 **envsubst**：**`DEVAULT_CONSOLE_API_UPSTREAM`**、**`DEVAULT_CONSOLE_IAM_UPSTREAM`**）；静态参考 **`deploy/nginx/console-spa.conf`**。
-- **Compose（可选 · 十五-21）**：在 **`deploy/`** 执行 **`docker compose --profile with-console build console && docker compose --profile with-console up -d`**（多阶段 **`deploy/Dockerfile.console`**，无需主机预建 **`dist/`**），访问 **`http://127.0.0.1:8080/`**。
+- **Compose（可选 · 十五-21）**：在 **`deploy/`** 执行 **`docker compose --profile with-control-plane --profile with-agent --profile with-console build console && docker compose --profile with-control-plane --profile with-agent --profile with-console up -d`**（多阶段 **`deploy/Dockerfile.console`**，无需主机预建 **`dist/`**），访问 **`http://127.0.0.1:8080/`**。
 - **Helm**：**`console.enabled: true`** 时安装控制台 Deployment/Service，Ingress 将 **`/api`**、**`/docs`** 等指向 API，**`/`** 指向控制台（见 **`deploy/helm/devault/values.yaml`**）。
 
 ### 十五-19～二十一（闸门与镜像）

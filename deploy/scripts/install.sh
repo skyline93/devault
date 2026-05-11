@@ -13,6 +13,9 @@
 #   DEVAULT_INSTALL_DIR         Same as --dir if set before the script runs.
 #   DEVAULT_IMAGE               Full image ref (default: glf9832/devault:latest-<amd64|arm64> from uname).
 #   DEVAULT_INSTALL_BASE_URL    Raw URL of deploy/ on a mirror (default: raw.githubusercontent.com/skyline93/devault/.../deploy).
+#   DEVAULT_COMPOSE_PROFILES    Comma-separated compose profiles (default: with-control-plane,with-agent).
+#                               Example with official console: with-control-plane,with-agent,with-console
+#                               (requires DEVAULT_CONSOLE_IMAGE or a pre-built console image).
 #
 # Local checkout:
 #   ./deploy/scripts/install.sh
@@ -182,6 +185,10 @@ elif [ -n "${DEVAULT_IMAGE:-}" ]; then
   echo ">> Using image: $DEVAULT_IMAGE"
 fi
 
+# Compose profiles: default matches historical one-liner (control plane + agent, no console).
+export COMPOSE_PROFILES="${DEVAULT_COMPOSE_PROFILES:-with-control-plane,with-agent}"
+echo ">> Compose profiles: ${COMPOSE_PROFILES}"
+
 echo ">> Pulling images..."
 if $DOCKER_COMPOSE -f "$COMPOSE_FILE" pull --help 2>&1 | grep -q -- '--policy'; then
   # shellcheck disable=SC2086
@@ -197,4 +204,4 @@ $DOCKER_COMPOSE -f "$COMPOSE_FILE" up -d
 
 echo ""
 echo "DeVault is up. Swagger: http://127.0.0.1:8000/docs"
-echo "Stop: cd \"$(pwd)\" && $DOCKER_COMPOSE -f \"$COMPOSE_FILE\" down"
+echo "Stop: cd \"$(pwd)\" && COMPOSE_PROFILES=\"${COMPOSE_PROFILES}\" $DOCKER_COMPOSE -f \"$COMPOSE_FILE\" down"

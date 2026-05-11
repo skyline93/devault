@@ -6,16 +6,23 @@
 
 ## 快速开始
 
-在仓库根目录执行：
+在仓库根目录，**不加 profile** 时仅启动内置 **Postgres / Redis / MinIO / minio-init**：
 
 ```bash
 cd deploy
 docker compose pull && docker compose up -d
 ```
 
-启动后可在本机访问 **Swagger**：<http://127.0.0.1:8000/docs>。数据库迁移在 Compose 中由 **api** 服务在启动时执行（`alembic upgrade head`）。
+要启动 **IAM、api、scheduler** 以及可选 **agent / 控制台**，需启用 Compose **profile**，例如与 **`install.sh`** 默认一致（控制面 + Agent）：
 
-`docker-compose.yml` 中 **api / scheduler / agent** 同时声明了 **`image`**（默认 **`glf9832/devault:latest`**）与 **`build`**（`deploy/Dockerfile`）。仅 **`docker compose pull && up -d`** 时使用预拉取镜像；加上 **`--build`** 或执行 **`make demo-stack-up`** 会从源码构建 **`devault:local`** 并带上当前仓库的 Alembic 迁移（含 IAM 默认租户 id 对齐）。环境变量模板见 **`deploy/.env.stack.example`**（可复制为 **`deploy/.env`**）。
+```bash
+cd deploy
+docker compose pull && docker compose --profile with-control-plane --profile with-agent up -d
+```
+
+**api** 运行后可在本机访问 **Swagger**：<http://127.0.0.1:8000/docs>；迁移在 **api** 启动时执行（`alembic upgrade head`）。profile 说明见 **`deploy/docker-compose.yml`** 文件头与网站文档 **Docker Compose** 章节。
+
+`docker-compose.yml` 中 **api / scheduler / agent** 同时声明了 **`image`**（默认 **`glf9832/devault:latest`**）与 **`build`**（`deploy/Dockerfile`）。带 profile 的 **`pull && up -d`** 使用预拉取镜像；加上 **`--build`** 或执行 **`make demo-stack-up`** 会从源码构建 **`devault:local`**（及控制台镜像）。环境变量模板见 **`deploy/.env.stack.example`**（可复制为 **`deploy/.env`**）。
 
 ### 远程一键安装（无需 `git clone`）
 
@@ -25,9 +32,9 @@ docker compose pull && docker compose up -d
 curl -fsSL https://raw.githubusercontent.com/skyline93/devault/main/deploy/scripts/install.sh | sh
 ```
 
-可选：`DEVAULT_REF` 指定分支或 tag（默认 `main`）以固定所拉取的 `deploy/` 版本；仅在镜像了 `deploy/` 目录时才需要 `DEVAULT_INSTALL_BASE_URL`。更多见 `deploy/scripts/install.sh` 头部注释。
+可选：`DEVAULT_REF` 指定分支或 tag（默认 `main`）以固定所拉取的 `deploy/` 版本；仅在镜像了 `deploy/` 目录时才需要 `DEVAULT_INSTALL_BASE_URL`。**`DEVAULT_COMPOSE_PROFILES`** 可覆盖默认 **`COMPOSE_PROFILES`**（默认 **`with-control-plane,with-agent`**，安装后即有 **Swagger**）。更多见 `deploy/scripts/install.sh` 头部注释。
 
-**本地克隆**：执行 `./deploy/scripts/install.sh` 会在仓库的 **`deploy/`** 目录内先 **`compose pull`** 再 **`up -d`**；`--dir` 在此模式下会被忽略。
+**本地克隆**：执行 `./deploy/scripts/install.sh` 会在仓库的 **`deploy/`** 目录内先 **`compose pull`** 再带默认 profile 的 **`up -d`**；`--dir` 在此模式下会被忽略。
 
 维护者：GitHub Actions 密钥 `DOCKERHUB_USERNAME`、`DOCKERHUB_TOKEN`（一般为拥有 `glf9832/devault` 的 Docker Hub 账号），可选仓库变量 `DOCKERHUB_IMAGE` 以推送其它镜像名。工作流：`.github/workflows/docker-publish.yml`（默认推送 `glf9832/devault`）。
 

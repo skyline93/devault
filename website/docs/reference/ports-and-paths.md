@@ -15,9 +15,9 @@ description: 默认端口、HTTP 路由与 Agent 挂载
 | **5432** | PostgreSQL |
 | **6379** | Redis |
 | **9000** / **9001** | MinIO API / 控制台 |
-| **9090** | Prometheus（叠加 `docker-compose.prometheus.yml`） |
+| **9090** | Prometheus（主 `docker-compose.yml`，profile **`with-monitoring`**） |
 
-网关叠加可能对外暴露 **50052** 等，见 `deploy/docker-compose.grpc-tls.yml`。
+网关 **50052** / **9901** 见主 `docker-compose.yml` profile **`with-grpc-tls`**；Agent TLS 片段见 **`deploy/compose.include/grpc-tls-agent.yml`**（或 **`docker-compose.grpc-tls.yml`** 包装）。
 
 ## Agent 演示挂载
 

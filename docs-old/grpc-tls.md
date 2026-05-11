@@ -9,7 +9,7 @@
 | 拓扑 | Agent → | 控制面 gRPC | 说明 |
 |------|---------|-------------|------|
 | **开发默认** | `api:50051` 明文 | `DEVAULT_GRPC_LISTEN` 无 TLS | `docker-compose.yml` 默认，零证书。 |
-| **网关 TLS（推荐对外）** | `grpc-gateway:50052` TLS | Envoy 终结 TLS，内网转发 `api:50051` 明文 h2 | 使用 `docker-compose.grpc-tls.yml` 叠加。 |
+| **网关 TLS（推荐对外）** | `grpc-gateway:50052` TLS | Envoy 终结 TLS，内网转发 `api:50051` 明文 h2 | 主 `docker-compose.yml` 启用 **`with-grpc-tls`**；Agent TLS 叠加 **`compose.include/grpc-tls-agent.yml`**（或 **`docker-compose.grpc-tls.yml`** 薄包装）。 |
 | **直连 TLS** | `api:50051` TLS | `DEVAULT_GRPC_SERVER_TLS_*` 启用内嵌 TLS | 无 Envoy 时仍加密链路。 |
 
 「明文仅在内网」在叠加 Envoy 时是预期：**TLS 在网关终结**，Docker 网络内为 h2c 至 API。
@@ -48,7 +48,7 @@
 
 ```bash
 bash scripts/gen_grpc_dev_tls.sh
-docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.grpc-tls.yml pull && docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.grpc-tls.yml up -d
+docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.grpc-tls.yml --profile with-control-plane --profile with-agent --profile with-grpc-tls pull && docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.grpc-tls.yml --profile with-control-plane --profile with-agent --profile with-grpc-tls up -d
 ```
 
 证书输出目录：`deploy/tls/dev/`（已在 `.gitignore` 中忽略）。`grpc-gateway` 监听 **50052**（TLS），管理接口 **9901**。

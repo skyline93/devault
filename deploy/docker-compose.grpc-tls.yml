@@ -1,27 +1,4 @@
-# Optional overlay: Envoy terminates TLS on :50052 → plaintext gRPC to api:50051.
-# Prereq: `bash scripts/gen_grpc_dev_tls.sh` from repo root (creates deploy/tls/dev/).
-#
-#   docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.grpc-tls.yml pull && docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.grpc-tls.yml up -d
-#
-services:
-  grpc-gateway:
-    image: envoyproxy/envoy:v1.31.0
-    command: ["-c", "/etc/envoy/envoy.yaml", "--log-level", "info"]
-    volumes:
-      - ./envoy/envoy-grpc-tls.yaml:/etc/envoy/envoy.yaml:ro
-      - ./tls/dev/server.crt:/etc/ssl/grpc/server.crt:ro
-      - ./tls/dev/server.key:/etc/ssl/grpc/server.key:ro
-    ports:
-      - "50052:50052"
-      - "9901:9901"
-    depends_on:
-      api:
-        condition: service_healthy
-
-  agent:
-    environment:
-      DEVAULT_GRPC_TARGET: grpc-gateway:50052
-      DEVAULT_GRPC_TLS_CA_PATH: /certs/ca.crt
-      DEVAULT_GRPC_TLS_SERVER_NAME: grpc-gateway
-    volumes:
-      - ./tls/dev/ca.crt:/certs/ca.crt:ro
+# 薄包装（向后兼容）：等价于 ``-f compose.include/grpc-tls-agent.yml``。
+# 片段说明与命令示例见 ``compose.include/grpc-tls-agent.yml``。
+include:
+  - path: compose.include/grpc-tls-agent.yml

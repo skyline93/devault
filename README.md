@@ -6,16 +6,23 @@ Enterprise-oriented **backup and restore** platform: a control plane (HTTP API, 
 
 ## Quick start
 
-From the repository root:
+From the repository root, **without profiles** only the bundled data plane starts (**postgres**, **redis**, **minio**, **minio-init**):
 
 ```bash
 cd deploy
 docker compose pull && docker compose up -d
 ```
 
-Then open **Swagger** at <http://127.0.0.1:8000/docs>. In Compose, database migrations run on **api** startup (`alembic upgrade head`).
+To run **IAM**, **api**, **scheduler**, and (optionally) **agent** / **console**, enable [Compose profiles](https://docs.docker.com/compose/how-tos/profiles/) — for example the same defaults as **`install.sh`** (control plane + agent):
 
-For **api**, **scheduler**, and **agent**, `docker-compose.yml` sets both **`image`** (default **`glf9832/devault:latest`**) and **`build`** (`deploy/Dockerfile`). A plain **`pull` + `up`** uses the pulled image; use **`up --build`** or **`make demo-stack-up`** to build **`devault:local`** from the repo (includes the latest Alembic revisions, including IAM default-tenant UUID alignment). Copy **`deploy/.env.stack.example`** to **`deploy/.env`** when you want Compose to load stack variables automatically.
+```bash
+cd deploy
+docker compose pull && docker compose --profile with-control-plane --profile with-agent up -d
+```
+
+Then open **Swagger** at <http://127.0.0.1:8000/docs> when **api** is running. Migrations run on **api** startup (`alembic upgrade head`). Profile summary: **`deploy/docker-compose.yml`** file header and [Docker Compose](website/docs/admin/docker-compose.md).
+
+For **api**, **scheduler**, and **agent**, `docker-compose.yml` sets both **`image`** (default **`glf9832/devault:latest`**) and **`build`** (`deploy/Dockerfile`). A plain **`pull` + `up`** with profiles uses the pulled image; use **`up --build`** or **`make demo-stack-up`** to build **`devault:local`** (+ **console**) from the repo. Copy **`deploy/.env.stack.example`** to **`deploy/.env`** when you want Compose to load stack variables automatically.
 
 ### Remote install (no `git clone`)
 
@@ -25,9 +32,9 @@ Official repo: **[skyline93/devault](https://github.com/skyline93/devault)**. Th
 curl -fsSL https://raw.githubusercontent.com/skyline93/devault/main/deploy/scripts/install.sh | sh
 ```
 
-Optional: `DEVAULT_REF` (branch or tag, default `main`) to pin which revision of `deploy/` is fetched; `DEVAULT_INSTALL_BASE_URL` only if you mirror the `deploy/` tree elsewhere.
+Optional: `DEVAULT_REF` (branch or tag, default `main`) to pin which revision of `deploy/` is fetched; `DEVAULT_INSTALL_BASE_URL` only if you mirror the `deploy/` tree elsewhere. **`DEVAULT_COMPOSE_PROFILES`** overrides the default **`COMPOSE_PROFILES`** (default **`with-control-plane,with-agent`** so **Swagger** is available after install).
 
-From a **local clone**, `./deploy/scripts/install.sh` runs inside `deploy/`, pulls images, then **`docker compose up -d`**. `--dir` is ignored in that mode.
+From a **local clone**, `./deploy/scripts/install.sh` runs inside `deploy/`, pulls images, then **`docker compose up -d`** with the same profile defaults. `--dir` is ignored in that mode.
 
 Maintainers: GitHub Actions secrets `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` (typically the Docker Hub user that owns `glf9832/devault`), optional repository variable `DOCKERHUB_IMAGE` to push under a different repo name. Workflow: `.github/workflows/docker-publish.yml` (default push target: `glf9832/devault`).
 

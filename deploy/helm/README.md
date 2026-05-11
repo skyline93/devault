@@ -16,4 +16,4 @@ helm template demo-mon deploy/helm/devault --set monitoring.enabled=true >/dev/n
 
 ## 企业控制台（Ant Design Pro）同域反代（十五-08）
 
-Chart 当前以 **api** 为主；**`console/dist`** 静态资源建议由 **Ingress 或前置 Nginx** 与 **`/api` → 控制面 Service** 同域发布。示例配置见 **`deploy/nginx/console-spa.conf`**（Compose 可选服务 **`console`**，`--profile with-console`）。
+Chart 当前以 **api** 为主；**`console/dist`** 静态资源建议由 **Ingress 或前置 Nginx** 与 **`/api` → 控制面 Service** 同域发布。示例配置见 **`deploy/nginx/console-spa.conf`**（Compose 可选服务 **`console`**，profile **`with-console`**，且需 **`with-control-plane`** 等，见 **`deploy/docker-compose.yml`** 文件头）。

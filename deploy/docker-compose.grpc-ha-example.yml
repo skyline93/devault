@@ -3,14 +3,16 @@
 # Compose bind-mounts the same host ports only once per scaled service; clearing `api.ports`
 # keeps HTTP/gRPC reachable only on the Docker network (Envoy, other containers).
 #
-# Typical demo (TLS Agent path):
+# Typical demo（TLS Agent + 多 ``api`` 副本）:
 #   bash scripts/gen_grpc_dev_tls.sh
 #   docker compose -f deploy/docker-compose.yml \
 #     -f deploy/docker-compose.grpc-tls.yml \
-#     -f deploy/docker-compose.grpc-ha-example.yml pull
+#     -f deploy/docker-compose.grpc-ha-example.yml \
+#     --profile with-control-plane --profile with-agent --profile with-grpc-tls pull
 #   docker compose -f deploy/docker-compose.yml \
 #     -f deploy/docker-compose.grpc-tls.yml \
-#     -f deploy/docker-compose.grpc-ha-example.yml up -d --scale api=3
+#     -f deploy/docker-compose.grpc-ha-example.yml \
+#     --profile with-control-plane --profile with-agent --profile with-grpc-tls up -d --scale api=3
 #
 # Agent → grpc-gateway:50052 → ROUND_ROBIN → api:50051 (see deploy/envoy/envoy-grpc-tls.yaml).
 # Full narrative: website/docs/install/grpc-multi-instance.md

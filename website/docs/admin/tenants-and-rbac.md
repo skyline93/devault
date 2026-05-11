@@ -34,7 +34,7 @@ Web UI 通过顶栏租户选择与 **`localStorage`** 写入该头；REST/自动
 
 ### 与 IAM 对齐租户主键
 
-在 **IAM** 中创建租户后，可在 DeVault **`POST /api/v1/tenants`** 的请求体中传入 **`id`**（与 IAM 返回的租户 UUID 相同），以便 JWT `tid` / 成员关系与 **`tenants.id`** 一致。可选编排见 **`deploy/scripts/bootstrap_demo_stack.py`** 与 Compose **`with-console`** profile（**`make demo-stack-up`** 会运行 **`demo-stack-init`**）。
+在 **IAM** 中创建租户后，可在 DeVault **`POST /api/v1/tenants`** 的请求体中传入 **`id`**（与 IAM 返回的租户 UUID 相同），以便 JWT `tid` / 成员关系与 **`tenants.id`** 一致。可选编排见 **`deploy/scripts/bootstrap_demo_stack.py`** 与 Compose profile **`with-console`**（须与 **`with-control-plane`** 同开；**`make demo-stack-up`** 会运行 **`demo-stack-init`**）。
 
 ### 创建额外租户
 
