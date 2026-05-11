@@ -5,9 +5,8 @@ import type { MenuProps } from 'antd';
 import React, { useMemo } from 'react';
 
 import HeaderDropdown from '@/components/HeaderDropdown';
+import { LOGIN_PATH } from '@/constants/auth-routes';
 import { STORAGE_BEARER_KEY, STORAGE_TENANT_ID_KEY } from '@/constants/storage';
-
-const loginPath = '/user/login';
 
 /**
  * 与 Pro 模板 `AvatarDropdown` 同构：头像 + 下拉菜单（账户信息 / 退出）。
@@ -48,7 +47,7 @@ const AvatarDropdown: React.FC = () => {
       canAdmin: false,
       canWrite: false,
     }));
-    history.push(loginPath);
+    history.push(LOGIN_PATH);
   };
 
   const items: MenuProps['items'] = [

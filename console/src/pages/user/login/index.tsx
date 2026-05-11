@@ -6,6 +6,7 @@ import React, { useState } from 'react';
 
 import { STORAGE_BEARER_KEY } from '@/constants/storage';
 import { IAM_API_PREFIX, isIamConsoleEnabled } from '@/config/iam';
+import { authDebug } from '@/utils/auth-debug';
 
 type IamTokenOut = {
   access_token: string;
@@ -26,6 +27,11 @@ const Login: React.FC = () => {
   const finishLogin = async (currentUser: API.CurrentUser) => {
     const canWrite = !currentUser.needs_mfa && (currentUser.role === 'admin' || currentUser.role === 'operator');
     const canAdmin = !currentUser.needs_mfa && currentUser.role === 'admin';
+    authDebug('finishLogin:beforeSetInitialState', {
+      pathname: window.location.pathname,
+      principal: currentUser.principal_label,
+      hasBearer: Boolean(localStorage.getItem(STORAGE_BEARER_KEY)),
+    });
     await setInitialState((s) => ({
       ...s,
       currentUser,
@@ -39,7 +45,9 @@ const Login: React.FC = () => {
     const redirect = sp.get('redirect');
     const safe =
       redirect && redirect.startsWith('/') && !redirect.startsWith('//') && !redirect.includes(':');
-    history.push(safe ? redirect : '/overview/welcome');
+    const target = safe ? redirect : '/overview/welcome';
+    authDebug('finishLogin:afterSetInitialState', { target });
+    history.push(target);
   };
 
   const loginViaIam = async (email: string, password: string, mfaCode?: string) => {
@@ -51,10 +59,12 @@ const Login: React.FC = () => {
       skipErrorHandler: true,
     });
     localStorage.setItem(STORAGE_BEARER_KEY, tok.access_token);
+    authDebug('loginViaIam:afterIamLogin', { tenantId: tok.tenant_id });
     const currentUser = await request<API.CurrentUser>('/api/v1/auth/session', {
       method: 'GET',
       skipErrorHandler: true,
     });
+    authDebug('loginViaIam:afterDevaultSession', { principal: currentUser.principal_label });
     setPendingIam(null);
     await finishLogin(currentUser);
   };

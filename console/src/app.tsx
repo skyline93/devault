@@ -1,7 +1,7 @@
 import { LinkOutlined } from '@ant-design/icons';
 import type { ProLayoutProps } from '@ant-design/pro-components';
 import type { RequestConfig, RunTimeLayoutConfig } from '@umijs/max';
-import { history, Link, request as maxRequest } from '@umijs/max';
+import { Link, request as maxRequest } from '@umijs/max';
 import { App as AntdApp } from 'antd';
 import React from 'react';
 
@@ -10,17 +10,9 @@ import defaultSettings from '../config/defaultSettings';
 import { STORAGE_BEARER_KEY, STORAGE_TENANT_ID_KEY } from '@/constants/storage';
 import { openapiAuthSessionContract } from '@/openapi/contract';
 import { errorConfig } from '@/requestErrorConfig';
+import { authDebug } from '@/utils/auth-debug';
 
 const isDev = process.env.NODE_ENV === 'development';
-const loginPath = '/user/login';
-/** 未登录也可访问的认证相关页（含 §十六-11 邀请接受）。 */
-const authPublicPaths = new Set([
-  '/user/login',
-  '/user/integration',
-  '/user/register',
-  '/user/reset-password',
-  '/user/accept-invite',
-]);
 
 void openapiAuthSessionContract;
 
@@ -59,20 +51,31 @@ export async function getInitialState(): Promise<{
         skipErrorHandler: true,
         credentials: 'include',
       });
-    } catch {
+    } catch (e) {
+      const status = (e as { response?: { status?: number } })?.response?.status;
+      authDebug('getInitialState:sessionRequestFailed', {
+        httpStatus: status ?? 'unknown',
+        hadBearer: typeof window !== 'undefined' && Boolean(localStorage.getItem(STORAGE_BEARER_KEY)),
+      });
       localStorage.removeItem(STORAGE_BEARER_KEY);
       return undefined;
     }
   };
 
-  if (authPublicPaths.has(history.location.pathname)) {
-    return {
-      fetchUserInfo,
-      settings: defaultSettings as Partial<ProLayoutProps>,
-    };
-  }
-
+  /**
+   * 所有入口路径统一解析会话（含登录等白名单页），避免「白名单短路」与 ProLayout
+   * 闭包中的 `currentUser` 长期不一致；未登录时 `fetchUserInfo` 返回 undefined。
+   */
+  authDebug('getInitialState:start', {
+    pathname: typeof window !== 'undefined' ? window.location.pathname : '(no-window)',
+    hasBearer: typeof window !== 'undefined' && Boolean(localStorage.getItem(STORAGE_BEARER_KEY)),
+  });
   const currentUser = await fetchUserInfo();
+  authDebug('getInitialState:afterSession', {
+    hasCurrentUser: Boolean(currentUser),
+    principal: currentUser?.principal_label,
+    needsMfa: currentUser?.needs_mfa,
+  });
   const gated = Boolean(currentUser?.needs_mfa);
   const canAdmin = Boolean(currentUser && !gated && currentUser.role === 'admin');
   const canWrite = Boolean(
@@ -107,14 +110,6 @@ export const layout: RunTimeLayoutConfig = ({ initialState }) => ({
   },
   actionsRender: () => [<RightContent key="right-content" />],
   footerRender: () => <Footer />,
-  onPageChange: () => {
-    const { location } = history;
-    if (!initialState?.currentUser && !authPublicPaths.has(location.pathname)) {
-      history.replace(
-        `${loginPath}?redirect=${encodeURIComponent(location.pathname + location.search + location.hash)}`,
-      );
-    }
-  },
   links: isDev
     ? [
         <a key="openapi" href="/docs" target="_blank" rel="noreferrer">

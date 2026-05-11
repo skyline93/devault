@@ -3,6 +3,7 @@ import { Select, Space, Tooltip, Typography, message } from 'antd';
 import React, { useEffect, useMemo, useState } from 'react';
 
 import { STORAGE_TENANT_ID_KEY } from '@/constants/storage';
+import { authDebug } from '@/utils/auth-debug';
 
 /**
  * 顶栏租户选择（十五-07）：`GET /api/v1/tenants`（服务端已按 token 过滤）+ 本地持久化 UUID。
@@ -25,7 +26,9 @@ const TenantSwitcher: React.FC = () => {
       try {
         const rows = await request<API.TenantRow[]>('/api/v1/tenants');
         if (!cancelled) setTenants(rows);
-      } catch {
+      } catch (e) {
+        const status = (e as { response?: { status?: number } })?.response?.status;
+        authDebug('tenantSwitcher:tenantsRequestFailed', { httpStatus: status ?? 'unknown' });
         if (!cancelled) setTenants([]);
       } finally {
         if (!cancelled) setLoading(false);

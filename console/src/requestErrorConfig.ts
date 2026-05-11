@@ -1,7 +1,9 @@
 import type { RequestConfig } from '@umijs/max';
 import { message } from 'antd';
 
+import { LOGIN_PATH } from '@/constants/auth-routes';
 import { CSRF_COOKIE_NAME, STORAGE_BEARER_KEY, STORAGE_TENANT_ID_KEY } from '@/constants/storage';
+import { authDebug } from '@/utils/auth-debug';
 
 function readCookie(name: string): string | null {
   if (typeof document === 'undefined') return null;
@@ -9,8 +11,6 @@ function readCookie(name: string): string | null {
   const m = document.cookie.match(new RegExp(`(?:^|; )${esc}=([^;]*)`));
   return m ? decodeURIComponent(m[1]) : null;
 }
-
-const loginPath = '/user/login';
 
 export function detailFromError(error: unknown): string {
   const body = (error as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
@@ -33,10 +33,17 @@ export const errorConfig: RequestConfig = {
       if (status === 401) {
         if (typeof window !== 'undefined') {
           const { pathname, search, hash } = window.location;
+          const reqUrl = (error as { request?: { url?: string }; config?: { url?: string } })?.request?.url
+            ?? (error as { config?: { url?: string } })?.config?.url;
+          authDebug('http:401', {
+            pathname,
+            requestUrl: reqUrl ?? 'unknown',
+            willFullPageRedirect: pathname !== LOGIN_PATH,
+          });
           localStorage.removeItem(STORAGE_BEARER_KEY);
-          if (pathname !== loginPath) {
+          if (pathname !== LOGIN_PATH) {
             const redirect = encodeURIComponent(pathname + search + hash);
-            window.location.href = `${loginPath}?redirect=${redirect}`;
+            window.location.href = `${LOGIN_PATH}?redirect=${redirect}`;
           }
         }
         return;

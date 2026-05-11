@@ -41,12 +41,17 @@ export default defineConfig({
     { path: '/user/register', layout: false, component: './user/register' },
     { path: '/user/reset-password', layout: false, component: './user/reset-password' },
     { path: '/user/accept-invite', layout: false, component: './user/accept-invite' },
-    { path: '/', redirect: '/overview/welcome' },
+    /** 与 `src/constants/auth-routes.ts` 白名单互补；新建需登录的顶级路由请放在此 `routes` 下。 */
     {
-      path: '/overview',
-      name: '概览',
-      icon: 'DashboardOutlined',
+      path: '/',
+      wrappers: ['@/wrappers/require-session'],
       routes: [
+        { path: '/', redirect: '/overview/welcome' },
+        {
+          path: '/overview',
+          name: '概览',
+          icon: 'DashboardOutlined',
+          routes: [
         {
           path: '/overview/welcome',
           name: '欢迎',
@@ -185,6 +190,8 @@ export default defineConfig({
           icon: 'BankOutlined',
           component: './platform/tenants',
         },
+      ],
+    },
       ],
     },
   ],
