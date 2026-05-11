@@ -1,6 +1,10 @@
 # 单源依赖：仅从 pyproject.toml 安装。
 # pip 缓存需 BuildKit：`DOCKER_BUILDKIT=1 docker build -f deploy/Dockerfile .` 或 `make docker-build`（Docker Desktop 默认已开启）
+# 默认 PyPI 镜像：阿里云；覆盖：`docker build --build-arg PIP_INDEX_URL=https://pypi.org/simple/ ...`
 FROM python:3.12-slim
+
+ARG PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/
+ENV PIP_INDEX_URL=${PIP_INDEX_URL}
 
 WORKDIR /app
 

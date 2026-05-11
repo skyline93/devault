@@ -30,3 +30,14 @@ Docker Compose 下 **`api`** 启动脚本包含上述命令。
 ## 本地开发
 
 导出 `DEVAULT_DATABASE_URL` 后 `alembic upgrade head`，再启动 `uvicorn`（见 [本地开发](../engineering/local-setup.md)）。
+
+## 生成新迁移
+
+在**空库或已与模型对齐的库**上，对照当前 ORM 生成迁移脚本（`alembic.ini` 已配置按时间排序的 **`file_template`**，便于版本目录排序）：
+
+```bash
+export DEVAULT_DATABASE_URL=postgresql+psycopg://...
+alembic revision --autogenerate -m "short_description"
+```
+
+生成后请人工审阅 diff（索引、`server_default`、PostgreSQL 专有类型等）。**IAM** 迁移见 [`iam/README.md`](../../../iam/README.md) 数据库章节。

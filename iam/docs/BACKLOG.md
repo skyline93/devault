@@ -32,7 +32,7 @@
    - [x] `tenants`、`tenant_members`（代理主键 `id`、`role_id` FK）  
    - [x] `roles`（`tenant_id` nullable 平台角色）、`permissions`、`role_permissions`（含 PG14 部分唯一索引）  
    - [x] **种子数据**：6 条 `permissions`、`tenant_admin` / `operator` / `auditor` / `platform_admin` 及 `role_permissions`；**不**再插入占位租户（首迁 `p0_001` 仅 schema + RBAC 模板）  
-   - [x] 占位 revision `0001_initial` 已移除，基线为 **`p0_001`**（`alembic/versions/p0_001_schema_and_seed.py`）  
+   - [x] 占位 revision `0001_initial` 已移除；历史多文件链已 **squash** 为 **`alembic/versions/` 下单条 head**（以 `alembic heads` 为准）  
 
 2. **数据库会话与仓库层**  
    - [x] `SessionLocal` / `get_db` FastAPI 依赖（`devault_iam.db.session`）  

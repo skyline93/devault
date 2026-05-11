@@ -4,6 +4,9 @@
 #
 # IAM API: http://127.0.0.1:8100/health  ·  DB: localhost:5432（devault/devault）
 
+x-pip-build-args: &pip-build-args
+  PIP_INDEX_URL: ${PIP_INDEX_URL:-https://mirrors.aliyun.com/pypi/simple/}
+
 services:
   postgres:
     image: postgres:14
@@ -28,6 +31,8 @@ services:
     build:
       context: ../iam
       dockerfile: Dockerfile
+      args:
+        <<: *pip-build-args
     command: >
       sh -c "alembic upgrade head &&
              uvicorn devault_iam.api.main:app --host 0.0.0.0 --port 8100"

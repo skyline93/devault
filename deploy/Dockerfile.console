@@ -5,6 +5,8 @@
 #   docker build -f deploy/Dockerfile.console -t devault-console:local .
 
 FROM python:3.12-slim AS openapi
+ARG PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/
+ENV PIP_INDEX_URL=${PIP_INDEX_URL}
 WORKDIR /w
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1

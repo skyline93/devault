@@ -1,6 +1,9 @@
 # Build from repository iam/ directory (context = iam/).
 FROM python:3.12-slim
 
+ARG PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/
+ENV PIP_INDEX_URL=${PIP_INDEX_URL}
+
 WORKDIR /app
 
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -14,7 +17,7 @@ COPY src ./src
 
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install --upgrade pip setuptools wheel \
-    && pip install --no-cache-dir -e .
+    && pip install -e .
 
 EXPOSE 8100
 

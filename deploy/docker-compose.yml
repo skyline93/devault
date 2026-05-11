@@ -33,6 +33,8 @@
 # Override: DEVAULT_IMAGE=registry.example.com/acme/devault:tag
 # Playwright 专用栈：`docker compose -f deploy/docker-compose.console-e2e.yml up -d --build`
 #
+# PyPI：默认阿里云镜像并复用 BuildKit pip 缓存；覆盖官方源可设 **``export PIP_INDEX_URL=https://pypi.org/simple/``** 后再 ``compose build``。
+#
 # Remote agents (outside this compose network) need presigned S3 URLs they can reach. By default
 # DEVAULT_S3_ENDPOINT is http://minio:9000 (in-stack only). Set in .env or the shell, e.g.:
 #   DEVAULT_S3_ENDPOINT=http://192.168.1.10:9000
@@ -43,12 +45,17 @@
 # 与 **DEVAULT_IAM_JWT_ISSUER/AUDIENCE**（与 IAM 默认 `IAM_JWT_*` 对齐），启动后 HTTP 走 IAM JWT 校验（非 dev-open）。
 # 浏览器访问 IAM：**http://127.0.0.1:8100**；issuer 仍为 **http://127.0.0.1:8100**，与令牌内 `iss` 一致。生产可仍为独立 Postgres/Redis，仅改连接串。
 
+x-pip-build-args: &pip-build-args
+  PIP_INDEX_URL: ${PIP_INDEX_URL:-https://mirrors.aliyun.com/pypi/simple/}
+
 services:
   iam:
     profiles: ["with-control-plane"]
     build:
       context: ../iam
       dockerfile: Dockerfile
+      args:
+        <<: *pip-build-args
     environment:
       IAM_DATABASE_URL: postgresql+psycopg://devault:devault@postgres:5432/devault
       IAM_REDIS_URL: redis://redis:6379/1
@@ -149,6 +156,8 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
+      args:
+        <<: *pip-build-args
     command: >
       sh -c "alembic upgrade head &&
              uvicorn devault.api.main:app --host 0.0.0.0 --port 8000"
@@ -200,6 +209,8 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
+      args:
+        <<: *pip-build-args
     # Do not run alembic here: api already runs `alembic upgrade head` on startup.
     # Concurrent migrations from multiple containers race on CREATE devault_alembic_version.
     command: devault-scheduler
@@ -240,6 +251,8 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
+      args:
+        <<: *pip-build-args
     command: devault-agent
     environment:
       # Stable id so migration 0011 can seed agent_enrollments → first tenant row before first Register.
@@ -267,6 +280,8 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
+      args:
+        <<: *pip-build-args
     environment:
       DEMO_STACK_IAM_BASE: ${DEMO_STACK_IAM_BASE:-http://iam:8100}
       DEMO_STACK_DEVAULT_API: ${DEMO_STACK_DEVAULT_API:-http://api:8000}
@@ -289,6 +304,7 @@ services:
       context: ..
       dockerfile: deploy/Dockerfile.console
       args:
+        <<: *pip-build-args
         UMI_APP_ENV_LABEL: ${UMI_APP_ENV_LABEL:-}
         UMI_APP_GRAFANA_URL: ${UMI_APP_GRAFANA_URL:-}
         UMI_APP_IAM_PREFIX: ${UMI_APP_IAM_PREFIX:-/iam-api}

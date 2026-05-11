@@ -5,11 +5,16 @@
 # 默认不配置 **DEVAULT_IAM_JWKS_URL**（dev-open，便于 Playwright 无令牌冒烟）。完整 IAM + JWT 校验见主栈 **`docker-compose.yml`**。
 # 内嵌 **iam** 仅供 nginx 解析 **iam:8100**（与 ``console-spa.conf.template`` 默认一致）；E2E 可不启用 IAM 登录（**UMI_APP_IAM_PREFIX** 留空）。
 
+x-pip-build-args: &pip-build-args
+  PIP_INDEX_URL: ${PIP_INDEX_URL:-https://mirrors.aliyun.com/pypi/simple/}
+
 services:
   iam:
     build:
       context: ../iam
       dockerfile: Dockerfile
+      args:
+        <<: *pip-build-args
     command: >
       sh -c "alembic upgrade head &&
              uvicorn devault_iam.api.main:app --host 0.0.0.0 --port 8100"
@@ -94,6 +99,8 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
+      args:
+        <<: *pip-build-args
     command: >
       sh -c "alembic upgrade head &&
              uvicorn devault.api.main:app --host 0.0.0.0 --port 8000"
@@ -136,6 +143,7 @@ services:
       context: ..
       dockerfile: deploy/Dockerfile.console
       args:
+        <<: *pip-build-args
         UMI_APP_ENV_LABEL: ${UMI_APP_ENV_LABEL:-}
         UMI_APP_GRAFANA_URL: ${UMI_APP_GRAFANA_URL:-}
         UMI_APP_IAM_PREFIX: ${UMI_APP_IAM_PREFIX:-}

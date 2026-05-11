@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from types import SimpleNamespace
 
-import grpc
+import grpc  # pyright: ignore[reportMissingModuleSource]
 
 from devault import __version__
 from devault.agent.capabilities import gate_multipart_resume, gate_multipart_upload
@@ -25,7 +25,6 @@ from devault.plugins.file.multipart_wip import (
     checkpoint_path,
     clear_job_multipart_state,
 )
-from devault.db.constants import DEFAULT_TENANT_UUID
 from devault.plugins.file.multipart_resume import validate_multipart_resume_checkpoint
 from devault.plugins.file.plugin import (
     BackupOutcome,
@@ -175,10 +174,18 @@ def _run_one_job(
             job_stub = _job_view(job_id, lease, cfg)
             bid = uuid.UUID(job_id)
             tid_raw = cfg.get("tenant_id")
+            if not tid_raw:
+                raise FileBackupError(
+                    "INVALID_CONFIG",
+                    "tenant_id required in job lease config",
+                )
             try:
-                tenant_uuid = uuid.UUID(str(tid_raw)) if tid_raw else DEFAULT_TENANT_UUID
-            except (ValueError, TypeError):
-                tenant_uuid = DEFAULT_TENANT_UUID
+                tenant_uuid = uuid.UUID(str(tid_raw))
+            except (ValueError, TypeError) as e:
+                raise FileBackupError(
+                    "INVALID_CONFIG",
+                    "tenant_id must be a UUID",
+                ) from e
             bundle_key, manifest_key = artifact_object_keys(s, bid, tenant_uuid)
             ck_path = checkpoint_path(s, job_id)
             wip_bundle = bundle_wip_path(s, job_id)

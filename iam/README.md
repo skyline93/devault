@@ -34,7 +34,18 @@ export IAM_DATABASE_URL=...
 alembic upgrade head
 ```
 
-若本地曾应用过已删除的占位 revision **`0001_initial`**，请先 `alembic downgrade base` 或手动清理 **`iam_alembic_version`**（与主栈共用库时勿删 **`devault_alembic_version`**）后再执行 `upgrade head`（当前链为 **`p0_001` → `p2_001` → `p3_001` → `p4_001`**，以 `alembic heads` 为准）。
+迁移已**压成单文件**（`alembic/versions/` 下一条链；`alembic.ini` 中 **`file_template`** 带时间前缀，便于排序）。若本地版本表仍指向已删除的旧 revision，请对 IAM 库 **`DELETE FROM iam_alembic_version;`**（与主栈共用库时勿动 **`devault_alembic_version`**）后重新 **`alembic upgrade head`**。
+
+改 IAM ORM 模型后，在项目根执行：
+
+```bash
+cd iam
+export IAM_DATABASE_URL=postgresql+psycopg://...
+pip install -e .
+alembic revision --autogenerate -m "describe_change"
+```
+
+（`pip install -e .` 后无需再设 `PYTHONPATH`。）
 
 ## 平台引导 CLI（`iam-admin`）
 

@@ -14,7 +14,6 @@ from devault.crypto.chunked_aes_gcm import (
     encrypt_bundle_file,
     parse_aes256_key,
 )
-from devault.db.constants import DEFAULT_TENANT_UUID
 from devault.db.models import Job
 from devault.plugins.file import run_file_backup
 from devault.plugins.file.plugin import finalize_bundle_with_optional_encryption
@@ -63,7 +62,7 @@ def test_finalize_encrypt_updates_manifest(tmp_path: Path) -> None:
 
     job = Job(
         id=uuid.uuid4(),
-        tenant_id=DEFAULT_TENANT_UUID,
+        tenant_id=uuid.uuid4(),
         kind="backup",
         plugin="file",
         status="pending",
@@ -108,7 +107,7 @@ def test_run_file_backup_encrypted_local_storage(tmp_path: Path) -> None:
 
     job = Job(
         id=uuid.uuid4(),
-        tenant_id=DEFAULT_TENANT_UUID,
+        tenant_id=uuid.uuid4(),
         kind="backup",
         plugin="file",
         status="pending",

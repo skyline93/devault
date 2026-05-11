@@ -45,6 +45,21 @@ def test_platform_users_crud_and_change_password_flow(
     assert cr.json()["must_change_password"] is True
     uid = cr.json()["id"]
 
+    slug = f"p4pw-{uuid.uuid4().hex[:10]}"
+    rt = client.post(
+        "/v1/tenants",
+        json={"name": "Pw Flow Org", "slug": slug},
+        headers={"Authorization": f"Bearer {plat_access}"},
+    )
+    assert rt.status_code == 201, rt.text
+    tid = rt.json()["id"]
+    am = client.post(
+        f"/v1/tenants/{tid}/members",
+        headers={"Authorization": f"Bearer {plat_access}"},
+        json={"email": nu, "role": "operator"},
+    )
+    assert am.status_code == 201, am.text
+
     lr = client.post("/v1/auth/login", json={"email": nu, "password": _pw()})
     assert lr.status_code == 200, lr.text
     assert lr.json().get("must_change_password") is True
