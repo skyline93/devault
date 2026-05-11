@@ -24,3 +24,28 @@
   flex: 1;
   min-height: 0;
 }
+
+/* 页脚：链接区与 copyright 同一行（DefaultFooter 原为两块纵向排列） */
+.ant-layout-footer .ant-pro-global-footer {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+}
+
+.ant-layout-footer .ant-pro-global-footer-list {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 8px;
+  margin-block-end: 0 !important;
+}
+
+.ant-layout-footer .ant-pro-global-footer-copyright {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  white-space: nowrap;
+}
