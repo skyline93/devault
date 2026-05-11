@@ -6,6 +6,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
+from devault.db.constants import prefixed_table as pt
+
 revision = "0005"
 down_revision = "0004"
 branch_labels = None
@@ -16,7 +18,7 @@ _DEFAULT_TENANT = "00000000-0000-0000-0000-000000000001"
 
 def upgrade() -> None:
     op.create_table(
-        "tenants",
+        pt("tenants"),
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("name", sa.String(length=255), nullable=False),
         sa.Column("slug", sa.String(length=64), nullable=False),
@@ -32,44 +34,44 @@ def upgrade() -> None:
 
     op.execute(
         sa.text(
-            "INSERT INTO tenants (id, name, slug) VALUES "
+            f"INSERT INTO {pt('tenants')} (id, name, slug) VALUES "
             f"('{_DEFAULT_TENANT}'::uuid, 'Default', 'default')"
         )
     )
 
     op.add_column(
-        "policies",
+        pt("policies"),
         sa.Column("tenant_id", postgresql.UUID(as_uuid=True), nullable=True),
     )
-    op.execute(sa.text(f"UPDATE policies SET tenant_id = '{_DEFAULT_TENANT}'::uuid"))
-    op.alter_column("policies", "tenant_id", nullable=False)
-    op.create_index(op.f("ix_policies_tenant_id"), "policies", ["tenant_id"], unique=False)
+    op.execute(sa.text(f"UPDATE {pt('policies')} SET tenant_id = '{_DEFAULT_TENANT}'::uuid"))
+    op.alter_column(pt("policies"), "tenant_id", nullable=False)
+    op.create_index(op.f("ix_policies_tenant_id"), pt("policies"), ["tenant_id"], unique=False)
     op.create_foreign_key(
         "fk_policies_tenant_id_tenants",
-        "policies",
-        "tenants",
+        pt("policies"),
+        pt("tenants"),
         ["tenant_id"],
         ["id"],
         ondelete="RESTRICT",
     )
 
     op.add_column(
-        "jobs",
+        pt("jobs"),
         sa.Column("tenant_id", postgresql.UUID(as_uuid=True), nullable=True),
     )
     op.execute(
         sa.text(
-            "UPDATE jobs SET tenant_id = policies.tenant_id "
-            "FROM policies WHERE jobs.policy_id = policies.id"
+            f"UPDATE {pt('jobs')} SET tenant_id = {pt('policies')}.tenant_id "
+            f"FROM {pt('policies')} WHERE {pt('jobs')}.policy_id = {pt('policies')}.id"
         )
     )
-    op.execute(sa.text(f"UPDATE jobs SET tenant_id = '{_DEFAULT_TENANT}'::uuid WHERE tenant_id IS NULL"))
-    op.alter_column("jobs", "tenant_id", nullable=False)
-    op.create_index(op.f("ix_jobs_tenant_id"), "jobs", ["tenant_id"], unique=False)
+    op.execute(sa.text(f"UPDATE {pt('jobs')} SET tenant_id = '{_DEFAULT_TENANT}'::uuid WHERE tenant_id IS NULL"))
+    op.alter_column(pt("jobs"), "tenant_id", nullable=False)
+    op.create_index(op.f("ix_jobs_tenant_id"), pt("jobs"), ["tenant_id"], unique=False)
     op.create_foreign_key(
         "fk_jobs_tenant_id_tenants",
-        "jobs",
-        "tenants",
+        pt("jobs"),
+        pt("tenants"),
         ["tenant_id"],
         ["id"],
         ondelete="RESTRICT",
@@ -77,55 +79,60 @@ def upgrade() -> None:
 
     bind = op.get_bind()
     insp = sa.inspect(bind)
-    for uc in insp.get_unique_constraints("jobs") or []:
+    dropped_idempotency_uc = False
+    for uc in insp.get_unique_constraints(pt("jobs")) or []:
         cols = set(uc.get("column_names") or ())
         if cols == {"idempotency_key"}:
-            op.drop_constraint(uc["name"], "jobs", type_="unique")
+            op.drop_constraint(uc["name"], pt("jobs"), type_="unique")
+            dropped_idempotency_uc = True
             break
-    else:
-        op.drop_constraint("jobs_idempotency_key_key", "jobs", type_="unique")
+    if not dropped_idempotency_uc:
+        # Pre-prefix installs used ``jobs_idempotency_key``; fresh installs use ``devault_jobs_*``.
+        op.execute(sa.text(f'ALTER TABLE {pt("jobs")} DROP CONSTRAINT IF EXISTS jobs_idempotency_key_key'))
+        op.execute(sa.text(f'ALTER TABLE {pt("jobs")} DROP CONSTRAINT IF EXISTS devault_jobs_idempotency_key_key'))
     op.create_unique_constraint(
         "uq_jobs_tenant_id_idempotency_key",
-        "jobs",
+        pt("jobs"),
         ["tenant_id", "idempotency_key"],
     )
 
     op.add_column(
-        "schedules",
+        pt("schedules"),
         sa.Column("tenant_id", postgresql.UUID(as_uuid=True), nullable=True),
     )
     op.execute(
         sa.text(
-            "UPDATE schedules SET tenant_id = policies.tenant_id "
-            "FROM policies WHERE schedules.policy_id = policies.id"
+            f"UPDATE {pt('schedules')} SET tenant_id = {pt('policies')}.tenant_id "
+            f"FROM {pt('policies')} WHERE {pt('schedules')}.policy_id = {pt('policies')}.id"
         )
     )
-    op.alter_column("schedules", "tenant_id", nullable=False)
-    op.create_index(op.f("ix_schedules_tenant_id"), "schedules", ["tenant_id"], unique=False)
+    op.alter_column(pt("schedules"), "tenant_id", nullable=False)
+    op.create_index(op.f("ix_schedules_tenant_id"), pt("schedules"), ["tenant_id"], unique=False)
     op.create_foreign_key(
         "fk_schedules_tenant_id_tenants",
-        "schedules",
-        "tenants",
+        pt("schedules"),
+        pt("tenants"),
         ["tenant_id"],
         ["id"],
         ondelete="RESTRICT",
     )
 
     op.add_column(
-        "artifacts",
+        pt("artifacts"),
         sa.Column("tenant_id", postgresql.UUID(as_uuid=True), nullable=True),
     )
     op.execute(
         sa.text(
-            "UPDATE artifacts SET tenant_id = jobs.tenant_id FROM jobs WHERE artifacts.job_id = jobs.id"
+            f"UPDATE {pt('artifacts')} SET tenant_id = {pt('jobs')}.tenant_id "
+            f"FROM {pt('jobs')} WHERE {pt('artifacts')}.job_id = {pt('jobs')}.id"
         )
     )
-    op.alter_column("artifacts", "tenant_id", nullable=False)
-    op.create_index(op.f("ix_artifacts_tenant_id"), "artifacts", ["tenant_id"], unique=False)
+    op.alter_column(pt("artifacts"), "tenant_id", nullable=False)
+    op.create_index(op.f("ix_artifacts_tenant_id"), pt("artifacts"), ["tenant_id"], unique=False)
     op.create_foreign_key(
         "fk_artifacts_tenant_id_tenants",
-        "artifacts",
-        "tenants",
+        pt("artifacts"),
+        pt("tenants"),
         ["tenant_id"],
         ["id"],
         ondelete="RESTRICT",
@@ -133,22 +140,22 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_constraint("fk_artifacts_tenant_id_tenants", "artifacts", type_="foreignkey")
-    op.drop_index(op.f("ix_artifacts_tenant_id"), table_name="artifacts")
-    op.drop_column("artifacts", "tenant_id")
+    op.drop_constraint("fk_artifacts_tenant_id_tenants", pt("artifacts"), type_="foreignkey")
+    op.drop_index(op.f("ix_artifacts_tenant_id"), table_name=pt("artifacts"))
+    op.drop_column(pt("artifacts"), "tenant_id")
 
-    op.drop_constraint("fk_schedules_tenant_id_tenants", "schedules", type_="foreignkey")
-    op.drop_index(op.f("ix_schedules_tenant_id"), table_name="schedules")
-    op.drop_column("schedules", "tenant_id")
+    op.drop_constraint("fk_schedules_tenant_id_tenants", pt("schedules"), type_="foreignkey")
+    op.drop_index(op.f("ix_schedules_tenant_id"), table_name=pt("schedules"))
+    op.drop_column(pt("schedules"), "tenant_id")
 
-    op.drop_constraint("uq_jobs_tenant_id_idempotency_key", "jobs", type_="unique")
-    op.create_unique_constraint(None, "jobs", ["idempotency_key"])
-    op.drop_constraint("fk_jobs_tenant_id_tenants", "jobs", type_="foreignkey")
-    op.drop_index(op.f("ix_jobs_tenant_id"), table_name="jobs")
-    op.drop_column("jobs", "tenant_id")
+    op.drop_constraint("uq_jobs_tenant_id_idempotency_key", pt("jobs"), type_="unique")
+    op.create_unique_constraint(None, pt("jobs"), ["idempotency_key"])
+    op.drop_constraint("fk_jobs_tenant_id_tenants", pt("jobs"), type_="foreignkey")
+    op.drop_index(op.f("ix_jobs_tenant_id"), table_name=pt("jobs"))
+    op.drop_column(pt("jobs"), "tenant_id")
 
-    op.drop_constraint("fk_policies_tenant_id_tenants", "policies", type_="foreignkey")
-    op.drop_index(op.f("ix_policies_tenant_id"), table_name="policies")
-    op.drop_column("policies", "tenant_id")
+    op.drop_constraint("fk_policies_tenant_id_tenants", pt("policies"), type_="foreignkey")
+    op.drop_index(op.f("ix_policies_tenant_id"), table_name=pt("policies"))
+    op.drop_column(pt("policies"), "tenant_id")
 
-    op.drop_table("tenants")
+    op.drop_table(pt("tenants"))

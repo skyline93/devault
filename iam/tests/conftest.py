@@ -72,7 +72,7 @@ def iam_platform_credentials(iam_database_url: str) -> tuple[str, str]:
 def iam_database_url() -> str:
     return os.environ.get(
         "IAM_TEST_DATABASE_URL",
-        "postgresql+psycopg://iam:iam@127.0.0.1:5433/iam",
+        "postgresql+psycopg://devault:devault@127.0.0.1:5432/devault",
     )
 
 

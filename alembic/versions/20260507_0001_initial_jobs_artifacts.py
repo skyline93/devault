@@ -12,6 +12,9 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
+from devault.db.constants import prefixed_fk as pfk
+from devault.db.constants import prefixed_table as pt
+
 revision: str = "0001"
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
@@ -20,7 +23,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     op.create_table(
-        "jobs",
+        pt("jobs"),
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("kind", sa.String(length=32), nullable=False),
         sa.Column("plugin", sa.String(length=32), nullable=False),
@@ -38,11 +41,11 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("idempotency_key"),
     )
-    op.create_index(op.f("ix_jobs_kind"), "jobs", ["kind"], unique=False)
-    op.create_index(op.f("ix_jobs_status"), "jobs", ["status"], unique=False)
+    op.create_index(op.f("ix_jobs_kind"), pt("jobs"), ["kind"], unique=False)
+    op.create_index(op.f("ix_jobs_status"), pt("jobs"), ["status"], unique=False)
 
     op.create_table(
-        "artifacts",
+        pt("artifacts"),
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("job_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("storage_backend", sa.String(length=16), nullable=False),
@@ -54,15 +57,15 @@ def upgrade() -> None:
         sa.Column("encrypted", sa.Boolean(), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
         sa.Column("retain_until", sa.DateTime(timezone=True), nullable=True),
-        sa.ForeignKeyConstraint(["job_id"], ["jobs.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["job_id"], [pfk("jobs", "id")], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index(op.f("ix_artifacts_job_id"), "artifacts", ["job_id"], unique=False)
+    op.create_index(op.f("ix_artifacts_job_id"), pt("artifacts"), ["job_id"], unique=False)
 
 
 def downgrade() -> None:
-    op.drop_index(op.f("ix_artifacts_job_id"), table_name="artifacts")
-    op.drop_table("artifacts")
-    op.drop_index(op.f("ix_jobs_status"), table_name="jobs")
-    op.drop_index(op.f("ix_jobs_kind"), table_name="jobs")
-    op.drop_table("jobs")
+    op.drop_index(op.f("ix_artifacts_job_id"), table_name=pt("artifacts"))
+    op.drop_table(pt("artifacts"))
+    op.drop_index(op.f("ix_jobs_status"), table_name=pt("jobs"))
+    op.drop_index(op.f("ix_jobs_kind"), table_name=pt("jobs"))
+    op.drop_table(pt("jobs"))

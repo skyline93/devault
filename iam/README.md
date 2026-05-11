@@ -14,7 +14,7 @@ cd iam
 python -m venv .venv
 source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
-export IAM_DATABASE_URL=postgresql+psycopg://iam:iam@127.0.0.1:5432/iam
+export IAM_DATABASE_URL=postgresql+psycopg://devault:devault@127.0.0.1:5432/devault
 uvicorn devault_iam.api.main:app --reload --port 8100
 ```
 
@@ -34,7 +34,7 @@ export IAM_DATABASE_URL=...
 alembic upgrade head
 ```
 
-若本地曾应用过已删除的占位 revision **`0001_initial`**，请先 `alembic downgrade base` 或手动清理 `alembic_version` 后再执行 `upgrade head`（当前链为 **`p0_001` → `p2_001` → `p3_001` → `p4_001`**，以 `alembic heads` 为准）。
+若本地曾应用过已删除的占位 revision **`0001_initial`**，请先 `alembic downgrade base` 或手动清理 **`iam_alembic_version`**（与主栈共用库时勿删 **`devault_alembic_version`**）后再执行 `upgrade head`（当前链为 **`p0_001` → `p2_001` → `p3_001` → `p4_001`**，以 `alembic heads` 为准）。
 
 ## 平台引导 CLI（`iam-admin`）
 
@@ -82,7 +82,7 @@ docker compose -f deploy/docker-compose.iam.yml up --build
 | `IAM_JWT_AUDIENCE` | 默认 `devault-api` |
 | `IAM_CORS_ORIGINS` | 逗号分隔的 Console origin，可为空 |
 | `IAM_ENVIRONMENT` | `development`（默认）或 `production`；生产环境会强制校验 JWT 与 HTTPS issuer |
-| `IAM_TEST_DATABASE_URL` | 仅测试：覆盖默认的 `postgresql+psycopg://iam:iam@127.0.0.1:5433/iam` |
+| `IAM_TEST_DATABASE_URL` | 仅测试：覆盖默认的 `postgresql+psycopg://devault:devault@127.0.0.1:5432/devault`（与主栈同库时 IAM 表前缀为 **`iam_`**） |
 | `IAM_ACCESS_TOKEN_TTL_SECONDS` | 默认 `900` |
 | `IAM_REFRESH_TOKEN_TTL_SECONDS` | 默认 `604800`（7 天） |
 | `IAM_LOGIN_RATE_LIMIT_PER_MINUTE` | 默认 `60`（依赖 Redis；不可用时跳过限流） |

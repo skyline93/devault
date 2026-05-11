@@ -7,6 +7,7 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from devault_iam.db.base import Base
+from devault_iam.db.constants import prefixed_fk as fk
 
 
 class User(Base):
@@ -57,7 +58,7 @@ class Session(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("users.id", ondelete="CASCADE"),
+        ForeignKey(fk("users", "id"), ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
@@ -86,7 +87,7 @@ class Tenant(Base):
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="active", index=True)
     owner_user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("users.id", ondelete="SET NULL"),
+        ForeignKey(fk("users", "id"), ondelete="SET NULL"),
         nullable=True,
     )
     created_at: Mapped[datetime] = mapped_column(
@@ -125,7 +126,7 @@ class Role(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("tenants.id", ondelete="CASCADE"),
+        ForeignKey(fk("tenants", "id"), ondelete="CASCADE"),
         nullable=True,
         index=True,
     )
@@ -158,12 +159,12 @@ class RolePermission(Base):
 
     role_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("roles.id", ondelete="CASCADE"),
+        ForeignKey(fk("roles", "id"), ondelete="CASCADE"),
         primary_key=True,
     )
     permission_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("permissions.id", ondelete="CASCADE"),
+        ForeignKey(fk("permissions", "id"), ondelete="CASCADE"),
         primary_key=True,
     )
 
@@ -179,19 +180,19 @@ class TenantMember(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("tenants.id", ondelete="CASCADE"),
+        ForeignKey(fk("tenants", "id"), ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("users.id", ondelete="CASCADE"),
+        ForeignKey(fk("users", "id"), ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
     role_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("roles.id", ondelete="RESTRICT"),
+        ForeignKey(fk("roles", "id"), ondelete="RESTRICT"),
         nullable=False,
         index=True,
     )
@@ -217,7 +218,7 @@ class ApiKey(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("tenants.id", ondelete="CASCADE"),
+        ForeignKey(fk("tenants", "id"), ondelete="CASCADE"),
         nullable=True,
         index=True,
     )
@@ -226,7 +227,7 @@ class ApiKey(Base):
     key_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
     created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("users.id", ondelete="SET NULL"),
+        ForeignKey(fk("users", "id"), ondelete="SET NULL"),
         nullable=True,
     )
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -260,7 +261,7 @@ class AuditLog(Base):
     outcome: Mapped[str] = mapped_column(String(32), nullable=False)
     actor_user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("users.id", ondelete="SET NULL"),
+        ForeignKey(fk("users", "id"), ondelete="SET NULL"),
         nullable=True,
         index=True,
     )
@@ -285,7 +286,7 @@ class ApiKeyScope(Base):
 
     api_key_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("api_keys.id", ondelete="CASCADE"),
+        ForeignKey(fk("api_keys", "id"), ondelete="CASCADE"),
         primary_key=True,
     )
     permission_key: Mapped[str] = mapped_column(String(128), primary_key=True)

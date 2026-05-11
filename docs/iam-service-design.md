@@ -219,7 +219,7 @@ uvicorn devault_iam.api.main:app --host 0.0.0.0 --port 8100
 docker compose -f deploy/docker-compose.iam.yml up --build
 ```
 
-默认暴露 **IAM** `8100`、Postgres **`5433`**（库名 `iam`）、Redis **`6380`**（避免与主栈端口冲突）。
+Compose 主栈内 **IAM** 与控制面共用 Postgres **`5432`**（库名 `devault`；IAM 物理表名前缀 **`iam_`**）与 Redis（IAM 使用 **db 1**）。独立 **`deploy/docker-compose.iam.yml`** 亦为单 Postgres + 单 Redis。
 
 ### 10.2 环境变量前缀
 

@@ -6,6 +6,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
+from devault.db.constants import prefixed_table as pt
+
 revision = "0006"
 down_revision = "0005"
 branch_labels = None
@@ -14,7 +16,7 @@ depends_on = None
 
 def upgrade() -> None:
     op.create_table(
-        "control_plane_api_keys",
+        pt("control_plane_api_keys"),
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("name", sa.String(length=255), nullable=False),
         sa.Column("token_hash", sa.String(length=64), nullable=False),
@@ -33,4 +35,4 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_table("control_plane_api_keys")
+    op.drop_table(pt("control_plane_api_keys"))

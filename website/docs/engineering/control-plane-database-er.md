@@ -6,7 +6,7 @@ description: PostgreSQL 表、外键与多租户边界（与 ORM 对齐）
 
 # 控制面数据库 ER 图
 
-本文梳理 **控制面元数据库**（PostgreSQL）中与业务相关的表及外键关系，便于评审与排障。权威字段定义以仓库为准：
+本文梳理 **控制面元数据库**（PostgreSQL）中与业务相关的表及外键关系，便于评审与排障。物理表名均带前缀 **`devault_`**（由 `src/devault/db/constants.py` 的 **`TABLE_PREFIX`** 统一配置；下图为逻辑名）。权威字段定义以仓库为准：
 
 - ORM：`src/devault/db/models.py`
 - 迁移：`alembic/versions/`

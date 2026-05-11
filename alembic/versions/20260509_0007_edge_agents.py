@@ -12,6 +12,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects.postgresql import UUID
 
+from devault.db.constants import prefixed_table as pt
+
 revision = "0007"
 down_revision = "0006"
 branch_labels = None
@@ -20,7 +22,7 @@ depends_on = None
 
 def upgrade() -> None:
     op.create_table(
-        "edge_agents",
+        pt("edge_agents"),
         sa.Column("id", UUID(as_uuid=True), primary_key=True, nullable=False),
         sa.Column(
             "first_seen_at",
@@ -41,12 +43,12 @@ def upgrade() -> None:
     )
     op.create_index(
         "ix_edge_agents_last_seen_at",
-        "edge_agents",
+        pt("edge_agents"),
         ["last_seen_at"],
         unique=False,
     )
 
 
 def downgrade() -> None:
-    op.drop_index("ix_edge_agents_last_seen_at", table_name="edge_agents")
-    op.drop_table("edge_agents")
+    op.drop_index("ix_edge_agents_last_seen_at", table_name=pt("edge_agents"))
+    op.drop_table(pt("edge_agents"))

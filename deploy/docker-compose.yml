@@ -24,37 +24,18 @@
 #   DEVAULT_S3_ENDPOINT=http://host.docker.internal:9000   # Docker Desktop: api reaches host-published :9000
 # Use the same host:port from api, scheduler, and every agent. Minio already publishes 9000:9000.
 #
-# IAM（可选内嵌）：本文件包含 **postgres-iam / redis-iam / iam**。`api` 默认配置 **DEVAULT_IAM_JWKS_URL=http://iam:8100/...**
+# IAM（可选内嵌）：与控制面共用 **postgres / redis**（同一 database `devault`，表前缀分别为 **devault_*** / **iam_***；Redis IAM 使用 **db 1**）。`api` 默认 **DEVAULT_IAM_JWKS_URL=http://iam:8100/...**
 # 与 **DEVAULT_IAM_JWT_ISSUER/AUDIENCE**（与 IAM 默认 `IAM_JWT_*` 对齐），启动后 HTTP 走 IAM JWT 校验（非 dev-open）。
-# 浏览器访问 IAM：**http://127.0.0.1:8100**；issuer 仍为 **http://127.0.0.1:8100**，与令牌内 `iss` 一致。
+# 浏览器访问 IAM：**http://127.0.0.1:8100**；issuer 仍为 **http://127.0.0.1:8100**，与令牌内 `iss` 一致。生产可仍为独立 Postgres/Redis，仅改连接串。
 
 services:
-  postgres-iam:
-    image: postgres:14
-    environment:
-      POSTGRES_USER: iam
-      POSTGRES_PASSWORD: iam
-      POSTGRES_DB: iam
-    ports:
-      - "5433:5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U iam -d iam"]
-      interval: 3s
-      timeout: 5s
-      retries: 20
-
-  redis-iam:
-    image: redis:7
-    ports:
-      - "6380:6379"
-
   iam:
     build:
       context: ../iam
       dockerfile: Dockerfile
     environment:
-      IAM_DATABASE_URL: postgresql+psycopg://iam:iam@postgres-iam:5432/iam
-      IAM_REDIS_URL: redis://redis-iam:6379/0
+      IAM_DATABASE_URL: postgresql+psycopg://devault:devault@postgres:5432/devault
+      IAM_REDIS_URL: redis://redis:6379/1
       IAM_JWT_ISSUER: ${IAM_JWT_ISSUER:-http://127.0.0.1:8100}
       IAM_JWT_AUDIENCE: ${IAM_JWT_AUDIENCE:-devault-api}
       # 演示栈默认平台员（与 demo-stack-init 一致）；生产部署请改写或设 IAM_DEMO_AUTO_BOOTSTRAP=false
@@ -76,9 +57,9 @@ services:
     ports:
       - "8100:8100"
     depends_on:
-      postgres-iam:
+      postgres:
         condition: service_healthy
-      redis-iam:
+      redis:
         condition: service_started
     healthcheck:
       test:
@@ -202,7 +183,7 @@ services:
       context: ..
       dockerfile: deploy/Dockerfile
     # Do not run alembic here: api already runs `alembic upgrade head` on startup.
-    # Concurrent migrations from multiple containers race on CREATE alembic_version.
+    # Concurrent migrations from multiple containers race on CREATE devault_alembic_version.
     command: devault-scheduler
     environment:
       DEVAULT_DATABASE_URL: postgresql+psycopg://devault:devault@postgres:5432/devault

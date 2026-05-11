@@ -6,25 +6,6 @@
 # 内嵌 **iam** 仅供 nginx 解析 **iam:8100**（与 ``console-spa.conf.template`` 默认一致）；E2E 可不启用 IAM 登录（**UMI_APP_IAM_PREFIX** 留空）。
 
 services:
-  postgres-iam:
-    image: postgres:14
-    environment:
-      POSTGRES_USER: iam
-      POSTGRES_PASSWORD: iam
-      POSTGRES_DB: iam
-    ports:
-      - "5433:5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U iam -d iam"]
-      interval: 3s
-      timeout: 5s
-      retries: 20
-
-  redis-iam:
-    image: redis:7
-    ports:
-      - "6380:6379"
-
   iam:
     build:
       context: ../iam
@@ -33,16 +14,16 @@ services:
       sh -c "alembic upgrade head &&
              uvicorn devault_iam.api.main:app --host 0.0.0.0 --port 8100"
     environment:
-      IAM_DATABASE_URL: postgresql+psycopg://iam:iam@postgres-iam:5432/iam
-      IAM_REDIS_URL: redis://redis-iam:6379/0
+      IAM_DATABASE_URL: postgresql+psycopg://devault:devault@postgres:5432/devault
+      IAM_REDIS_URL: redis://redis:6379/1
       IAM_JWT_ISSUER: ${IAM_JWT_ISSUER:-http://127.0.0.1:8100}
       IAM_JWT_AUDIENCE: ${IAM_JWT_AUDIENCE:-devault-api}
     ports:
       - "8100:8100"
     depends_on:
-      postgres-iam:
+      postgres:
         condition: service_healthy
-      redis-iam:
+      redis:
         condition: service_started
     healthcheck:
       test:

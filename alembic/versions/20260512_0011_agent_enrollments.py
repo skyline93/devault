@@ -7,6 +7,8 @@ from alembic import op
 from sqlalchemy import text
 from sqlalchemy.dialects.postgresql import JSONB
 
+from devault.db.constants import prefixed_table as pt
+
 revision = "0011"
 down_revision = "0010"
 branch_labels = None
@@ -18,7 +20,7 @@ _DEMO_AGENT_ID = "00000000-0000-4000-8000-000000000001"
 
 def upgrade() -> None:
     op.create_table(
-        "agent_enrollments",
+        pt("agent_enrollments"),
         sa.Column("agent_id", sa.UUID(as_uuid=True), nullable=False),
         sa.Column("allowed_tenant_ids", JSONB(astext_type=sa.Text()), nullable=False),
         sa.Column(
@@ -35,15 +37,17 @@ def upgrade() -> None:
         ),
         sa.PrimaryKeyConstraint("agent_id", name="pk_agent_enrollments"),
     )
+    t_enroll = pt("agent_enrollments")
+    t_tenants = pt("tenants")
     op.get_bind().execute(
         text(
-            """
-            INSERT INTO agent_enrollments (agent_id, allowed_tenant_ids, created_at, updated_at)
+            f"""
+            INSERT INTO {t_enroll} (agent_id, allowed_tenant_ids, created_at, updated_at)
             SELECT CAST(:demo_agent AS uuid),
                    jsonb_build_array(t.id::text),
                    now(),
                    now()
-            FROM tenants t
+            FROM {t_tenants} t
             ORDER BY t.created_at ASC
             LIMIT 1
             """,
@@ -53,4 +57,4 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_table("agent_enrollments")
+    op.drop_table(pt("agent_enrollments"))

@@ -11,6 +11,9 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 
+from devault.db.constants import prefixed_fk as pfk
+from devault.db.constants import prefixed_table as pt
+
 revision = "0008"
 down_revision = "0007"
 branch_labels = None
@@ -19,13 +22,19 @@ depends_on = None
 
 def upgrade() -> None:
     op.create_table(
-        "restore_drill_schedules",
+        pt("restore_drill_schedules"),
         sa.Column("id", UUID(as_uuid=True), primary_key=True, nullable=False),
-        sa.Column("tenant_id", UUID(as_uuid=True), sa.ForeignKey("tenants.id", ondelete="RESTRICT"), nullable=False, index=True),
+        sa.Column(
+            "tenant_id",
+            UUID(as_uuid=True),
+            sa.ForeignKey(pfk("tenants", "id"), ondelete="RESTRICT"),
+            nullable=False,
+            index=True,
+        ),
         sa.Column(
             "artifact_id",
             UUID(as_uuid=True),
-            sa.ForeignKey("artifacts.id", ondelete="CASCADE"),
+            sa.ForeignKey(pfk("artifacts", "id"), ondelete="CASCADE"),
             nullable=False,
             index=True,
         ),
@@ -40,9 +49,9 @@ def upgrade() -> None:
             nullable=False,
         ),
     )
-    op.add_column("jobs", sa.Column("result_meta", JSONB(), nullable=True))
+    op.add_column(pt("jobs"), sa.Column("result_meta", JSONB(), nullable=True))
 
 
 def downgrade() -> None:
-    op.drop_column("jobs", "result_meta")
-    op.drop_table("restore_drill_schedules")
+    op.drop_column(pt("jobs"), "result_meta")
+    op.drop_table(pt("restore_drill_schedules"))

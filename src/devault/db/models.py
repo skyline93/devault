@@ -8,6 +8,7 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from devault.db.base import Base
+from devault.db.constants import prefixed_fk as fk
 
 
 class AgentEnrollment(Base):
@@ -56,7 +57,7 @@ class AgentPool(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("tenants.id", ondelete="RESTRICT"),
+        ForeignKey(fk("tenants", "id"), ondelete="RESTRICT"),
         nullable=False,
         index=True,
     )
@@ -81,7 +82,7 @@ class AgentPoolMember(Base):
 
     pool_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("agent_pools.id", ondelete="CASCADE"),
+        ForeignKey(fk("agent_pools", "id"), ondelete="CASCADE"),
         primary_key=True,
     )
     agent_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
@@ -128,7 +129,7 @@ class Policy(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("tenants.id", ondelete="RESTRICT"),
+        ForeignKey(fk("tenants", "id"), ondelete="RESTRICT"),
         nullable=False,
         index=True,
     )
@@ -145,7 +146,7 @@ class Policy(Base):
     bound_agent_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     bound_agent_pool_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("agent_pools.id", ondelete="SET NULL"),
+        ForeignKey(fk("agent_pools", "id"), ondelete="SET NULL"),
         nullable=True,
     )
 
@@ -165,13 +166,13 @@ class RestoreDrillSchedule(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("tenants.id", ondelete="RESTRICT"),
+        ForeignKey(fk("tenants", "id"), ondelete="RESTRICT"),
         nullable=False,
         index=True,
     )
     artifact_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("artifacts.id", ondelete="CASCADE"),
+        ForeignKey(fk("artifacts", "id"), ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
@@ -192,13 +193,13 @@ class Schedule(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("tenants.id", ondelete="RESTRICT"),
+        ForeignKey(fk("tenants", "id"), ondelete="RESTRICT"),
         nullable=False,
         index=True,
     )
     policy_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("policies.id", ondelete="CASCADE"),
+        ForeignKey(fk("policies", "id"), ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
@@ -221,7 +222,7 @@ class Job(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("tenants.id", ondelete="RESTRICT"),
+        ForeignKey(fk("tenants", "id"), ondelete="RESTRICT"),
         nullable=False,
         index=True,
     )
@@ -270,13 +271,13 @@ class Artifact(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("tenants.id", ondelete="RESTRICT"),
+        ForeignKey(fk("tenants", "id"), ondelete="RESTRICT"),
         nullable=False,
         index=True,
     )
     job_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("jobs.id", ondelete="CASCADE"),
+        ForeignKey(fk("jobs", "id"), ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
