@@ -21,6 +21,7 @@ description: 研发与贡献者文档路径
 | **搭本地环境、跑 API/Agent** | [本地开发](./local-setup.md)、[仓库结构](./project-structure.md) |
 | **理解 Pull、控制面/数据面实现对照** | [平台实现架构](./platform-architecture.md) |
 | **控制面 Postgres 表与 ER** | [控制面数据库 ER 图](./control-plane-database-er.md) |
+| **PostgreSQL 物理备份（pgBackRest，分期）** | [pgBackRest 物理备份总体方案](./postgresql-pgbackrest-physical-backup.md) |
 | **改 proto、发版、兼容矩阵** | [兼容性与版本矩阵](./compatibility.md)、[发版与变更记录](./releasing.md) |
 | **测试与 CI** | [测试](./testing.md) |
 
