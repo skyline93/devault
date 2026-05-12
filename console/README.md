@@ -37,6 +37,7 @@
 - 顶栏 **`TenantSwitcher`**：**`GET /api/v1/tenants`**（列表已由控制面按 token 过滤）；非 admin 再按 **`allowed_tenant_ids`** 客户端收窄；所选 UUID 写入 **`localStorage`**（**`devault_tenant_id`**），切换后整页刷新以拉取新租户数据。
 - **`getInitialState`** 内 **`ensureTenantSelection`**：若无合法已存租户，则默认选列表第一项。
 - 控制面已下线 Jinja **`/ui/*`**；租户上下文仅 **`localStorage`** + **`X-DeVault-Tenant-Id`**（十五-19）。
+- **IAM 人机登录**：当配置了 **`UMI_APP_IAM_PREFIX`** 时，发往该前缀下任意路径的请求（含 **`POST …/v1/auth/login`**、**`…/v1/auth/refresh`**）**不会**自动附加 **`X-DeVault-Tenant-Id`**，避免浏览器中残留的 **`devault_tenant_id`** 被 IAM 当作「显式请求租户」而导致 **`tenant_not_allowed`** 或平台用户的 **`platform_user_tenant_disallowed`**。租户仍由 IAM 在凭证校验后解析（无显式租户时非平台用户取成员列表首项），登录成功后再由 **`ensureTenantSelection`** 与顶栏与 **`/api/*`** 请求对齐。**HTTP 401** 时与 Bearer 一并清除 **`devault_tenant_id`**，避免会话过期后脏租户污染下一次登录。
 
 ### 十五-08（代理与部署）
 

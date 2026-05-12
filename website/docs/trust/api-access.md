@@ -28,7 +28,7 @@ X-DeVault-Tenant-Id: <tenant-uuid>
 
 ## Web 控制台（`console/`）
 
-人机主路径：**Cookie 会话**（**`POST /api/v1/auth/login`**，**httpOnly** + **Redis**）；租户策略可要求 **TOTP**（**`POST /api/v1/auth/mfa/verify`**，**`AuthSessionOut.needs_mfa`**）；写请求带 **CSRF**（**`X-CSRF-Token`** 与 **`devault_csrf`** Cookie）。可选 **`Authorization: Bearer`**（与 REST 相同解析链：全局 **OIDC**、**租户级 OIDC**（**`iss`/`aud`** 匹配 **`tenants`** 行）、API 密钥、遗留令牌；控制台 **`/user/integration`**）。生产须 **HTTPS**，并设置 **`DEVAULT_SESSION_COOKIE_SECURE=true`** 等 Cookie 属性。
+人机主路径：**Cookie 会话**（**`POST /api/v1/auth/login`**，**httpOnly** + **Redis**）；租户策略可要求 **TOTP**（**`POST /api/v1/auth/mfa/verify`**，**`AuthSessionOut.needs_mfa`**）；写请求带 **CSRF**（**`X-CSRF-Token`** 与 **`devault_csrf`** Cookie）。可选 **`Authorization: Bearer`**（与 REST 相同解析链：全局 **OIDC**、**租户级 OIDC**（**`iss`/`aud`** 匹配 **`tenants`** 行）、API 密钥、遗留令牌；控制台 **`/user/integration`**）。若控制台配置了独立 **IAM** 代理前缀（**`UMI_APP_IAM_PREFIX`**），**IAM** 的 **`/v1/auth/login`** 与 **`/v1/auth/refresh`** 请求**不**应自动携带 **`X-DeVault-Tenant-Id`**（由 IAM 解析租户；详见 **`console/README.md`**）；对控制面 **`/api/v1/*`** 仍按前述「多租户 HTTP 作用域」带头。生产须 **HTTPS**，并设置 **`DEVAULT_SESSION_COOKIE_SECURE=true`** 等 Cookie 属性。
 
 ## OpenAPI
 

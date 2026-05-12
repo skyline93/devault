@@ -35,6 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Console + IAM 登录与租户头**：全局 **`request`** 拦截器对 **`UMI_APP_IAM_PREFIX`** 下的请求不再附加 **`X-DeVault-Tenant-Id`**，避免陈旧 **`devault_tenant_id`** 或平台管理员携带租户头导致 IAM **`tenant_not_allowed`** / **`platform_user_tenant_disallowed`**；**HTTP 401** 清理路径同时移除 **`devault_tenant_id`**。见 **`console/src/requestErrorConfig.ts`**、**`console/README.md`**、**`website/docs/guides/web-console.md`**、**`website/docs/user/web-console.md`**、**`website/docs/trust/api-access.md`**；OpenSpec **`openspec/changes/fix-console-login-tenant-context/`**。
 - **Alembic `a1b2c3d4e5f6`（agent_tokens_refactor）**：升级时先删除 **`devault_policies.bound_agent_pool_id`** 外键与列，再删除 **`devault_agent_pools`**，避免 PostgreSQL **`DependentObjectsStillExist`**。
 
 ### Security
