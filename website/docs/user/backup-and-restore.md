@@ -88,6 +88,74 @@ sequenceDiagram
 
 失败时 Agent 会 **`CompleteJob(success=false, error_code, error_message)`**。
 
+### Agent 端文件备份（实现级时序）
+
+下列时序对应 **`src/devault/agent/main.py`** 中 `_run_one_job` 在 **`JobKind.BACKUP`** 下的分支，以及 **`src/devault/plugins/file/plugin.py`** 中的打包、可选加密与 **`upload_backup_via_storage_grant`** 上传逻辑。控制面在图中抽象为 **AgentControl gRPC**（签发租约、存储授权、登记 artifact；大对象完成类调用见上文）。
+
+```mermaid
+sequenceDiagram
+  participant AG as Agent
+  participant CP as AgentControl gRPC
+  participant FS as 本机磁盘
+  participant S3 as 对象存储
+
+  Note over AG,CP: 首启：Register（agent_id、backup_path_allowlist 等）后进入循环
+
+  loop run_forever
+    AG->>CP: Heartbeat
+    CP-->>AG: server_capabilities（如 multipart_upload、multipart_resume）
+    AG->>CP: LeaseJobs(agent_id, max_jobs=1)
+    CP-->>AG: JobLease（backup、config_json：paths、excludes、tenant_id、加密策略等）
+  end
+
+  Note over AG: 解析 config_json；tenant_id 缺失则 CompleteJob 失败
+
+  alt 断点续传：本地 checkpoint + wip bundle 有效且服务端支持 multipart_resume
+    AG->>FS: 读取 multipart checkpoint 与 wip bundle
+    Note over AG: 复用 manifest、content_length、checksum；不重新打 tar
+  else 新建打包
+    AG->>FS: _build_backup_tarball（allowlist 校验、tar.gz + manifest 元数据）
+    AG->>AG: finalize_bundle_with_optional_encryption（按策略可选）
+    opt 对象大小 ≥ multipart 阈值且服务端支持 multipart_upload
+      AG->>FS: 将最终 bundle 移至 wip 路径供分片读取
+    end
+  end
+
+  AG->>CP: RequestStorageGrant(WRITE, job_id, bundle_content_length, 可选 resume_upload_id)
+  CP-->>AG: manifest_http_url、bundle_http_url 或 multipart（upload_id、分片 PUT URL）
+
+  opt 控制面返回新的 multipart upload_id
+    AG->>FS: write_multipart_checkpoint（upload_id、manifest、parts 等）
+  end
+
+  AG->>S3: PUT manifest（预签名）
+  alt 单对象上传
+    AG->>S3: PUT bundle（整包预签名）
+  else Multipart
+    loop 每个未完成分片
+      AG->>S3: PUT 分片（预签名）
+      AG->>FS: 更新 multipart checkpoint（PartNumber、ETag）
+    end
+  end
+
+  AG->>CP: ReportProgress(95, uploaded)
+  AG->>CP: CompleteJob(success=true, bundle/manifest key、size_bytes、checksum_sha256、multipart 完成 JSON 等)
+
+  opt multipart 成功结束
+    AG->>FS: clear_job_multipart_state
+  end
+
+  AG->>FS: 删除临时 tarball（路径非 wip 时 unlink）
+
+  Note over AG,CP: 任一步骤出现 FileBackupError → CompleteJob(success=false, error_code, error_message)
+```
+
+要点简述：
+
+- **租约配置**：`config_json` 须含 **`tenant_id`**，并与控制面约定的 **`artifact_object_keys`**（`bundle.tar.gz` / `manifest.json` 前缀）一致。
+- **断点续传**：仅当本地 checkpoint 与 wip 文件通过校验且 **`multipart_resume`** 在能力集中启用；否则会先清理本地 multipart 状态再全量重打包。
+- **上传顺序**：始终 **先 manifest、后 bundle**（与 `upload_backup_via_storage_grant` 一致）；multipart 时控制面在 **`CompleteJob`** 后完成 **CompleteMultipartUpload** 等收尾（见上文「租约、存储授权与上传收尾」）。
+
 ---
 
 ## 恢复
