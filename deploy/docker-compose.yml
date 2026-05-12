@@ -8,7 +8,7 @@
 # | Profile | 服务 |
 # |---------|------|
 # | **with-control-plane** | ``iam``、``api``、``scheduler``（IAM 与 DeVault 控制面） |
-# | **with-agent** | ``agent``、``agent2``（需与控制面同时启用）；与 **with-console** 任一启用时都会跑 ``demo-stack-init``（IAM→DeVault 租户镜像；**with-agent** 时还会经 HTTP 签发 **两条** 演示 Agent 令牌写入共享卷，供两个边端实例） |
+# | **with-agent** | ``postgres-pgbr-demo``、``pgbr-demo-init``、``agent``、``agent2``、``demo-pgbr-policy-init``（须与控制面同时启用）；与 **with-console** 任一启用时都会跑 ``demo-stack-init``（IAM→DeVault 租户镜像；**with-agent** 时还会经 HTTP 签发 **两条** 演示 Agent 令牌写入共享卷，供两个边端实例） |
 # | **with-console** | ``demo-stack-init``、``console``（演示租户镜像 + 官方 Web 控制台；需 **with-control-plane**） |
 # | **with-grpc-tls** | ``grpc-gateway``（Envoy 对外 TLS :50052 → ``api:50051``；需 **with-control-plane**） |
 # | **with-monitoring** | ``alertdump``、``alertmanager``、``prometheus``（需 **with-control-plane** 以便抓取 ``api``） |
@@ -150,6 +150,56 @@ services:
         mc mb --ignore-existing "local/$$DEVAULT_S3_BUCKET"
     restart: "no"
 
+  # pgBackRest *target* Postgres (not the devault metadata DB). Compose-only trust auth — do not copy to production.
+  postgres-pgbr-demo:
+    profiles: ["with-agent"]
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.postgres-pgbr-demo
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: devault-pgbr-pass
+      POSTGRES_DB: postgres
+      POSTGRES_HOST_AUTH_METHOD: trust
+    command:
+      - postgres
+      - -c
+      - wal_level=replica
+      - -c
+      - max_wal_senders=10
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+
+  # One-shot: pgBackRest stanza on MinIO for demo stanza name (default ``demo``).
+  pgbr-demo-init:
+    profiles: ["with-agent"]
+    image: ${DEVAULT_IMAGE:-glf9832/devault:latest}
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args:
+        <<: *pip-build-args
+    environment:
+      DEVAULT_S3_BUCKET: ${DEVAULT_S3_BUCKET:-devault}
+      DEMO_PGBR_STANZA: ${DEMO_PGBR_STANZA:-demo}
+      DEMO_PGBR_PG_HOST: postgres-pgbr-demo
+      DEMO_PGBR_S3_ENDPOINT: ${DEVAULT_S3_ENDPOINT:-http://minio:9000}
+      PGBACKREST_REPO1_S3_KEY: minioadmin
+      PGBACKREST_REPO1_S3_KEY_SECRET: minioadmin
+    entrypoint: ["/bin/sh", "/app/deploy/scripts/pgbackrest_demo_stanza_init.sh"]
+    volumes:
+      - ./pgbr-demo/id_ed25519:/root/.ssh/pgbr_demo_ed25519:ro
+      - ./pgbr-demo/ssh_config:/root/.ssh/config:ro
+    depends_on:
+      postgres-pgbr-demo:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    restart: "no"
+
   api:
     profiles: ["with-control-plane"]
     image: ${DEVAULT_IMAGE:-glf9832/devault:latest}
@@ -262,14 +312,23 @@ services:
       # Dev/demo default key (literal label: devault-docker-demo-aes256-key!!); override for real use.
       DEVAULT_ARTIFACT_ENCRYPTION_KEY: ${DEVAULT_ARTIFACT_ENCRYPTION_KEY:-ZGV2YXVsdC1kb2NrZXItZGVtby1hZXMyNTYta2V5ISE=}
       PYTHONPATH: /app/src
+      # pgBackRest → MinIO (non-secret repo fields also in policy JSON; keys from env only).
+      DEVAULT_S3_BUCKET: ${DEVAULT_S3_BUCKET:-devault}
+      PGBACKREST_REPO1_S3_KEY: minioadmin
+      PGBACKREST_REPO1_S3_KEY_SECRET: minioadmin
+      PGSSLMODE: disable
     volumes:
       - ./demo_data:/data:ro
       - agent_restore:/restore
       - demo_stack_secrets:/shared:ro
+      - ./pgbr-demo/id_ed25519:/root/.ssh/pgbr_demo_ed25519:ro
+      - ./pgbr-demo/ssh_config:/root/.ssh/config:ro
     depends_on:
       api:
         condition: service_healthy
       minio-init:
+        condition: service_completed_successfully
+      pgbr-demo-init:
         condition: service_completed_successfully
       demo-stack-init:
         condition: service_completed_successfully
@@ -291,14 +350,23 @@ services:
       DEVAULT_ALLOWED_PATH_PREFIXES: /data,/restore
       DEVAULT_ARTIFACT_ENCRYPTION_KEY: ${DEVAULT_ARTIFACT_ENCRYPTION_KEY:-ZGV2YXVsdC1kb2NrZXItZGVtby1hZXMyNTYta2V5ISE=}
       PYTHONPATH: /app/src
+      # pgBackRest → MinIO (non-secret repo fields also in policy JSON; keys from env only).
+      DEVAULT_S3_BUCKET: ${DEVAULT_S3_BUCKET:-devault}
+      PGBACKREST_REPO1_S3_KEY: minioadmin
+      PGBACKREST_REPO1_S3_KEY_SECRET: minioadmin
+      PGSSLMODE: disable
     volumes:
       - ./demo_data:/data:ro
       - agent2_restore:/restore
       - demo_stack_secrets:/shared:ro
+      - ./pgbr-demo/id_ed25519:/root/.ssh/pgbr_demo_ed25519:ro
+      - ./pgbr-demo/ssh_config:/root/.ssh/config:ro
     depends_on:
       api:
         condition: service_healthy
       minio-init:
+        condition: service_completed_successfully
+      pgbr-demo-init:
         condition: service_completed_successfully
       demo-stack-init:
         condition: service_completed_successfully
@@ -334,6 +402,42 @@ services:
         condition: service_healthy
       iam:
         condition: service_healthy
+    restart: "no"
+
+  # One-shot: after both Agents start, create ``demo-pgbackrest`` policy (bound to agent2 by default).
+  demo-pgbr-policy-init:
+    profiles: ["with-agent"]
+    image: ${DEVAULT_IMAGE:-glf9832/devault:latest}
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args:
+        <<: *pip-build-args
+    environment:
+      DEMO_STACK_PGBR_ENABLED: ${DEMO_STACK_PGBR_ENABLED:-true}
+      DEMO_STACK_PGBR_MIN_AGENTS: ${DEMO_STACK_PGBR_MIN_AGENTS:-2}
+      DEMO_STACK_PGBR_AGENT_INDEX: ${DEMO_STACK_PGBR_AGENT_INDEX:-1}
+      DEMO_STACK_IAM_BASE: ${DEMO_STACK_IAM_BASE:-http://iam:8100}
+      DEMO_STACK_DEVAULT_API: ${DEMO_STACK_DEVAULT_API:-http://api:8000}
+      DEMO_STACK_PLATFORM_EMAIL: ${DEMO_STACK_PLATFORM_EMAIL:-demo@devault.com}
+      DEMO_STACK_PLATFORM_PASSWORD: ${DEMO_STACK_PLATFORM_PASSWORD:-Devault12345}
+      DEMO_STACK_TENANT_SLUG: ${DEMO_STACK_TENANT_SLUG:-demo}
+      DEMO_STACK_PGBR_POLICY_NAME: ${DEMO_STACK_PGBR_POLICY_NAME:-demo-pgbackrest}
+      DEVAULT_S3_BUCKET: ${DEVAULT_S3_BUCKET:-devault}
+      DEMO_PGBR_S3_ENDPOINT: ${DEVAULT_S3_ENDPOINT:-http://minio:9000}
+      PYTHONPATH: /app/src
+    entrypoint: ["python3", "/app/deploy/scripts/bootstrap_pgbr_demo_policy.py"]
+    depends_on:
+      api:
+        condition: service_healthy
+      iam:
+        condition: service_healthy
+      demo-stack-init:
+        condition: service_completed_successfully
+      agent:
+        condition: service_started
+      agent2:
+        condition: service_started
     restart: "no"
 
   console:

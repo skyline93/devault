@@ -39,7 +39,7 @@ const PoliciesPage: React.FC = () => {
         width: 170,
       },
       { title: formatMessage({ id: 'page.policies.colName' }), dataIndex: 'name', ellipsis: true },
-      { title: formatMessage({ id: 'page.policies.colPlugin' }), dataIndex: 'plugin', width: 80 },
+      { title: formatMessage({ id: 'page.policies.colPlugin' }), dataIndex: 'plugin', width: 140 },
       {
         title: formatMessage({ id: 'page.policies.colAgentHost' }),
         dataIndex: 'bound_agent_id',

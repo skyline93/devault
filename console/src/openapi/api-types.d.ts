@@ -749,13 +749,16 @@ export interface components {
         CreateBackupJobBody: {
             /**
              * Plugin
-             * @description Backup plugin; only `file` is supported.
-             * @default file
-             * @constant
+             * @description Required for inline `config`. Ignored when `policy_id` is set (policy.plugin is authoritative).
              */
-            plugin: "file";
-            /** @description Inline backup config when not referencing a saved policy. */
-            config?: components["schemas"]["FileBackupConfigV1"] | null;
+            plugin?: ("file" | "postgres_pgbackrest") | null;
+            /**
+             * Config
+             * @description Inline backup config when not referencing a saved policy (shape depends on `plugin`).
+             */
+            config?: {
+                [key: string]: unknown;
+            } | null;
             /**
              * Policy Id
              * @description If set, use the saved policy config instead of inline `config`.
@@ -918,73 +921,6 @@ export interface components {
              */
             status: string;
         };
-        /**
-         * FileBackupConfigV1
-         * @description File-plugin backup configuration (version 1).
-         */
-        FileBackupConfigV1: {
-            /**
-             * Version
-             * @description Config schema version; must be 1.
-             * @default 1
-             * @constant
-             */
-            version: 1;
-            /**
-             * Paths
-             * @description Absolute paths to back up (files or directories).
-             */
-            paths: string[];
-            /**
-             * Excludes
-             * @description Optional gitwildmatch patterns to exclude.
-             */
-            excludes?: string[];
-            /**
-             * Follow Symlinks
-             * @description Follow symlinks when walking paths (reserved).
-             * @default false
-             */
-            follow_symlinks: boolean;
-            /**
-             * Preserve Uid Gid
-             * @description Preserve uid/gid in archive metadata (reserved).
-             * @default true
-             */
-            preserve_uid_gid: boolean;
-            /**
-             * One Filesystem
-             * @description Stay on one filesystem (reserved).
-             * @default false
-             */
-            one_filesystem: boolean;
-            /**
-             * Encrypt Artifacts
-             * @description Encrypt backup bundle with AES-256-GCM before upload (KMS envelope or static key).
-             * @default false
-             */
-            encrypt_artifacts: boolean;
-            /**
-             * Kms Envelope Key Id
-             * @description KMS CMK id or ARN for envelope encryption (optional if tenant/platform default is set).
-             */
-            kms_envelope_key_id?: string | null;
-            /**
-             * Object Lock Mode
-             * @description S3 Object Lock mode when the bucket has Object Lock enabled.
-             */
-            object_lock_mode?: ("GOVERNANCE" | "COMPLIANCE") | null;
-            /**
-             * Object Lock Retain Days
-             * @description Object Lock retention window in days from upload time.
-             */
-            object_lock_retain_days?: number | null;
-            /**
-             * Retention Days
-             * @description Optional retention: artifact eligible for automatic deletion this many days after successful backup.
-             */
-            retention_days?: number | null;
-        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -1057,7 +993,7 @@ export interface components {
             trace_id: string | null;
             /**
              * Result Meta
-             * @description restore_drill / path_precheck: structured report from the Agent (see `schema` in JSON).
+             * @description Structured Agent report: restore_drill / path_precheck / postgres_pgbackrest backup or expire.
              */
             result_meta?: {
                 [key: string]: unknown;
@@ -1077,13 +1013,17 @@ export interface components {
             name: string;
             /**
              * Plugin
-             * @description Plugin; only `file` is supported.
-             * @default file
-             * @constant
+             * @description Backup plugin: `file` (paths) or `postgres_pgbackrest` (pgBackRest on Agent).
+             * @enum {string}
              */
-            plugin: "file";
-            /** @description Paths and exclude patterns. */
-            config: components["schemas"]["FileBackupConfigV1"];
+            plugin: "file" | "postgres_pgbackrest";
+            /**
+             * Config
+             * @description Plugin-specific JSON config (validated server-side).
+             */
+            config: {
+                [key: string]: unknown;
+            };
             /**
              * Enabled
              * @description Whether schedules and manual runs may use this policy.
@@ -1133,7 +1073,10 @@ export interface components {
         PolicyPatch: {
             /** Name */
             name?: string | null;
-            config?: components["schemas"]["FileBackupConfigV1"] | null;
+            /** Config */
+            config?: {
+                [key: string]: unknown;
+            } | null;
             /** Enabled */
             enabled?: boolean | null;
             /**

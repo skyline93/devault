@@ -30,3 +30,4 @@ class JobTrigger(StrEnum):
 
 class PluginName(StrEnum):
     FILE = "file"
+    POSTGRES_PGBACKREST = "postgres_pgbackrest"

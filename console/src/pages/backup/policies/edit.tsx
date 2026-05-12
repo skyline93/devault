@@ -3,13 +3,19 @@ import { history, request, useAccess, useIntl } from '@umijs/max';
 import { App, Button, Card, Col, Form, Input, Row, Switch } from 'antd';
 import React, { useCallback, useEffect, useState } from 'react';
 import PolicyFormFields from './PolicyFormFields';
-import { bindingPayloadFromValues, buildConfigPayloadFromValues, parseConfig } from './policyPayload';
+import {
+  bindingPayloadFromValues,
+  buildConfigPayloadFromValues,
+  parseConfig,
+  type PolicyPluginKind,
+} from './policyPayload';
 
 const PolicyNewPage: React.FC = () => {
   const { formatMessage } = useIntl();
   const { message } = App.useApp();
   const access = useAccess();
   const [form] = Form.useForm();
+  const pluginKind = (Form.useWatch('policy_plugin', form) as PolicyPluginKind) ?? 'file';
   const [tenantAgents, setTenantAgents] = useState<API.TenantScopedAgentOut[]>([]);
 
   const loadAgents = useCallback(async () => {
@@ -24,7 +30,8 @@ const PolicyNewPage: React.FC = () => {
   useEffect(() => {
     form.setFieldsValue({
       name: '',
-      ...parseConfig({ version: 1, paths: [] }),
+      policy_plugin: 'file' satisfies PolicyPluginKind,
+      ...parseConfig({ version: 1, paths: [] }, 'file'),
       encrypt_artifacts: true,
       initial_schedule_timezone: 'UTC',
       initial_schedule_enabled: true,
@@ -34,14 +41,15 @@ const PolicyNewPage: React.FC = () => {
   const onSave = async () => {
     try {
       const values = await form.validateFields();
-      const config = buildConfigPayloadFromValues(values);
+      const pl = (values.policy_plugin as PolicyPluginKind) || 'file';
+      const config = buildConfigPayloadFromValues(values, pl);
       const bind = bindingPayloadFromValues(values);
 
       const created = await request<API.PolicyOut>('/api/v1/policies', {
         method: 'POST',
         data: {
           name: values.name,
-          plugin: 'file',
+          plugin: pl,
           enabled: true,
           config,
           ...bind,
@@ -80,7 +88,7 @@ const PolicyNewPage: React.FC = () => {
     <PageContainer title={formatMessage({ id: 'page.policyEdit.newTitle' })} onBack={() => history.push('/backup/policies')}>
       <Card>
         <Form form={form} layout="vertical" disabled={!access.canWrite}>
-          <PolicyFormFields tenantAgents={tenantAgents} pathsAgentDisabled={false} />
+          <PolicyFormFields tenantAgents={tenantAgents} pathsAgentDisabled={false} pluginKind={pluginKind} />
 
           <Card
             size="small"

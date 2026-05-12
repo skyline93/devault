@@ -12,6 +12,19 @@ def _props(schema: dict) -> dict:
     return schema.get("properties") or {}
 
 
+def _string_enum_from_schema_prop(prop: object) -> set[str] | None:
+    """Resolve a string enum from a JSON Schema property (handles anyOf with null)."""
+    if not isinstance(prop, dict):
+        return None
+    if prop.get("type") == "string" and isinstance(prop.get("enum"), list):
+        return {str(x) for x in prop["enum"]}
+    for sub in prop.get("anyOf") or []:
+        got = _string_enum_from_schema_prop(sub)
+        if got is not None:
+            return got
+    return None
+
+
 def main() -> int:
     if len(sys.argv) < 2:
         print("usage: verify_console_openapi_contract.py <openapi.json>", file=sys.stderr)
@@ -22,6 +35,7 @@ def main() -> int:
         return 1
     doc = json.loads(path.read_text(encoding="utf-8"))
     failed = False
+    need_backup_plugins = {"file", "postgres_pgbackrest"}
 
     paths = doc.get("paths") or {}
     ui_paths = [p for p in paths if p.startswith("/ui") or p == "/ui"]
@@ -109,6 +123,32 @@ def main() -> int:
             if needle not in pp:
                 print(f"PolicyOut.properties missing {needle!r}", file=sys.stderr)
                 failed = True
+
+    pol_create = schemas.get("PolicyCreate")
+    if not isinstance(pol_create, dict):
+        print("missing components.schemas.PolicyCreate", file=sys.stderr)
+        failed = True
+    else:
+        plug_enum = _string_enum_from_schema_prop(_props(pol_create).get("plugin"))
+        if plug_enum != need_backup_plugins:
+            print(
+                f"PolicyCreate.plugin enum must be {sorted(need_backup_plugins)!r}, got {sorted(plug_enum or [])!r}",
+                file=sys.stderr,
+            )
+            failed = True
+
+    job_body = schemas.get("CreateBackupJobBody")
+    if not isinstance(job_body, dict):
+        print("missing components.schemas.CreateBackupJobBody", file=sys.stderr)
+        failed = True
+    else:
+        jb_plug = _string_enum_from_schema_prop(_props(job_body).get("plugin"))
+        if jb_plug != need_backup_plugins:
+            print(
+                f"CreateBackupJobBody.plugin enum must be {sorted(need_backup_plugins)!r}, got {sorted(jb_plug or [])!r}",
+                file=sys.stderr,
+            )
+            failed = True
 
     return 1 if failed else 0
 

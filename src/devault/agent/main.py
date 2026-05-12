@@ -6,6 +6,7 @@ import os
 import platform
 import socket
 import shutil
+import subprocess
 import sys
 import time
 import uuid
@@ -17,7 +18,7 @@ import grpc  # pyright: ignore[reportMissingModuleSource]
 
 from devault import __version__
 from devault.agent.capabilities import gate_multipart_resume, gate_multipart_upload
-from devault.core.enums import JobKind
+from devault.core.enums import JobKind, PluginName
 from devault.grpc_gen import agent_pb2, agent_pb2_grpc
 from devault.plugins.file import FileBackupError, run_file_restore_with_presigned_bundle
 from devault.plugins.file.multipart_wip import (
@@ -193,7 +194,79 @@ def _run_one_job(
     cfg = json.loads(lease.config_json)
     host_snapshot = socket.gethostname()
     try:
-        if lease.kind == JobKind.BACKUP.value:
+        if lease.kind == JobKind.BACKUP.value and lease.plugin == PluginName.POSTGRES_PGBACKREST.value:
+            try:
+                from devault.plugins.pgbackrest.runner import run_pgbackrest_job
+
+                summary = run_pgbackrest_job(cfg)
+            except (ValueError, OSError) as e:
+                logger.warning("pgbackrest job failed job_id=%s %s", job_id, e)
+                stub.CompleteJob(
+                    agent_pb2.CompleteJobRequest(
+                        agent_id=agent_id,
+                        job_id=job_id,
+                        success=False,
+                        error_code="PGBR_CONFIG",
+                        error_message=str(e)[:7900],
+                        bundle_key="",
+                        manifest_key="",
+                        size_bytes=0,
+                        checksum_sha256="",
+                        agent_hostname=host_snapshot,
+                    ),
+                    metadata=md,
+                )
+            except subprocess.TimeoutExpired as e:
+                logger.warning("pgbackrest timeout job_id=%s", job_id)
+                stub.CompleteJob(
+                    agent_pb2.CompleteJobRequest(
+                        agent_id=agent_id,
+                        job_id=job_id,
+                        success=False,
+                        error_code="PGBR_TIMEOUT",
+                        error_message=str(e)[:7900],
+                        bundle_key="",
+                        manifest_key="",
+                        size_bytes=0,
+                        checksum_sha256="",
+                        agent_hostname=host_snapshot,
+                    ),
+                    metadata=md,
+                )
+            else:
+                if int(summary.get("exit_code") or 1) != 0:
+                    msg = (summary.get("stderr_tail") or summary.get("stdout_tail") or "pgbackrest failed")[:7900]
+                    stub.CompleteJob(
+                        agent_pb2.CompleteJobRequest(
+                            agent_id=agent_id,
+                            job_id=job_id,
+                            success=False,
+                            error_code="PGBR_NONZERO",
+                            error_message=msg,
+                            bundle_key="",
+                            manifest_key="",
+                            size_bytes=0,
+                            checksum_sha256="",
+                            agent_hostname=host_snapshot,
+                        ),
+                        metadata=md,
+                    )
+                else:
+                    stub.CompleteJob(
+                        agent_pb2.CompleteJobRequest(
+                            agent_id=agent_id,
+                            job_id=job_id,
+                            success=True,
+                            bundle_key="",
+                            manifest_key="",
+                            size_bytes=0,
+                            checksum_sha256="",
+                            result_summary_json=json.dumps(summary),
+                            agent_hostname=host_snapshot,
+                        ),
+                        metadata=md,
+                    )
+        elif lease.kind == JobKind.BACKUP.value and lease.plugin == PluginName.FILE.value:
             job_stub = _job_view(job_id, lease, cfg)
             bid = uuid.UUID(job_id)
             tid_raw = cfg.get("tenant_id")
@@ -354,6 +427,11 @@ def _run_one_job(
                         tmp_path.unlink(missing_ok=True)
                 except OSError:
                     pass
+        elif lease.kind == JobKind.BACKUP.value:
+            raise FileBackupError(
+                "UNSUPPORTED_PLUGIN",
+                f"unsupported backup plugin: {lease.plugin!r}",
+            )
         elif lease.kind in (JobKind.RESTORE.value, JobKind.RESTORE_DRILL.value):
             g = stub.RequestStorageGrant(
                 agent_pb2.RequestStorageGrantRequest(

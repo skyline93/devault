@@ -314,6 +314,35 @@ sequenceDiagram
 
 ---
 
+## 附录 A：DeVault 一期联调（FULL 与 expire，可 mock）
+
+### A.0 仓库一键演示栈（`make demo-stack-up`）
+
+启用 profile **`with-control-plane`** + **`with-agent`**（Makefile 的 `demo-stack-up` 已包含）时，Compose 会额外拉起 **pgBackRest 演示链**（与元数据库 `postgres` 分离）：
+
+| 服务名 | 作用 |
+|--------|------|
+| `postgres-pgbr-demo` | **被备份** PostgreSQL 14；`pg_host` 填 **`postgres-pgbr-demo`**；`pg_data_path` **`/var/lib/postgresql/data`**；演示用 **`POSTGRES_HOST_AUTH_METHOD=trust`（仅 compose 内网，禁止照抄生产）**。 |
+| `pgbr-demo-init` | 一次性执行 **`pgbackrest stanza-create`**（stanza 默认 **`demo`**），把 repo 元数据写入 MinIO 前缀 **`pgbr-demo/`**（与 DeVault file artifact 对象前缀分离）。 |
+| `agent` / `agent2` | 同一 **`deploy/Dockerfile`** 镜像内已安装 **`pgbackrest`**；环境变量 **`PGBACKREST_REPO1_S3_KEY` / `PGBACKREST_REPO1_S3_KEY_SECRET`** 对齐 MinIO；**`PGSSLMODE=disable`** 便于连接演示库。 |
+| `demo-pgbr-policy-init` | 在两台 Agent **已启动** 后，幂等创建策略 **`demo-pgbackrest`**（默认绑定 **按 `agent_id` 排序后的第二台**，即 `DEMO_STACK_PGBR_AGENT_INDEX` 默认 **`1`** → 通常为 `agent2`）；可用 **`DEMO_STACK_PGBR_ENABLED=false`** 关闭。 |
+
+**与 MinIO / 桶**：`repo_s3_bucket` 默认与 **`DEVAULT_S3_BUCKET`**（默认 `devault`）相同；对象前缀使用 **`pgbr-demo/`**，避免与 file 插件 bundle 键冲突。
+
+**冒烟**：控制台或 `POST /api/v1/jobs/backup` 指定 **`policy_id`** 为 `demo-pgbackrest` 对应策略（无需 body 传 `plugin`）；作业成功后 **`result_meta`** 含 `stanza` 等字段，**无** `artifacts` 下载入口。
+
+---
+
+以下步骤假设 **控制面**、**元数据库**、**Redis**、**对象存储（MinIO）** 与至少一台 **已注册且绑定到策略的 Agent** 已按仓库 `docker-compose` 或等价环境启动；Agent 镜像或主机上已安装 **`pgbackrest` 可执行文件**（与 PostgreSQL 大版本匹配），或联调时使用 **`DEVAULT_PGBACKREST_BIN`** 指向 **退出码为 0 的 mock 脚本**（仅验证控制面与租约链路）。
+
+1. **创建物理备份策略**（`POST /api/v1/policies`）：`plugin` 为 `postgres_pgbackrest`，`config` 至少包含 `version:1`、`stanza`、`pg_host`、`pg_port`、`pg_data_path`、`pgbackrest_operation`（`backup` 或 `expire`）、`backup_type`（仅当 `backup`）、以及 **`repo_s3_bucket`+`repo_s3_prefix`** 或 **`repo_path`**。**勿**在 JSON 中写入访问密钥；S3 凭据通过 **Agent 进程环境**（如 `PGBACKREST_REPO1_S3_KEY` / `PGBACKREST_REPO1_S3_KEY_SECRET` 等，以 pgBackRest 文档为准）注入。  
+2. **绑定 Agent**：策略 `bound_agent_id` 指向 **已安装 pgBackRest** 的 Agent；与文件策略并存时，靠 **不同 Policy 绑定不同 Agent** 避免误领作业。  
+3. **手动入队一次 FULL**（`POST /api/v1/jobs/backup`，`policy_id` 指向该策略；**无需**传 `plugin`），或配置 **Schedule** 触发；Agent 拉取租约后执行 `pgbackrest … backup --type=full`，成功后 **`CompleteJob`** 携带 **`result_summary_json`**（含 `stanza`）；控制面 **不创建** file 类 `Artifact`，作业 **`result_meta`** 存摘要 JSON。  
+4. **expire 策略**：可复制一条策略将 `pgbackrest_operation` 设为 **`expire`** 并 **省略** `backup_type`，单独绑定 Schedule；触发后 Agent 执行 `pgbackrest expire`，成功路径同样 **无 Artifact**。  
+5. **验收**：控制台 **作业详情** 可见 `result_meta`；`GET /api/v1/jobs/{id}` 中 `plugin` 为 `postgres_pgbackrest`；失败时 `error_code` / `error_message` 由 Agent 上报。
+
+---
+
 ## 7. 修订记录
 
 | 日期 | 说明 |

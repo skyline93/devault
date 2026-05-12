@@ -17,6 +17,12 @@ COPY pyproject.toml README.md alembic.ini /app/
 COPY alembic /app/alembic
 COPY src /app/src
 COPY deploy/scripts /app/deploy/scripts
+RUN chmod +x /app/deploy/scripts/pgbackrest_demo_stanza_init.sh
+
+# pgBackRest CLI for edge Agent physical-backup jobs and demo-stack stanza init (bookworm package; demo + CI image).
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends pgbackrest openssh-client \
+    && rm -rf /var/lib/apt/lists/*
 
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install --upgrade pip setuptools wheel \

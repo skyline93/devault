@@ -47,7 +47,7 @@ const JobsPage: React.FC = () => {
         width: 100,
         render: (_, r) => <Tag>{r.status}</Tag>,
       },
-      { title: formatMessage({ id: 'page.jobs.colPlugin' }), dataIndex: 'plugin', width: 80 },
+      { title: formatMessage({ id: 'page.jobs.colPlugin' }), dataIndex: 'plugin', width: 140 },
       { title: formatMessage({ id: 'page.jobs.colTrigger' }), dataIndex: 'trigger', width: 100 },
       {
         title: formatMessage({ id: 'page.jobs.colAgentHost' }),
@@ -150,6 +150,11 @@ const JobsPage: React.FC = () => {
                 {JSON.stringify(detail.config_snapshot, null, 2)}
               </pre>
             </div>
+            {detail.plugin === 'postgres_pgbackrest' ? (
+              <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
+                {formatMessage({ id: 'page.jobs.pgNoArtifactHint' })}
+              </Typography.Paragraph>
+            ) : null}
             <div>
               <strong>{formatMessage({ id: 'page.jobs.resultMeta' })}</strong>
               <pre

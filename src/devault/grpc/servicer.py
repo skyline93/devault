@@ -509,6 +509,13 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
                 if job.status not in _ACTIVE_JOB_STATUSES:
                     context.abort(grpc.StatusCode.FAILED_PRECONDITION, "job not active")
 
+                if job.plugin == PluginName.POSTGRES_PGBACKREST.value:
+                    context.abort(
+                        grpc.StatusCode.FAILED_PRECONDITION,
+                        "postgres_pgbackrest jobs do not use RequestStorageGrant",
+                    )
+                    raise RuntimeError("unreachable")
+
                 ttl = int(settings.presign_ttl_seconds)
                 tenant = db.get(Tenant, job.tenant_id)
                 client = build_s3_client_for_tenant(settings, tenant)
@@ -800,6 +807,47 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
                         JOB_TOTAL.labels(
                             *job_terminal_label_values(job, status="success", error_class="none"),
                         ).inc()
+                    elif job.kind == JobKind.BACKUP.value and job.plugin == PluginName.POSTGRES_PGBACKREST.value:
+                        raw_sum = (request.result_summary_json or "").strip()
+                        if not raw_sum:
+                            BACKUP_INTEGRITY_CONTROL_REJECTS_TOTAL.labels(
+                                reason="pgbackrest_result_summary_missing",
+                            ).inc()
+                            context.abort(
+                                grpc.StatusCode.INVALID_ARGUMENT,
+                                "result_summary_json required for postgres_pgbackrest backup",
+                            )
+                            raise RuntimeError("unreachable")
+                        try:
+                            parsed_sum = json.loads(raw_sum)
+                        except json.JSONDecodeError:
+                            BACKUP_INTEGRITY_CONTROL_REJECTS_TOTAL.labels(
+                                reason="pgbackrest_result_summary_invalid_json",
+                            ).inc()
+                            context.abort(
+                                grpc.StatusCode.INVALID_ARGUMENT,
+                                "invalid result_summary_json",
+                            )
+                            raise RuntimeError("unreachable")
+                        if not isinstance(parsed_sum, dict) or not str(parsed_sum.get("stanza") or "").strip():
+                            BACKUP_INTEGRITY_CONTROL_REJECTS_TOTAL.labels(
+                                reason="pgbackrest_result_summary_missing_stanza",
+                            ).inc()
+                            context.abort(
+                                grpc.StatusCode.INVALID_ARGUMENT,
+                                "result_summary_json must be an object including stanza",
+                            )
+                            raise RuntimeError("unreachable")
+                        job.result_meta = parsed_sum
+                        job.bundle_wip_multipart_upload_id = None
+                        job.bundle_wip_content_length = None
+                        job.bundle_wip_part_size_bytes = None
+                        finished_pg = datetime.now(timezone.utc)
+                        job.status = JobStatus.SUCCESS.value
+                        job.finished_at = finished_pg
+                        JOB_TOTAL.labels(
+                            *job_terminal_label_values(job, status="success", error_class="none"),
+                        ).inc()
                     elif job.kind == JobKind.BACKUP.value:
                         tenant_row = db.get(Tenant, job.tenant_id)
                         storage = get_storage_for_tenant(settings, tenant_row)
@@ -977,7 +1025,11 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
                             *job_terminal_label_values(job, status="success", error_class="none"),
                         ).inc()
                 else:
-                    if job.kind == JobKind.BACKUP.value and settings.storage_backend == "s3":
+                    if (
+                        job.kind == JobKind.BACKUP.value
+                        and job.plugin == PluginName.FILE.value
+                        and settings.storage_backend == "s3"
+                    ):
                         uid = job.bundle_wip_multipart_upload_id
                         if uid:
                             tenant_row = db.get(Tenant, job.tenant_id)
@@ -1021,7 +1073,7 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
                     )
 
                 db.commit()
-                JOB_DURATION_SECONDS.labels(kind=job.kind, plugin=PluginName.FILE.value).observe(
+                JOB_DURATION_SECONDS.labels(kind=job.kind, plugin=job.plugin or PluginName.FILE.value).observe(
                     time.monotonic() - t_inner
                 )
                 return agent_pb2.CompleteJobReply(ok=True)

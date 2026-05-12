@@ -25,6 +25,7 @@ from devault.api.schemas import (
     TenantCreate,
     TenantPatch,
 )
+from devault.plugins.pgbackrest.config import PgbackrestPhysicalBackupConfigV1
 from devault.core.enums import JobKind, JobStatus, JobTrigger, PluginName
 from devault.core.locking import release_policy_job_lock
 from devault.db.models import Artifact, Job, Policy, RestoreDrillSchedule, Schedule, Tenant
@@ -122,10 +123,19 @@ def patch_tenant(db: Session, tenant_id: uuid.UUID, body: TenantPatch) -> Tenant
 
 
 def create_policy(db: Session, body: PolicyCreate, *, tenant_id: uuid.UUID) -> Policy:
-    if body.plugin != "file":
-        raise HTTPException(400, detail="Only plugin=file is supported")
-    validate_backup_config_for_tenant(db, tenant_id, body.config)
-    validate_policy_paths_against_tenant_allowlist(db, tenant_id, body.config.paths)
+    if body.plugin not in (PluginName.FILE.value, PluginName.POSTGRES_PGBACKREST.value):
+        raise HTTPException(400, detail="Unsupported policy plugin")
+    if body.plugin == PluginName.FILE.value:
+        raw = dict(body.config)
+        if "version" not in raw:
+            raw["version"] = 1
+        file_cfg = FileBackupConfigV1.model_validate(raw)
+        validate_backup_config_for_tenant(db, tenant_id, file_cfg)
+        validate_policy_paths_against_tenant_allowlist(db, tenant_id, file_cfg.paths)
+        config_json = file_cfg.model_dump(mode="json")
+    else:
+        pg_cfg = PgbackrestPhysicalBackupConfigV1.model_validate(body.config)
+        config_json = pg_cfg.model_dump(mode="json")
     validate_bound_agent_for_policy(
         db,
         tenant_id=tenant_id,
@@ -134,8 +144,8 @@ def create_policy(db: Session, body: PolicyCreate, *, tenant_id: uuid.UUID) -> P
     p = Policy(
         tenant_id=tenant_id,
         name=body.name,
-        plugin=PluginName.FILE.value,
-        config=body.config.model_dump(mode="json"),
+        plugin=body.plugin,
+        config=config_json,
         enabled=body.enabled,
         bound_agent_id=body.bound_agent_id,
     )
@@ -152,9 +162,19 @@ def patch_policy(db: Session, policy_id: uuid.UUID, body: PolicyPatch, *, tenant
     if body.name is not None:
         p.name = body.name
     if body.config is not None:
-        validate_backup_config_for_tenant(db, tenant_id, body.config)
-        validate_policy_paths_against_tenant_allowlist(db, tenant_id, body.config.paths)
-        p.config = body.config.model_dump(mode="json")
+        if p.plugin == PluginName.FILE.value:
+            raw = dict(body.config)
+            if "version" not in raw:
+                raw["version"] = 1
+            file_cfg = FileBackupConfigV1.model_validate(raw)
+            validate_backup_config_for_tenant(db, tenant_id, file_cfg)
+            validate_policy_paths_against_tenant_allowlist(db, tenant_id, file_cfg.paths)
+            p.config = file_cfg.model_dump(mode="json")
+        elif p.plugin == PluginName.POSTGRES_PGBACKREST.value:
+            pg_cfg = PgbackrestPhysicalBackupConfigV1.model_validate(body.config)
+            p.config = pg_cfg.model_dump(mode="json")
+        else:
+            raise HTTPException(400, detail="Unsupported policy plugin")
     if body.enabled is not None:
         p.enabled = body.enabled
     upd = body.model_dump(exclude_unset=True)
@@ -241,29 +261,48 @@ def delete_schedule(db: Session, schedule_id: uuid.UUID, *, tenant_id: uuid.UUID
 
 
 def create_backup_job(db: Session, body: CreateBackupJobBody, *, tenant_id: uuid.UUID) -> Job:
-    if body.plugin != "file":
-        raise HTTPException(status_code=400, detail="Only plugin=file is supported")
-
     policy_id: uuid.UUID | None = None
+    plugin: str
+    snap: dict
+
     if body.policy_id is not None:
         pol = db.get(Policy, body.policy_id)
         if pol is None or pol.tenant_id != tenant_id:
             raise HTTPException(status_code=404, detail="policy not found")
         if not pol.enabled:
             raise HTTPException(status_code=400, detail="policy is disabled")
-        if pol.plugin != PluginName.FILE.value:
+        if pol.plugin not in (PluginName.FILE.value, PluginName.POSTGRES_PGBACKREST.value):
             raise HTTPException(status_code=400, detail="Unsupported policy plugin")
+        if body.plugin is not None and body.plugin != pol.plugin:
+            raise HTTPException(status_code=400, detail="plugin does not match policy")
+        plugin = pol.plugin
         snap = dict(pol.config)
         policy_id = pol.id
+        if plugin == PluginName.FILE.value:
+            raw = dict(snap)
+            if "version" not in raw:
+                raw["version"] = 1
+            validate_backup_config_for_tenant(db, tenant_id, FileBackupConfigV1.model_validate(raw))
     else:
         assert body.config is not None
-        validate_backup_config_for_tenant(db, tenant_id, body.config)
-        snap = body.config.model_dump(mode="json")
+        if body.plugin is None:
+            raise HTTPException(status_code=400, detail="plugin is required for inline backup config")
+        plugin = body.plugin
+        if plugin == PluginName.FILE.value:
+            raw = dict(body.config)
+            if "version" not in raw:
+                raw["version"] = 1
+            file_cfg = FileBackupConfigV1.model_validate(raw)
+            validate_backup_config_for_tenant(db, tenant_id, file_cfg)
+            snap = file_cfg.model_dump(mode="json")
+        else:
+            pg_cfg = PgbackrestPhysicalBackupConfigV1.model_validate(body.config)
+            snap = pg_cfg.model_dump(mode="json")
 
     job = Job(
         tenant_id=tenant_id,
         kind=JobKind.BACKUP.value,
-        plugin=PluginName.FILE.value,
+        plugin=plugin,
         status=JobStatus.PENDING.value,
         trigger=JobTrigger.MANUAL.value,
         idempotency_key=body.idempotency_key,

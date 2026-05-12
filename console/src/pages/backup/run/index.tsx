@@ -62,8 +62,10 @@ const BackupRunPage: React.FC = () => {
 
   const submit = async () => {
     const namePaths =
-      mode === 'policy' ? (['mode', 'policy_id', 'idempotency_key'] as const) : (['mode', 'configJson', 'idempotency_key'] as const);
-    const v = await form.validateFields([...namePaths]);
+      mode === 'policy'
+        ? (['mode', 'policy_id', 'idempotency_key'] as const)
+        : (['mode', 'configJson', 'inline_plugin', 'idempotency_key'] as const);
+      const v = await form.validateFields([...namePaths, 'inline_plugin']);
     if (mode === 'policy') {
       if (!v.policy_id) {
         message.error(formatMessage({ id: 'page.backupRun.missingPolicy' }));
@@ -72,7 +74,6 @@ const BackupRunPage: React.FC = () => {
       await request('/api/v1/jobs/backup', {
         method: 'POST',
         data: {
-          plugin: 'file',
           policy_id: v.policy_id,
           idempotency_key: v.idempotency_key || undefined,
         },
@@ -90,10 +91,11 @@ const BackupRunPage: React.FC = () => {
         return;
       }
       if (!config.version) config.version = 1;
+      const pl = (v.inline_plugin as 'file' | 'postgres_pgbackrest') || 'file';
       await request('/api/v1/jobs/backup', {
         method: 'POST',
         data: {
-          plugin: 'file',
+          plugin: pl,
           config,
           idempotency_key: v.idempotency_key || undefined,
         },
@@ -125,7 +127,7 @@ const BackupRunPage: React.FC = () => {
       <Card>
         <Steps current={step} style={{ marginBottom: 24 }} items={stepItems} />
 
-        <Form form={form} layout="vertical" initialValues={{ mode: 'policy' }}>
+        <Form form={form} layout="vertical" initialValues={{ mode: 'policy', inline_plugin: 'file' }}>
           {step === 0 ? (
             <>
               <Form.Item name="mode" label={formatMessage({ id: 'page.backupRun.modeLabel' })}>
@@ -160,16 +162,29 @@ const BackupRunPage: React.FC = () => {
                   />
                 </Form.Item>
               ) : (
-                <Form.Item
-                  name="configJson"
-                  label={formatMessage({ id: 'page.backupRun.configJsonLabel' })}
-                  rules={[{ required: true, message: formatMessage({ id: 'page.backupRun.jsonRequired' }) }]}
-                >
-                  <Input.TextArea
-                    rows={14}
-                    placeholder={`{\n  "version": 1,\n  "paths": ["/data"],\n  "excludes": []\n}`}
-                  />
-                </Form.Item>
+                <>
+                  <Form.Item name="inline_plugin" label={formatMessage({ id: 'page.backupRun.inlinePluginLabel' })}>
+                    <Radio.Group
+                      options={[
+                        { label: formatMessage({ id: 'page.backupRun.inlinePluginFile' }), value: 'file' },
+                        {
+                          label: formatMessage({ id: 'page.backupRun.inlinePluginPg' }),
+                          value: 'postgres_pgbackrest',
+                        },
+                      ]}
+                    />
+                  </Form.Item>
+                  <Form.Item
+                    name="configJson"
+                    label={formatMessage({ id: 'page.backupRun.configJsonLabel' })}
+                    rules={[{ required: true, message: formatMessage({ id: 'page.backupRun.jsonRequired' }) }]}
+                  >
+                    <Input.TextArea
+                      rows={14}
+                      placeholder={`{\n  "version": 1,\n  "paths": ["/data"],\n  "excludes": []\n}`}
+                    />
+                  </Form.Item>
+                </>
               )}
               <Form.Item name="idempotency_key" label={formatMessage({ id: 'page.backupRun.idempotencyLabel' })}>
                 <Input />

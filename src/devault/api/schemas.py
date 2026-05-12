@@ -6,6 +6,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from devault.plugins.pgbackrest.config import PgbackrestPhysicalBackupConfigV1
+
 
 class TenantCreate(BaseModel):
     id: uuid.UUID | None = Field(
@@ -199,10 +201,13 @@ class FileBackupConfigV1(BaseModel):
 class CreateBackupJobBody(BaseModel):
     """Request body to enqueue a backup job."""
 
-    plugin: Literal["file"] = Field("file", description="Backup plugin; only `file` is supported.")
-    config: FileBackupConfigV1 | None = Field(
+    plugin: Literal["file", "postgres_pgbackrest"] | None = Field(
         None,
-        description="Inline backup config when not referencing a saved policy.",
+        description="Required for inline `config`. Ignored when `policy_id` is set (policy.plugin is authoritative).",
+    )
+    config: dict[str, Any] | None = Field(
+        None,
+        description="Inline backup config when not referencing a saved policy (shape depends on `plugin`).",
     )
     policy_id: uuid.UUID | None = Field(
         None,
@@ -226,6 +231,8 @@ class CreateBackupJobBody(BaseModel):
     def policy_or_config(self) -> CreateBackupJobBody:
         if self.policy_id is None and self.config is None:
             raise ValueError("Either policy_id or config is required")
+        if self.policy_id is None and self.plugin is None:
+            raise ValueError("plugin is required when using inline config")
         return self
 
 
@@ -289,7 +296,7 @@ class JobOut(BaseModel):
     trace_id: str | None
     result_meta: dict[str, Any] | None = Field(
         default=None,
-        description="restore_drill / path_precheck: structured report from the Agent (see `schema` in JSON).",
+        description="Structured Agent report: restore_drill / path_precheck / postgres_pgbackrest backup or expire.",
     )
 
     model_config = {"from_attributes": True}
@@ -328,18 +335,32 @@ class EnqueueResponse(BaseModel):
 
 class PolicyCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=255, description="Human-readable policy name.")
-    plugin: Literal["file"] = Field("file", description="Plugin; only `file` is supported.")
-    config: FileBackupConfigV1 = Field(..., description="Paths and exclude patterns.")
+    plugin: Literal["file", "postgres_pgbackrest"] = Field(
+        ...,
+        description="Backup plugin: `file` (paths) or `postgres_pgbackrest` (pgBackRest on Agent).",
+    )
+    config: dict[str, Any] = Field(..., description="Plugin-specific JSON config (validated server-side).")
     enabled: bool = Field(True, description="Whether schedules and manual runs may use this policy.")
     bound_agent_id: uuid.UUID = Field(
         ...,
         description="Only this registered Agent may LeaseJobs for this policy.",
     )
 
+    @model_validator(mode="after")
+    def validate_config_shape(self) -> PolicyCreate:
+        if self.plugin == "file":
+            raw = dict(self.config)
+            if "version" not in raw:
+                raw["version"] = 1
+            FileBackupConfigV1.model_validate(raw)
+        else:
+            PgbackrestPhysicalBackupConfigV1.model_validate(self.config)
+        return self
+
 
 class PolicyPatch(BaseModel):
     name: str | None = Field(None, min_length=1, max_length=255)
-    config: FileBackupConfigV1 | None = None
+    config: dict[str, Any] | None = None
     enabled: bool | None = None
     bound_agent_id: uuid.UUID | None = Field(default=None, description="Replace execution binding.")
 

@@ -4,7 +4,7 @@ import { request, useAccess, useIntl } from '@umijs/max';
 import { App, Button, Drawer, Form, Input, Modal, Space, Spin, Switch, Tag } from 'antd';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import PolicyFormFields from './PolicyFormFields';
-import { buildConfigPayloadFromValues, parseConfig } from './policyPayload';
+import { buildConfigPayloadFromValues, parseConfig, type PolicyPluginKind } from './policyPayload';
 
 export type PolicyEditDrawerProps = {
   open: boolean;
@@ -18,6 +18,7 @@ const PolicyEditDrawer: React.FC<PolicyEditDrawerProps> = ({ open, policyId, onC
   const { message } = App.useApp();
   const access = useAccess();
   const [form] = Form.useForm();
+  const pluginKind = (Form.useWatch('policy_plugin', form) as PolicyPluginKind) ?? 'file';
   const [loading, setLoading] = useState(false);
   const [schedules, setSchedules] = useState<API.ScheduleOut[]>([]);
   const [tenantAgents, setTenantAgents] = useState<API.TenantScopedAgentOut[]>([]);
@@ -43,9 +44,11 @@ const PolicyEditDrawer: React.FC<PolicyEditDrawerProps> = ({ open, policyId, onC
     setLoading(true);
     try {
       const p = await request<API.PolicyOut>(`/api/v1/policies/${policyId}`);
+      const pl = p.plugin === 'postgres_pgbackrest' ? 'postgres_pgbackrest' : 'file';
       form.setFieldsValue({
         name: p.name,
-        ...parseConfig(p.config),
+        policy_plugin: pl,
+        ...parseConfig(p.config as Record<string, unknown> | undefined, pl),
         bound_agent_id: p.bound_agent_id ?? undefined,
       });
     } finally {
@@ -167,7 +170,8 @@ const PolicyEditDrawer: React.FC<PolicyEditDrawerProps> = ({ open, policyId, onC
     if (!policyId) return;
     try {
       const values = await form.validateFields();
-      const config = buildConfigPayloadFromValues(values);
+      const pl = (values.policy_plugin as PolicyPluginKind) || 'file';
+      const config = buildConfigPayloadFromValues(values, pl);
       await request(`/api/v1/policies/${policyId}`, {
         method: 'PATCH',
         data: {
@@ -202,7 +206,7 @@ const PolicyEditDrawer: React.FC<PolicyEditDrawerProps> = ({ open, policyId, onC
     >
       <Spin spinning={loading}>
         <Form form={form} layout="vertical" disabled={!access.canWrite}>
-          <PolicyFormFields tenantAgents={tenantAgents} pathsAgentDisabled />
+          <PolicyFormFields tenantAgents={tenantAgents} pathsAgentDisabled pluginKind={pluginKind} pluginLocked />
           {access.canWrite ? (
             <Button type="primary" onClick={() => void onSave()} style={{ marginTop: 16 }}>
               {formatMessage({ id: 'page.policyEdit.save' })}

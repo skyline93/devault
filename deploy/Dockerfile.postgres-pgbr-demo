@@ -1,0 +1,19 @@
+# Demo-only: PostgreSQL 14 + sshd so pgBackRest on another container can use default pg-host-type=ssh.
+FROM postgres:14
+USER root
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends openssh-server \
+    && rm -rf /var/lib/apt/lists/* \
+    && mkdir -p /var/run/sshd \
+    && mkdir -p /var/lib/postgresql/.ssh \
+    && chown postgres:postgres /var/lib/postgresql/.ssh \
+    && chmod 700 /var/lib/postgresql/.ssh \
+    && sed -i 's/^#*PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config \
+    && sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config \
+    && sed -i 's/^#*PubkeyAuthentication.*/PubkeyAuthentication yes/' /etc/ssh/sshd_config \
+    && printf '\nAllowUsers postgres\n' >> /etc/ssh/sshd_config
+COPY deploy/pgbr-demo/authorized_keys /var/lib/postgresql/.ssh/authorized_keys
+RUN chown postgres:postgres /var/lib/postgresql/.ssh/authorized_keys && chmod 600 /var/lib/postgresql/.ssh/authorized_keys
+COPY deploy/pgbr-demo/docker-entrypoint-postgres-pgbr.sh /usr/local/bin/docker-entrypoint-postgres-pgbr.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint-postgres-pgbr.sh
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint-postgres-pgbr.sh"]

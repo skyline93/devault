@@ -1,0 +1,5 @@
+Host postgres-pgbr-demo
+  User postgres
+  IdentityFile /root/.ssh/pgbr_demo_ed25519
+  StrictHostKeyChecking no
+  UserKnownHostsFile /dev/null
