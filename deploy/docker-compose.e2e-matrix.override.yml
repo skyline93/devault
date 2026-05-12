@@ -12,3 +12,5 @@ services:
     image: ${DEVAULT_E2E_CP_IMAGE:?}
   agent:
     image: ${DEVAULT_E2E_AGENT_IMAGE:?Set DEVAULT_E2E_AGENT_IMAGE}
+  agent2:
+    image: ${DEVAULT_E2E_AGENT_IMAGE:?Set DEVAULT_E2E_AGENT_IMAGE}

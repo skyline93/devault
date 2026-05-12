@@ -20,6 +20,7 @@ Environment (defaults suit in-network Compose service names):
 - ``DEMO_STACK_AGENT_TOKEN_LABEL`` — label used to find or create the demo token (default ``demo-stack-agent``).
 - ``DEMO_STACK_AGENT_TOKEN_FILE`` — path to write ``plaintext_secret`` once (default ``/shared/demo-agent-token``).
 - ``DEMO_STACK_AGENT_TOKEN_DESCRIPTION`` — optional description for ``POST /api/v1/agent-tokens``.
+- ``DEMO_STACK_AGENT2_TOKEN_LABEL`` / ``DEMO_STACK_AGENT2_TOKEN_FILE`` / ``DEMO_STACK_AGENT2_TOKEN_DESCRIPTION`` — second demo Agent token for a second compose ``agent2`` (defaults ``demo-stack-agent-2``, ``/shared/demo-agent-token-2``).
 
 Idempotent: if IAM or DeVault already has the slug, exits 0 after ensuring DeVault row exists when possible.
 When Agent token bootstrap is enabled, uses **only** DeVault HTTP APIs (``GET``/``POST /api/v1/agent-tokens``) after a successful tenant mirror.
@@ -73,15 +74,15 @@ def _devault_tenant_headers(bearer: str, tenant_id: str) -> dict[str, str]:
     }
 
 
-def _ensure_demo_agent_token_file(*, api: str, bearer: str, tenant_id: str) -> int:
-    if _truthy_env("DEMO_STACK_SKIP_AGENT_TOKEN_BOOTSTRAP", default=False):
-        print("Skipping demo Agent token bootstrap (DEMO_STACK_SKIP_AGENT_TOKEN_BOOTSTRAP).", file=sys.stderr)
-        return 0
-
-    token_path = Path(os.environ.get("DEMO_STACK_AGENT_TOKEN_FILE", "/shared/demo-agent-token").strip())
-    label = os.environ.get("DEMO_STACK_AGENT_TOKEN_LABEL", "demo-stack-agent").strip() or "demo-stack-agent"
-    description = os.environ.get("DEMO_STACK_AGENT_TOKEN_DESCRIPTION", "Docker demo stack (auto)").strip() or None
-
+def _ensure_one_demo_agent_token_file(
+    *,
+    api: str,
+    bearer: str,
+    tenant_id: str,
+    token_path: Path,
+    label: str,
+    description: str | None,
+) -> int:
     if token_path.is_file():
         try:
             existing = token_path.read_text(encoding="utf-8").strip()
@@ -138,6 +139,40 @@ def _ensure_demo_agent_token_file(*, api: str, bearer: str, tenant_id: str) -> i
 
     print(f"Demo Agent token written to {token_path}", file=sys.stderr)
     return 0
+
+
+def _ensure_demo_agent_tokens(*, api: str, bearer: str, tenant_id: str) -> int:
+    if _truthy_env("DEMO_STACK_SKIP_AGENT_TOKEN_BOOTSTRAP", default=False):
+        print("Skipping demo Agent token bootstrap (DEMO_STACK_SKIP_AGENT_TOKEN_BOOTSTRAP).", file=sys.stderr)
+        return 0
+
+    token_path = Path(os.environ.get("DEMO_STACK_AGENT_TOKEN_FILE", "/shared/demo-agent-token").strip())
+    label = os.environ.get("DEMO_STACK_AGENT_TOKEN_LABEL", "demo-stack-agent").strip() or "demo-stack-agent"
+    description = os.environ.get("DEMO_STACK_AGENT_TOKEN_DESCRIPTION", "Docker demo stack (auto)").strip() or None
+
+    rc = _ensure_one_demo_agent_token_file(
+        api=api,
+        bearer=bearer,
+        tenant_id=tenant_id,
+        token_path=token_path,
+        label=label,
+        description=description,
+    )
+    if rc != 0:
+        return rc
+
+    token_path2 = Path(os.environ.get("DEMO_STACK_AGENT2_TOKEN_FILE", "/shared/demo-agent-token-2").strip())
+    label2 = os.environ.get("DEMO_STACK_AGENT2_TOKEN_LABEL", "demo-stack-agent-2").strip() or "demo-stack-agent-2"
+    description2 = os.environ.get("DEMO_STACK_AGENT2_TOKEN_DESCRIPTION", "Docker demo stack agent 2 (auto)").strip() or None
+
+    return _ensure_one_demo_agent_token_file(
+        api=api,
+        bearer=bearer,
+        tenant_id=tenant_id,
+        token_path=token_path2,
+        label=label2,
+        description=description2,
+    )
 
 
 def main() -> int:
@@ -199,10 +234,10 @@ def main() -> int:
     )
     if code_d in (200, 201):
         print(f"DeVault tenant upsert ok: {slug} ({tid})", file=sys.stderr)
-        return _ensure_demo_agent_token_file(api=api, bearer=bearer, tenant_id=tid)
+        return _ensure_demo_agent_tokens(api=api, bearer=bearer, tenant_id=tid)
     if code_d == 409:
         print(f"DeVault tenant slug already exists ({slug}); treating as success.", file=sys.stderr)
-        return _ensure_demo_agent_token_file(api=api, bearer=bearer, tenant_id=tid)
+        return _ensure_demo_agent_tokens(api=api, bearer=bearer, tenant_id=tid)
 
     print(f"DeVault POST /api/v1/tenants failed: HTTP {code_d} {d_body!r}", file=sys.stderr)
     return 1

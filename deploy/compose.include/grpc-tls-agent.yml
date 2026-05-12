@@ -1,5 +1,5 @@
 # 可选片段：栈内 Agent 经 TLS 连接 ``grpc-gateway:50052``。
-# Envoy **grpc-gateway** 定义在主 ``docker-compose.yml``（profile **with-grpc-tls**）；本文件仅覆盖 **agent** 的 gRPC 目标与 CA 挂载。
+# Envoy **grpc-gateway** 定义在主 ``docker-compose.yml``（profile **with-grpc-tls**）；本文件仅覆盖 **agent** / **agent2** 的 gRPC 目标与 CA 挂载。
 #
 # 使用（在 ``deploy/`` 下，与主文件组合；须启用 **with-control-plane**、**with-agent**、**with-grpc-tls**）：
 #   docker compose -f docker-compose.yml -f compose.include/grpc-tls-agent.yml \
@@ -10,6 +10,13 @@
 #
 services:
   agent:
+    environment:
+      DEVAULT_GRPC_TARGET: grpc-gateway:50052
+      DEVAULT_GRPC_TLS_CA_PATH: /certs/ca.crt
+      DEVAULT_GRPC_TLS_SERVER_NAME: grpc-gateway
+    volumes:
+      - ./tls/dev/ca.crt:/certs/ca.crt:ro
+  agent2:
     environment:
       DEVAULT_GRPC_TARGET: grpc-gateway:50052
       DEVAULT_GRPC_TLS_CA_PATH: /certs/ca.crt
