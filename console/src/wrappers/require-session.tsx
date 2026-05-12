@@ -2,9 +2,10 @@ import { history, request, useModel } from '@umijs/max';
 import { Spin } from 'antd';
 import React, { useEffect, useMemo, useRef } from 'react';
 
-import { LOGIN_PATH } from '@/constants/auth-routes';
+import { CHANGE_PASSWORD_PATH, LOGIN_PATH } from '@/constants/auth-routes';
 import { STORAGE_BEARER_KEY } from '@/constants/storage';
 import { authDebug } from '@/utils/auth-debug';
+import { computeSessionAccessFlags, readPasswordChangePending } from '@/utils/auth-access';
 import { ensureTenantSelection } from '@/utils/ensure-tenant-selection';
 
 /**
@@ -35,7 +36,15 @@ export default function RequireSession(props: { children: React.ReactNode }) {
 
     if (loading) return;
 
-    if (initialState?.currentUser) {
+    const pathname = typeof window !== 'undefined' ? window.location.pathname : '';
+    const pwdPending = readPasswordChangePending();
+    if (pwdPending && pathname !== CHANGE_PASSWORD_PATH && pathname !== LOGIN_PATH) {
+      authDebug('requireSession:redirectPasswordChange', { pathname });
+      history.replace(CHANGE_PASSWORD_PATH);
+      return;
+    }
+
+    if (initialState?.currentUser && !pwdPending) {
       bearerHydrateStarted.current = false;
       awaitingModelAfterSilentHydrate.current = false;
       return;
@@ -64,15 +73,14 @@ export default function RequireSession(props: { children: React.ReactNode }) {
             awaitingModelAfterSilentHydrate.current = true;
             try {
               await ensureTenantSelection(u);
-              const gated = Boolean(u.needs_mfa);
+              const flags = computeSessionAccessFlags(u);
               await setInitialState((s) => ({
                 ...s,
                 currentUser: u,
-                canAdmin: Boolean(u && !gated && u.role === 'admin'),
-                canWrite: Boolean(u && !gated && (u.role === 'admin' || u.role === 'operator')),
-                canInviteMembers: Boolean(
-                  u && !gated && u.tenants?.some((t) => t.membership_role === 'tenant_admin'),
-                ),
+                canAdmin: flags.canAdmin,
+                canWrite: flags.canWrite,
+                canInviteMembers: flags.canInviteMembers,
+                needsPasswordChange: flags.needsPasswordChange,
               }));
               authDebug('requireSession:silentHydrateOk', { principal: u.principal_label });
             } catch {

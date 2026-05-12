@@ -4,7 +4,8 @@ import { history, Link, request, useIntl, useModel } from '@umijs/max';
 import { Alert, Card, theme, Typography } from 'antd';
 import React, { useState } from 'react';
 
-import { STORAGE_BEARER_KEY } from '@/constants/storage';
+import { STORAGE_BEARER_KEY, STORAGE_REFRESH_TOKEN_KEY } from '@/constants/storage';
+import { computeSessionAccessFlags } from '@/utils/auth-access';
 
 const ApiIntegrationLogin: React.FC = () => {
   const { formatMessage } = useIntl();
@@ -43,25 +44,26 @@ const ApiIntegrationLogin: React.FC = () => {
               localStorage.setItem(STORAGE_BEARER_KEY, raw);
             } else {
               localStorage.removeItem(STORAGE_BEARER_KEY);
+              localStorage.removeItem(STORAGE_REFRESH_TOKEN_KEY);
             }
             try {
               const currentUser = await request<API.CurrentUser>('/api/v1/auth/session', {
                 method: 'GET',
                 skipErrorHandler: true,
               });
-              const gated = Boolean(currentUser.needs_mfa);
+              const flags = computeSessionAccessFlags(currentUser);
               await setInitialState((s) => ({
                 ...s,
                 currentUser,
-                canAdmin: Boolean(!gated && currentUser.role === 'admin'),
-                canWrite: Boolean(!gated && (currentUser.role === 'admin' || currentUser.role === 'operator')),
-                canInviteMembers: Boolean(
-                  !gated && currentUser.tenants?.some((t) => t.membership_role === 'tenant_admin'),
-                ),
+                canAdmin: flags.canAdmin,
+                canWrite: flags.canWrite,
+                canInviteMembers: flags.canInviteMembers,
+                needsPasswordChange: flags.needsPasswordChange,
               }));
               history.push('/overview/welcome');
             } catch (e) {
               localStorage.removeItem(STORAGE_BEARER_KEY);
+              localStorage.removeItem(STORAGE_REFRESH_TOKEN_KEY);
               const status = (e as { response?: { status?: number } })?.response?.status;
               setErr(
                 status === 401 || status === 403

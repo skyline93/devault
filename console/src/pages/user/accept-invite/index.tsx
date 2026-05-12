@@ -4,6 +4,8 @@ import { history, Link, request, useIntl, useModel } from '@umijs/max';
 import { Alert, Card, theme, Typography } from 'antd';
 import React, { useMemo, useState } from 'react';
 
+import { computeSessionAccessFlags } from '@/utils/auth-access';
+
 const AcceptInvitePage: React.FC = () => {
   const { formatMessage } = useIntl();
   const { token } = theme.useToken();
@@ -48,15 +50,14 @@ const AcceptInvitePage: React.FC = () => {
                 data: { token: urlToken, password: pwd || undefined },
                 skipErrorHandler: true,
               });
-              const gated = Boolean(currentUser.needs_mfa);
+              const flags = computeSessionAccessFlags(currentUser);
               await setInitialState((s) => ({
                 ...s,
                 currentUser,
-                canAdmin: Boolean(!gated && currentUser.role === 'admin'),
-                canWrite: Boolean(!gated && (currentUser.role === 'admin' || currentUser.role === 'operator')),
-                canInviteMembers: Boolean(
-                  !gated && currentUser.tenants?.some((t) => t.membership_role === 'tenant_admin'),
-                ),
+                canAdmin: flags.canAdmin,
+                canWrite: flags.canWrite,
+                canInviteMembers: flags.canInviteMembers,
+                needsPasswordChange: flags.needsPasswordChange,
               }));
               history.push('/overview/welcome');
             } catch (e) {

@@ -11,6 +11,7 @@ import DocumentLang from '@/components/DocumentLang';
 import defaultSettings from '../config/defaultSettings';
 import { STORAGE_BEARER_KEY } from '@/constants/storage';
 import RequireSession from '@/wrappers/require-session';
+import { computeSessionAccessFlags } from '@/utils/auth-access';
 import { ensureTenantSelection } from '@/utils/ensure-tenant-selection';
 import { openapiAuthSessionContract } from '@/openapi/contract';
 import { errorConfig } from '@/requestErrorConfig';
@@ -63,6 +64,7 @@ export async function getInitialState(): Promise<{
   canAdmin?: boolean;
   canWrite?: boolean;
   canInviteMembers?: boolean;
+  needsPasswordChange?: boolean;
   fetchUserInfo?: () => Promise<API.CurrentUser | undefined>;
 }> {
   authDebugBootProbe('getInitialState:entry', {
@@ -97,21 +99,13 @@ export async function getInitialState(): Promise<{
     hasBearer: typeof window !== 'undefined' && Boolean(localStorage.getItem(STORAGE_BEARER_KEY)),
   });
   const currentUser = await fetchUserInfo();
+  const flags = computeSessionAccessFlags(currentUser);
   authDebug('getInitialState:afterSession', {
     hasCurrentUser: Boolean(currentUser),
     principal: currentUser?.principal_label,
     needsMfa: currentUser?.needs_mfa,
+    needsPasswordChange: flags.needsPasswordChange,
   });
-  const gated = Boolean(currentUser?.needs_mfa);
-  const canAdmin = Boolean(currentUser && !gated && currentUser.role === 'admin');
-  const canWrite = Boolean(
-    currentUser && !gated && (currentUser.role === 'admin' || currentUser.role === 'operator'),
-  );
-  const canInviteMembers = Boolean(
-    currentUser &&
-      !gated &&
-      currentUser.tenants?.some((t) => t.membership_role === 'tenant_admin'),
-  );
 
   if (currentUser) {
     await ensureTenantSelection(currentUser);
@@ -120,9 +114,10 @@ export async function getInitialState(): Promise<{
   return {
     fetchUserInfo,
     currentUser,
-    canAdmin,
-    canWrite,
-    canInviteMembers,
+    canAdmin: flags.canAdmin,
+    canWrite: flags.canWrite,
+    canInviteMembers: flags.canInviteMembers,
+    needsPasswordChange: flags.needsPasswordChange,
     settings: defaultSettings as Partial<ProLayoutProps>,
   };
 }

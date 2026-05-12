@@ -4,7 +4,13 @@ import { message } from 'antd';
 
 import { IAM_API_PREFIX } from '@/config/iam';
 import { LOGIN_PATH } from '@/constants/auth-routes';
-import { CSRF_COOKIE_NAME, STORAGE_BEARER_KEY, STORAGE_TENANT_ID_KEY } from '@/constants/storage';
+import {
+  CSRF_COOKIE_NAME,
+  STORAGE_BEARER_KEY,
+  STORAGE_IAM_PWD_CHANGE_REQUIRED,
+  STORAGE_REFRESH_TOKEN_KEY,
+  STORAGE_TENANT_ID_KEY,
+} from '@/constants/storage';
 import { authDebug } from '@/utils/auth-debug';
 
 /** IAM resolves tenant on login/refresh; stale `devault_tenant_id` must not become `X-DeVault-Tenant-Id`. */
@@ -67,6 +73,8 @@ export const errorConfig: RequestConfig = {
             willFullPageRedirect: pathname !== LOGIN_PATH,
           });
           localStorage.removeItem(STORAGE_BEARER_KEY);
+          localStorage.removeItem(STORAGE_REFRESH_TOKEN_KEY);
+          localStorage.removeItem(STORAGE_IAM_PWD_CHANGE_REQUIRED);
           localStorage.removeItem(STORAGE_TENANT_ID_KEY);
           if (pathname !== LOGIN_PATH) {
             const redirect = encodeURIComponent(pathname + search + hash);

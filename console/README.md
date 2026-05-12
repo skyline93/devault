@@ -30,7 +30,7 @@
 
 ### 十五-01～06（基座）+ IAM 人机身份
 
-- 会话、OpenAPI 类型、**`/user/login`**（**IAM** 或历史邮箱 UI）、**`/user/integration`**（**IAM access_token** 或 dev-open 留空）；**`request` 拦截器**（可选 **`X-CSRF-Token`** 若浏览器仍有旧 Cookie、**`credentials: 'include'`**）；**`getInitialState` / `access.ts`**（**`needs_mfa`** 时关闭 **`canWrite`/`canAdmin`/`canInviteMembers`**）。自助注册已移除，账号由平台引导 CLI 或管理 API 创建（见 **`docs/iam-tenant-lifecycle-and-bootstrap.md`**）。
+- 会话、OpenAPI 类型、**`/user/login`**（**IAM** 或历史邮箱 UI）、**`/user/integration`**（**IAM access_token** 或 dev-open 留空）、**`/user/change-password`**（IAM **`must_change_password`** 时强制改密；成功后 **`/v1/auth/refresh`**）；**`request` 拦截器**（可选 **`X-CSRF-Token`** 若浏览器仍有旧 Cookie、**`credentials: 'include'`**）；**`getInitialState` / `access.ts`**（**`needs_mfa`** 或 **`needsPasswordChange`** 时关闭 **`canWrite`/`canAdmin`/`canInviteMembers`**）。平台管理下 **IAM 模式**：**`/platform/users/new`**（**`POST /v1/platform/users`** + **`POST /v1/tenants/{id}/members`**）、**`/platform/users`**（成员列表与角色调整）。自助注册已移除，账号由平台引导 CLI 或管理 API 创建（见 **`docs/iam-tenant-lifecycle-and-bootstrap.md`**）。
 
 ### 十五-07（租户）
 

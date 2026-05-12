@@ -11,18 +11,21 @@ export default function access(initialState: {
   canAdmin?: boolean;
   canWrite?: boolean;
   canInviteMembers?: boolean;
+  needsPasswordChange?: boolean;
 }) {
-  const { currentUser, canAdmin, canWrite, canInviteMembers } = initialState ?? {};
+  const { currentUser, canAdmin, canWrite, canInviteMembers, needsPasswordChange } = initialState ?? {};
   const snapshot = {
     canAdmin: Boolean(canAdmin),
     canWrite: Boolean(canWrite),
     canInviteMembers: Boolean(canInviteMembers),
+    needsPasswordChange: Boolean(needsPasswordChange),
     isAuditor: currentUser?.role === 'auditor',
   };
   const accessLogPayload = {
     hasCurrentUser: Boolean(currentUser),
     role: currentUser?.role,
     needsMfa: currentUser?.needs_mfa,
+    needsPasswordChange: snapshot.needsPasswordChange,
     ...snapshot,
   };
   const nextJson = JSON.stringify(accessLogPayload);

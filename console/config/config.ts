@@ -55,6 +55,7 @@ export default defineConfig({
     { path: '/user/integration', layout: false, component: './user/integration' },
     { path: '/user/reset-password', layout: false, component: './user/reset-password' },
     { path: '/user/accept-invite', layout: false, component: './user/accept-invite' },
+    { path: '/user/change-password', layout: false, component: './user/change-password' },
     /**
      * 需登录的业务路由与根重定向并列在顶层（不再包一层无 `name` 的 `path: '/'`）。
      * 否则 ProLayout `clearMenuItem` 会丢掉该壳节点，侧栏 `menuData` 为空（mix 下无菜单）。
@@ -197,6 +198,18 @@ export default defineConfig({
           name: 'tenants',
           icon: 'BankOutlined',
           component: './platform/tenants',
+        },
+        {
+          path: '/platform/users/new',
+          name: 'users-new',
+          icon: 'UserAddOutlined',
+          component: './platform/users-new',
+        },
+        {
+          path: '/platform/users',
+          name: 'users',
+          icon: 'TeamOutlined',
+          component: './platform/users',
         },
       ],
     },

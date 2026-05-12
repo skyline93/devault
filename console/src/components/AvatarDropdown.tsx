@@ -6,7 +6,8 @@ import React, { useMemo } from 'react';
 
 import HeaderDropdown from '@/components/HeaderDropdown';
 import { LOGIN_PATH } from '@/constants/auth-routes';
-import { STORAGE_BEARER_KEY, STORAGE_TENANT_ID_KEY } from '@/constants/storage';
+import { STORAGE_BEARER_KEY, STORAGE_IAM_PWD_CHANGE_REQUIRED, STORAGE_REFRESH_TOKEN_KEY, STORAGE_TENANT_ID_KEY } from '@/constants/storage';
+import { computeSessionAccessFlags } from '@/utils/auth-access';
 
 /**
  * 与 Pro 模板 `AvatarDropdown` 同构：头像 + 下拉菜单（账户信息 / 退出）。
@@ -41,12 +42,16 @@ const AvatarDropdown: React.FC = () => {
   const onLogout = () => {
     void fetch('/api/v1/auth/logout', { method: 'POST', credentials: 'include' }).catch(() => {});
     localStorage.removeItem(STORAGE_BEARER_KEY);
+    localStorage.removeItem(STORAGE_REFRESH_TOKEN_KEY);
+    localStorage.removeItem(STORAGE_IAM_PWD_CHANGE_REQUIRED);
     localStorage.removeItem(STORAGE_TENANT_ID_KEY);
     setInitialState((s) => ({
       ...s,
       currentUser: undefined,
       canAdmin: false,
       canWrite: false,
+      canInviteMembers: false,
+      needsPasswordChange: false,
     }));
     history.push(LOGIN_PATH);
   };

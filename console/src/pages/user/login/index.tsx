@@ -4,9 +4,11 @@ import { history, Link, request, useIntl, useModel } from '@umijs/max';
 import { Alert, Card, theme, Typography } from 'antd';
 import React, { useRef, useState } from 'react';
 
-import { STORAGE_BEARER_KEY } from '@/constants/storage';
+import { STORAGE_BEARER_KEY, STORAGE_REFRESH_TOKEN_KEY } from '@/constants/storage';
+import { CHANGE_PASSWORD_PATH } from '@/constants/auth-routes';
 import { IAM_API_PREFIX, isIamConsoleEnabled } from '@/config/iam';
 import { authDebug } from '@/utils/auth-debug';
+import { computeSessionAccessFlags, setPasswordChangePending } from '@/utils/auth-access';
 import { waitNextPaint } from '@/utils/wait-next-paint';
 
 /** 本地 / 演示栈默认平台账号（与 deploy `DEMO_STACK_PLATFORM_*` 对齐，仅省开发输入）。 */
@@ -35,8 +37,7 @@ const Login: React.FC = () => {
   const authSubmitLock = useRef(false);
 
   const finishLogin = async (currentUser: API.CurrentUser) => {
-    const canWrite = !currentUser.needs_mfa && (currentUser.role === 'admin' || currentUser.role === 'operator');
-    const canAdmin = !currentUser.needs_mfa && currentUser.role === 'admin';
+    const flags = computeSessionAccessFlags(currentUser);
     authDebug('finishLogin:beforeSetInitialState', {
       pathname: window.location.pathname,
       principal: currentUser.principal_label,
@@ -45,11 +46,10 @@ const Login: React.FC = () => {
     await setInitialState((s) => ({
       ...s,
       currentUser,
-      canAdmin,
-      canWrite,
-      canInviteMembers: Boolean(
-        currentUser.tenants?.some((t) => t.membership_role === 'tenant_admin'),
-      ),
+      canAdmin: flags.canAdmin,
+      canWrite: flags.canWrite,
+      canInviteMembers: flags.canInviteMembers,
+      needsPasswordChange: flags.needsPasswordChange,
     }));
     const sp = new URLSearchParams(window.location.search);
     const redirect = sp.get('redirect');
@@ -77,7 +77,15 @@ const Login: React.FC = () => {
         skipErrorHandler: true,
       });
       localStorage.setItem(STORAGE_BEARER_KEY, tok.access_token);
-      authDebug('loginViaIam:afterIamLogin', { tenantId: tok.tenant_id });
+      localStorage.setItem(STORAGE_REFRESH_TOKEN_KEY, tok.refresh_token);
+      authDebug('loginViaIam:afterIamLogin', { tenantId: tok.tenant_id, mustChangePassword: tok.must_change_password });
+      if (tok.must_change_password) {
+        setPasswordChangePending(true);
+        setPendingIam(null);
+        history.push(CHANGE_PASSWORD_PATH);
+        return;
+      }
+      setPasswordChangePending(false);
       const currentUser = await request<API.CurrentUser>('/api/v1/auth/session', {
         method: 'GET',
         skipErrorHandler: true,
@@ -204,6 +212,7 @@ const Login: React.FC = () => {
                   skipErrorHandler: true,
                 });
                 localStorage.removeItem(STORAGE_BEARER_KEY);
+                localStorage.removeItem(STORAGE_REFRESH_TOKEN_KEY);
                 if (currentUser.needs_mfa) {
                   await setInitialState((s) => ({
                     ...s,
@@ -211,6 +220,7 @@ const Login: React.FC = () => {
                     canAdmin: false,
                     canWrite: false,
                     canInviteMembers: false,
+                    needsPasswordChange: computeSessionAccessFlags(currentUser).needsPasswordChange,
                   }));
                   setMfaStep(true);
                   return;
