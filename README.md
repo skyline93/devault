@@ -67,6 +67,20 @@ API surfaces, gRPC/TLS, S3, and Helm are covered in the doc site; this root READ
 | `console/` | Ant Design Pro（Umi 4）企业控制台：Bearer + 租户头；`npm run dev` / `npm run build` |
 | `iam/` | 独立 IAM 服务（自有 `pyproject.toml`、FastAPI、Alembic）；见 [`docs/iam-service-design.md`](docs/iam-service-design.md) |
 | `tests/` | pytest suite |
+| `openspec/` | [OpenSpec](https://github.com/Fission-AI/OpenSpec) specs and change proposals (`specs/` baseline, `changes/` active + archive) |
+| `.cursor/` | Cursor OpenSpec slash commands and skills (refresh with `make openspec-update`) |
+
+## OpenSpec (AI spec-driven development)
+
+This repo includes **OpenSpec** so humans and coding agents align on intent, design, and tasks before implementation.
+
+- **Prerequisites**: **Node.js ≥ 20.19**. Install the CLI globally (`npm i -g @fission-ai/openspec`) or use `npx @fission-ai/openspec@latest <subcommand>` from the repo root.
+- **In Cursor**: after a window reload, use **`/opsx:propose`**, **`/opsx:apply`**, **`/opsx:archive`**, and **`/opsx:explore`** (see `.cursor/commands/` and `.cursor/skills/`).
+- **Refresh agent files**: run **`make openspec-update`** after upgrading the package (runs with `OPENSPEC_TELEMETRY=0`).
+- **Telemetry**: you can also set `DO_NOT_TRACK=1` (see upstream [OpenSpec README](https://github.com/Fission-AI/OpenSpec)).
+- **Expanded workflows** (e.g. `/opsx:verify`): run `openspec config profile` interactively, then `openspec update` or `make openspec-update`.
+
+Upstream guide: [Getting Started](https://github.com/Fission-AI/OpenSpec/blob/main/docs/getting-started.md).
 
 ## Local development (summary)
 

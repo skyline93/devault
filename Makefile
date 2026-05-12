@@ -20,7 +20,7 @@ PLATFORMS ?=
 # Used only by docker-buildx-push (manifest list).
 PLATFORMS_MULTI ?= linux/amd64,linux/arm64
 
-.PHONY: help docker-build docker-push docker-build-push docker-buildx-push py-dist py-dist-clean agent-dist demo-stack-up demo-stack-down
+.PHONY: help docker-build docker-push docker-build-push docker-buildx-push py-dist py-dist-clean agent-dist demo-stack-up demo-stack-down openspec-update
 
 help:
 	@echo "DeVault — image targets (registry-agnostic; set IMAGE to your full ref)"
@@ -57,6 +57,11 @@ help:
 	@echo "  make demo-stack-down"
 	@echo "      Same profiles as demo-stack-up, then docker compose down"
 	@echo ""
+	@echo "OpenSpec (AI spec-driven workflow; requires Node >= 20.19)"
+	@echo ""
+	@echo "  make openspec-update"
+	@echo "      Refresh .cursor/ OpenSpec commands & skills via npx (telemetry off)."
+	@echo ""
 	@echo "Current default IMAGE=$(IMAGE)"
 
 docker-build:
@@ -91,3 +96,7 @@ demo-stack-up:
 
 demo-stack-down:
 	cd deploy && docker compose --profile with-control-plane --profile with-agent --profile with-console down
+
+# OpenSpec: https://github.com/Fission-AI/OpenSpec — refresh Cursor slash commands / skills after upgrading the CLI package.
+openspec-update:
+	OPENSPEC_TELEMETRY=0 npx --yes @fission-ai/openspec@latest update
