@@ -5,8 +5,7 @@ package devault.agent.v1;
 // Agent control plane: Pull lease + storage grants + completion.
 
 service AgentControl {
-  // Bootstrap: exchange a one-time registration secret for a Redis-scoped gRPC bearer
-  // (per agent_id). Disabled when DEVAULT_GRPC_REGISTRATION_SECRET is unset.
+  // Register an edge instance with a tenant Agent token (Authorization Bearer).
   rpc Register(RegisterRequest) returns (RegisterReply);
   rpc Heartbeat(HeartbeatRequest) returns (HeartbeatReply);
   rpc LeaseJobs(LeaseJobsRequest) returns (LeaseJobsReply);
@@ -16,30 +15,34 @@ service AgentControl {
 }
 
 message RegisterRequest {
+  // Empty on first register; reuse persisted id on re-register.
   string agent_id = 1;
-  string registration_secret = 2;
-  // Application SemVer of the Agent build (e.g. same as devault.__version__ for co-released binaries).
+  reserved 2;
+  reserved "registration_secret";
   string agent_release = 3;
-  // Protobuf API package the Agent was generated from (e.g. devault.agent.v1).
   string proto_package = 4;
-  // Optional short git SHA of the Agent build.
   string git_commit = 5;
+  string hostname = 6;
+  string os = 7;
+  string region = 8;
+  string env = 9;
+  repeated string backup_path_allowlist = 10;
+  int32 snapshot_schema_version = 11;
 }
 
 message RegisterReply {
   bool ok = 1;
-  string bearer_token = 2;
-  int64 expires_in_seconds = 3;
+  reserved 2, 3;
+  reserved "bearer_token", "expires_in_seconds";
   string message = 4;
   string server_release = 5;
   string min_supported_agent_version = 6;
   string max_tested_agent_version = 7;
   optional string upgrade_url = 8;
   string deprecation_message = 9;
-  // Populated on ok=false for machine-readable clients (mirrors gRPC trailing metadata when aborted).
   string reason_code = 10;
-  // Enabled capability tokens for this control plane (see docs/compatibility.json).
   repeated string server_capabilities = 11;
+  string agent_id = 12;
 }
 
 message HeartbeatRequest {
@@ -47,14 +50,6 @@ message HeartbeatRequest {
   string agent_release = 2;
   string proto_package = 3;
   string git_commit = 4;
-  // When snapshot_schema_version >= 1, control plane persists the following snapshot fields
-  // (empty strings / empty repeated clear to null where applicable). Version 0 = legacy Agent: do not touch snapshot columns.
-  string hostname = 5;
-  string os = 6;
-  string region = 7;
-  string env = 8;
-  repeated string backup_path_allowlist = 9;
-  int32 snapshot_schema_version = 10;
 }
 
 message HeartbeatReply {
@@ -64,7 +59,6 @@ message HeartbeatReply {
   string max_tested_agent_version = 4;
   optional string upgrade_url = 5;
   string deprecation_message = 6;
-  // Empty when ok=true; when ok=false, same semantics as trailing metadata devault-reason-code.
   string reason_code = 7;
   repeated string server_capabilities = 8;
 }
@@ -95,11 +89,7 @@ message RequestStorageGrantRequest {
   string agent_id = 1;
   string job_id = 2;
   StorageIntent intent = 3;
-  // Backup WRITE: bundle byte size after local tarball is built. If >= control plane
-  // multipart threshold, reply uses bundle_multipart_* instead of bundle_http_url.
   int64 bundle_content_length = 4;
-  // When continuing an in-flight multipart upload after Agent restart, set to the same
-  // bundle_multipart_upload_id returned by a prior grant for this job (control plane validates).
   string resume_bundle_multipart_upload_id = 5;
 }
 
@@ -114,16 +104,10 @@ message RequestStorageGrantReply {
   string bundle_http_url = 3;
   string manifest_http_url = 4;
   int64 expires_in_seconds = 5;
-  // For READ: client should verify the downloaded bundle against this digest.
   string expected_checksum_sha256 = 6;
-  // When non-empty, upload bundle via S3 multipart using these presigned PUTs, then
-  // send bundle_multipart_upload_id + bundle_multipart_parts_json on CompleteJob.
   string bundle_multipart_upload_id = 7;
   repeated BundlePartPresign bundle_multipart_parts = 8;
-  // Byte size of parts 1..N-1 (last part may be smaller); matches control plane calculation.
   int64 bundle_multipart_part_size_bytes = 9;
-  // When all parts are already on S3 (resume grant), server fills this JSON array of
-  // {"PartNumber":n,"ETag":"..."} for CompleteJob; bundle_multipart_parts may be empty.
   string bundle_multipart_completed_parts_json = 10;
 }
 
@@ -149,13 +133,9 @@ message CompleteJobRequest {
   string manifest_key = 7;
   int64 size_bytes = 8;
   string checksum_sha256 = 9;
-  // After multipart bundle upload: same upload_id as grant; JSON array of
-  // {"PartNumber":1,"ETag":"..."} (ETag values as returned by S3 / presigned PUT).
   string bundle_multipart_upload_id = 10;
   string bundle_multipart_parts_json = 11;
-  // Restore-drill success: JSON object mirroring the on-disk `.devault-drill-report.json` (optional).
   string result_summary_json = 12;
-  // Optional host identity at CompleteJob time (audit); control plane may fall back to edge_agents snapshot.
   string agent_hostname = 13;
 }
 

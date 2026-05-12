@@ -1,4 +1,4 @@
-"""Union of enrolled Agents' reported backup path prefixes; optional tenant policy validation."""
+"""Union of registered Agents' backup path prefixes; optional tenant policy validation."""
 
 from __future__ import annotations
 
@@ -9,26 +9,28 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from devault.db.models import AgentEnrollment, EdgeAgent, Tenant
+from devault.db.models import AgentToken, EdgeAgent, Tenant
 from devault.observability.metrics import POLICY_ALLOWLIST_ENFORCE_REJECTS_TOTAL
 
 logger = logging.getLogger(__name__)
 
 
-def list_enrolled_agent_ids_for_tenant(db: Session, tenant_id: uuid.UUID) -> list[uuid.UUID]:
-    tenant_s = str(tenant_id)
-    out: list[uuid.UUID] = []
-    for row in db.scalars(select(AgentEnrollment)).all():
-        raw = row.allowed_tenant_ids or []
-        allowed = {str(x) for x in raw}
-        if tenant_s in allowed:
-            out.append(row.agent_id)
-    return out
+def list_registered_agent_ids_for_tenant(db: Session, tenant_id: uuid.UUID) -> list[uuid.UUID]:
+    token_ids = list(
+        db.scalars(select(AgentToken.id).where(AgentToken.tenant_id == tenant_id)).all(),
+    )
+    if not token_ids:
+        return []
+    return list(
+        db.scalars(
+            select(EdgeAgent.id).where(EdgeAgent.agent_token_id.in_(token_ids)),
+        ).all(),
+    )
 
 
 def union_backup_path_allowlist_for_tenant(db: Session, tenant_id: uuid.UUID) -> list[str]:
     prefixes: set[str] = set()
-    for aid in list_enrolled_agent_ids_for_tenant(db, tenant_id):
+    for aid in list_registered_agent_ids_for_tenant(db, tenant_id):
         edge = db.get(EdgeAgent, aid)
         if edge is None or not edge.backup_path_allowlist:
             continue
@@ -71,8 +73,8 @@ def validate_policy_paths_against_tenant_allowlist(
     if not bad:
         return
     msg = (
-        "Policy paths must fall under the union of backup path prefixes reported by Agents "
-        f"enrolled for this tenant (Heartbeat). Offending paths: {bad!r}. "
+        "Policy paths must fall under the union of backup path prefixes reported by registered "
+        f"Agents for this tenant (Register). Offending paths: {bad!r}. "
         f"Current union: {union!r}. "
         f"Tenant policy_paths_allowlist_mode={mode!r}."
     )

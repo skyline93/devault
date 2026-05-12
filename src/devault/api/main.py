@@ -8,7 +8,7 @@ from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from devault import __version__
 from devault.api.routes import (
-    agent_pools,
+    agent_tokens,
     agents,
     artifacts,
     auth,
@@ -43,7 +43,7 @@ _OPENAPI_TAGS = [
     },
     {
         "name": "policies",
-        "description": "CRUD for file backup policies (paths, excludes, enabled); optional **execution binding** (`bound_agent_id` or `bound_agent_pool_id`) for LeaseJobs routing. When the tenant sets **`policy_paths_allowlist_mode`** to `enforce`/`warn` and enrolled Agents report **`backup_path_allowlist`** via Heartbeat, policy **`paths`** must fall under the union of those prefixes.",
+        "description": "CRUD for file backup policies; each policy must bind a registered Agent (`bound_agent_id`). Policy paths may be validated against Agent path allowlists reported at Register.",
     },
     {
         "name": "schedules",
@@ -66,15 +66,15 @@ _OPENAPI_TAGS = [
     },
     {
         "name": "agents",
-        "description": "Edge Agent fleet inventory (Heartbeat / Register) and **tenant enrollment** (`PUT /agents/{id}/enrollment`) required before Register can mint gRPC sessions.",
+        "description": "Registered edge Agent fleet inventory (Register / Heartbeat).",
+    },
+    {
+        "name": "agent-tokens",
+        "description": "Tenant-scoped long-lived Agent bearer tokens (create, list, disable).",
     },
     {
         "name": "tenant-agents",
-        "description": "Agents **enrolled** for the effective tenant (`X-DeVault-Tenant-Id`), with optional **Heartbeat snapshot** fields (hostname, OS, backup path allowlist union for policy UX).",
-    },
-    {
-        "name": "agent-pools",
-        "description": "Tenant-scoped Agent pools (members + weights) for **policy execution binding** (`policies.bound_agent_pool_id`).",
+        "description": "Agents registered for the effective tenant (`X-DeVault-Tenant-Id`) with host snapshot fields from Register.",
     },
 ]
 
@@ -97,8 +97,8 @@ app = FastAPI(
 )
 
 app.include_router(agents.router, prefix="/api/v1")
+app.include_router(agent_tokens.router, prefix="/api/v1")
 app.include_router(tenant_agents.router, prefix="/api/v1")
-app.include_router(agent_pools.router, prefix="/api/v1")
 app.include_router(jobs.router, prefix="/api/v1")
 app.include_router(artifacts.router, prefix="/api/v1")
 app.include_router(policies.router, prefix="/api/v1")

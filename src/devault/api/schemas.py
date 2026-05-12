@@ -331,28 +331,17 @@ class PolicyCreate(BaseModel):
     plugin: Literal["file"] = Field("file", description="Plugin; only `file` is supported.")
     config: FileBackupConfigV1 = Field(..., description="Paths and exclude patterns.")
     enabled: bool = Field(True, description="Whether schedules and manual runs may use this policy.")
-    bound_agent_id: uuid.UUID | None = Field(
-        default=None,
-        description="If set, only this Agent may LeaseJobs for backups of this policy.",
+    bound_agent_id: uuid.UUID = Field(
+        ...,
+        description="Only this registered Agent may LeaseJobs for this policy.",
     )
-    bound_agent_pool_id: uuid.UUID | None = Field(
-        default=None,
-        description="If set, only Agents in this pool may lease; mutually exclusive with bound_agent_id.",
-    )
-
-    @model_validator(mode="after")
-    def policy_binding_xor(self) -> PolicyCreate:
-        if self.bound_agent_id is not None and self.bound_agent_pool_id is not None:
-            raise ValueError("only one of bound_agent_id or bound_agent_pool_id may be set")
-        return self
 
 
 class PolicyPatch(BaseModel):
     name: str | None = Field(None, min_length=1, max_length=255)
     config: FileBackupConfigV1 | None = None
     enabled: bool | None = None
-    bound_agent_id: uuid.UUID | None = Field(default=None, description="Set/clear execution binding.")
-    bound_agent_pool_id: uuid.UUID | None = Field(default=None, description="Set/clear pool binding.")
+    bound_agent_id: uuid.UUID | None = Field(default=None, description="Replace execution binding.")
 
 
 class PolicyOut(BaseModel):
@@ -365,46 +354,45 @@ class PolicyOut(BaseModel):
     created_at: datetime
     updated_at: datetime | None = None
     bound_agent_id: uuid.UUID | None = None
-    bound_agent_pool_id: uuid.UUID | None = None
 
     model_config = {"from_attributes": True}
 
 
-class AgentPoolCreate(BaseModel):
-    name: str = Field(..., min_length=1, max_length=255)
+class AgentTokenCreate(BaseModel):
+    label: str = Field(..., min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=2048)
+    expires_at: datetime | None = Field(default=None, description="Null means no expiry.")
 
 
-class AgentPoolOut(BaseModel):
+class AgentTokenCreatedOut(BaseModel):
     id: uuid.UUID
     tenant_id: uuid.UUID
-    name: str
+    label: str
+    description: str | None = None
+    expires_at: datetime | None = None
     created_at: datetime
+    plaintext_secret: str = Field(..., description="Shown once at creation.")
+    instance_count: int = 0
+
+
+class AgentTokenOut(BaseModel):
+    id: uuid.UUID
+    tenant_id: uuid.UUID
+    label: str
+    description: str | None = None
+    expires_at: datetime | None = None
+    disabled_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
+    last_used_at: datetime | None = None
+    instance_count: int = 0
 
     model_config = {"from_attributes": True}
 
 
-class AgentPoolMemberIn(BaseModel):
-    agent_id: uuid.UUID
-    weight: int = Field(100, ge=1, le=1_000_000)
-    sort_order: int = Field(0, ge=-1_000_000, le=1_000_000)
-
-
-class AgentPoolMembersPut(BaseModel):
-    members: list[AgentPoolMemberIn] = Field(default_factory=list)
-
-
-class AgentPoolMemberOut(BaseModel):
-    agent_id: uuid.UUID
-    weight: int
-    sort_order: int
-    last_seen_at: datetime | None = Field(
-        default=None,
-        description="From edge_agents.last_seen_at when the Agent has checked in.",
-    )
-
-
-class AgentPoolDetailOut(AgentPoolOut):
-    members: list[AgentPoolMemberOut]
+class AgentTokenPatch(BaseModel):
+    label: str | None = Field(default=None, min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=2048)
 
 
 class ScheduleCreate(BaseModel):
@@ -472,29 +460,11 @@ class RestoreDrillScheduleOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class AgentEnrollmentPut(BaseModel):
-    """Replace authorized tenants for an Agent (admin); required before Register can mint a session token."""
-
-    allowed_tenant_ids: list[uuid.UUID] = Field(
-        ...,
-        min_length=1,
-        description="Job tenant_id values this Agent may lease and complete over gRPC.",
-    )
-
-
-class AgentEnrollmentOut(BaseModel):
-    agent_id: uuid.UUID
-    allowed_tenant_ids: list[uuid.UUID]
-    created_at: datetime
-    updated_at: datetime
-
-    model_config = {"from_attributes": True}
-
-
 class EdgeAgentOut(BaseModel):
-    """Registered edge Agent (from gRPC Heartbeat / Register)."""
+    """Registered edge Agent (from gRPC Register / Heartbeat)."""
 
-    id: uuid.UUID = Field(..., description="Same as DEVAULT_AGENT_ID / Heartbeat agent_id.")
+    id: uuid.UUID = Field(..., description="Agent instance UUID from Register.")
+    agent_token_id: uuid.UUID | None = Field(None, description="Issuing tenant Agent token, when known.")
     first_seen_at: datetime
     last_seen_at: datetime
     agent_release: str | None = Field(None, description="Last reported SemVer string.")
@@ -509,31 +479,24 @@ class EdgeAgentOut(BaseModel):
         ...,
         description="True when proto_package is empty or equals the control plane expected package.",
     )
-    allowed_tenant_ids: list[uuid.UUID] | None = Field(
-        None,
-        description="From agent_enrollments; omitted when no enrollment row exists yet.",
-    )
-    hostname: str | None = Field(None, description="Last reported hostname (Heartbeat snapshot v1).")
-    os: str | None = Field(None, description="Last reported OS string (untrusted).")
-    region: str | None = Field(None, description="Optional region tag from Agent.")
-    env: str | None = Field(None, description="Optional environment tag from Agent.")
+    hostname: str | None = Field(None, description="Host snapshot from Register.")
+    os: str | None = Field(None, description="Host OS from Register.")
+    region: str | None = Field(None, description="Optional region tag from Register.")
+    env: str | None = Field(None, description="Optional environment tag from Register.")
     backup_path_allowlist: list[str] | None = Field(
         None,
-        description="Absolute path prefixes this Agent reported as allowed for backups (Heartbeat).",
+        description="Path prefixes reported at Register.",
     )
 
     model_config = ConfigDict(from_attributes=True)
 
 
 class TenantScopedAgentOut(BaseModel):
-    """Agent enrolled for the requested tenant, with optional fleet snapshot from ``edge_agents``."""
+    """Registered Agent instance for the effective tenant."""
 
-    id: uuid.UUID = Field(..., description="Agent UUID (same as DEVAULT_AGENT_ID).")
-    allowed_tenant_ids: list[uuid.UUID] = Field(
-        ...,
-        description="Full enrollment list for this Agent (includes the effective tenant).",
-    )
-    first_seen_at: datetime | None = Field(None, description="Set once the Agent has checked in over gRPC.")
+    id: uuid.UUID = Field(..., description="Agent instance UUID.")
+    agent_token_id: uuid.UUID | None = None
+    first_seen_at: datetime | None = Field(None, description="Set once the Agent has registered over gRPC.")
     last_seen_at: datetime | None = None
     agent_release: str | None = None
     proto_package: str | None = None

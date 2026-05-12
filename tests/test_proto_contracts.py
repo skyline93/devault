@@ -20,8 +20,8 @@ def test_heartbeat_reply_capabilities_roundtrip() -> None:
     assert list(m2.server_capabilities) == ["backup_file_v1", "multipart_upload"]
 
 
-def test_heartbeat_request_snapshot_roundtrip() -> None:
-    m = agent_pb2.HeartbeatRequest(
+def test_register_request_snapshot_roundtrip() -> None:
+    m = agent_pb2.RegisterRequest(
         agent_id="00000000-0000-4000-8000-000000000001",
         agent_release="0.4.0",
         proto_package="devault.agent.v1",
@@ -33,11 +33,23 @@ def test_heartbeat_request_snapshot_roundtrip() -> None:
         backup_path_allowlist=["/data", "/var/backups"],
         snapshot_schema_version=1,
     )
-    m2 = agent_pb2.HeartbeatRequest()
+    m2 = agent_pb2.RegisterRequest()
     m2.ParseFromString(m.SerializeToString())
     assert m2.snapshot_schema_version == 1
     assert m2.hostname == "edge-1"
     assert list(m2.backup_path_allowlist) == ["/data", "/var/backups"]
+
+
+def test_heartbeat_request_version_roundtrip() -> None:
+    m = agent_pb2.HeartbeatRequest(
+        agent_id="00000000-0000-4000-8000-000000000001",
+        agent_release="0.4.0",
+        proto_package="devault.agent.v1",
+        git_commit="abc",
+    )
+    m2 = agent_pb2.HeartbeatRequest()
+    m2.ParseFromString(m.SerializeToString())
+    assert m2.agent_release == "0.4.0"
 
 
 def test_complete_job_request_agent_hostname_roundtrip() -> None:
@@ -55,8 +67,6 @@ def test_complete_job_request_agent_hostname_roundtrip() -> None:
 def test_register_reply_capabilities_roundtrip() -> None:
     m = agent_pb2.RegisterReply(
         ok=True,
-        bearer_token="x",
-        expires_in_seconds=0,
         message="ok",
         server_release="0.4.0",
         min_supported_agent_version="0.1.0",
@@ -64,6 +74,7 @@ def test_register_reply_capabilities_roundtrip() -> None:
         deprecation_message="",
         reason_code="",
         server_capabilities=["agent_grpc_v1", "s3_presign_bundle"],
+        agent_id="00000000-0000-4000-8000-000000000001",
     )
     m2 = agent_pb2.RegisterReply()
     m2.ParseFromString(m.SerializeToString())

@@ -34,6 +34,7 @@ def upsert_edge_agent(
     db: Session,
     *,
     agent_id: uuid.UUID,
+    agent_token_id: uuid.UUID | None = None,
     agent_release: str | None,
     proto_package: str | None,
     git_commit: str | None,
@@ -54,6 +55,7 @@ def upsert_edge_agent(
     if row is None:
         row = EdgeAgent(
             id=agent_id,
+            agent_token_id=agent_token_id,
             first_seen_at=now,
             last_seen_at=now,
             agent_release=rel,
@@ -64,6 +66,8 @@ def upsert_edge_agent(
         db.add(row)
     else:
         row.last_seen_at = now
+        if agent_token_id is not None:
+            row.agent_token_id = agent_token_id
         if rel is not None:
             row.agent_release = rel
         if pkg is not None:
@@ -80,6 +84,32 @@ def upsert_edge_agent(
         row.agent_env = _norm_snapshot_str(agent_env)
         row.backup_path_allowlist = _norm_allowlist(backup_path_allowlist)
 
+    return row
+
+
+def touch_edge_agent_heartbeat(
+    db: Session,
+    *,
+    agent_id: uuid.UUID,
+    agent_release: str | None,
+    proto_package: str | None,
+    git_commit: str | None,
+) -> EdgeAgent:
+    """Refresh liveness; sync version columns when they change (no host snapshot updates)."""
+    now = datetime.now(timezone.utc)
+    row = db.get(EdgeAgent, agent_id)
+    if row is None:
+        raise ValueError("edge agent missing")
+    row.last_seen_at = now
+    rel = (agent_release or "").strip() or None
+    pkg = (proto_package or "").strip() or None
+    gc = (git_commit or "").strip() or None
+    if rel is not None:
+        row.agent_release = rel
+    if pkg is not None:
+        row.proto_package = pkg
+    if gc is not None:
+        row.git_commit = gc
     return row
 
 

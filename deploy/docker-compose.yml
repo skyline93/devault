@@ -8,7 +8,7 @@
 # | Profile | 服务 |
 # |---------|------|
 # | **with-control-plane** | ``iam``、``api``、``scheduler``（IAM 与 DeVault 控制面） |
-# | **with-agent** | ``agent``（需与控制面同时启用，因依赖 ``api``） |
+# | **with-agent** | ``agent``（需与控制面同时启用）；与 **with-console** 任一启用时都会跑 ``demo-stack-init``（IAM→DeVault 租户镜像；**with-agent** 时还会经 HTTP 签发 Agent 令牌写入共享卷） |
 # | **with-console** | ``demo-stack-init``、``console``（演示租户镜像 + 官方 Web 控制台；需 **with-control-plane**） |
 # | **with-grpc-tls** | ``grpc-gateway``（Envoy 对外 TLS :50052 → ``api:50051``；需 **with-control-plane**） |
 # | **with-monitoring** | ``alertdump``、``alertmanager``、``prometheus``（需 **with-control-plane** 以便抓取 ``api``） |
@@ -23,9 +23,9 @@
 #   # 完整演示栈（IAM + API + scheduler + agent + 控制台）
 #   docker compose --profile with-control-plane --profile with-agent --profile with-console up -d --build
 #
-# 仓库根 **``make demo-stack-up``**：本地构建 ``devault:local`` / ``devault-console:local`` 并启用 **with-control-plane**、**with-agent**、**with-console**。
+# 仓库根 **``make demo-stack-up``**：本地构建 ``devault:local`` / ``devault-console:local`` 并启用 **with-control-plane**、**with-agent**、**with-console**（**demo-stack-init** 会镜像租户并经 HTTP 签发演示 Agent 令牌写入共享卷）。
 #
-# **with-console** 时：``demo-stack-init`` 在 ``api``/``iam`` 健康后运行；**Console** 在其 **成功退出后** 再启动。``IAM_DEMO_AUTO_BOOTSTRAP`` 下 **IAM** 迁移后幂等 ``iam-admin bootstrap``（默认 ``demo@devault.com`` / ``Devault12345``，仅演示）。
+# **with-console** 或 **with-agent** 时：``demo-stack-init`` 在 ``api``/``iam`` 健康后运行（**with-console** 时 **Console** 在其 **成功退出后** 再启动）。``IAM_DEMO_AUTO_BOOTSTRAP`` 下 **IAM** 迁移后幂等 ``iam-admin bootstrap``（默认 ``demo@devault.com`` / ``Devault12345``，仅演示）。
 #
 # 浏览器：<http://127.0.0.1:8080/> 控制台；<http://127.0.0.1:8100/docs> IAM；<http://127.0.0.1:8000/docs> API。
 # 控制面 REST 须带 **``X-DeVault-Tenant-Id``**（UUID）；无默认 slug 回落。覆盖默认平台账号：**``DEMO_STACK_PLATFORM_EMAIL``** / **``DEMO_STACK_PLATFORM_PASSWORD``**（见 **``deploy/.env.stack.example``**）。
@@ -244,7 +244,7 @@ services:
   #   export DEVAULT_ARTIFACT_ENCRYPTION_KEY="$(openssl rand -base64 32)"
   # Format: standard Base64 decoding to exactly 32 bytes (AES-256). See website/docs/security/artifact-encryption.md
   #
-  # Auth: the agent obtains a gRPC bearer via Register using DEVAULT_GRPC_REGISTRATION_SECRET (must match api).
+  # Auth: default uses ``demo-stack-init`` → ``POST /api/v1/agent-tokens`` + shared volume; override ``DEVAULT_AGENT_TOKEN`` in ``.env`` for non-demo.
   agent:
     profiles: ["with-agent"]
     image: ${DEVAULT_IMAGE:-glf9832/devault:latest}
@@ -253,11 +253,9 @@ services:
       dockerfile: deploy/Dockerfile
       args:
         <<: *pip-build-args
-    command: devault-agent
+    command: ["/bin/sh", "/app/deploy/scripts/devault-agent-docker-entry.sh"]
     environment:
-      # Stable id so migration 0011 can seed agent_enrollments → first tenant row before first Register.
-      DEVAULT_AGENT_ID: ${DEVAULT_AGENT_ID:-00000000-0000-4000-8000-000000000001}
-      DEVAULT_GRPC_REGISTRATION_SECRET: ${DEVAULT_GRPC_REGISTRATION_SECRET:-devault-docker-register-secret}
+      DEVAULT_AGENT_TOKEN: ${DEVAULT_AGENT_TOKEN:-}
       DEVAULT_GRPC_TARGET: api:50051
       DEVAULT_ALLOWED_PATH_PREFIXES: /data,/restore
       # Dev/demo default key (literal label: devault-docker-demo-aes256-key!!); override for real use.
@@ -266,16 +264,19 @@ services:
     volumes:
       - ./demo_data:/data:ro
       - agent_restore:/restore
+      - demo_stack_secrets:/shared:ro
     depends_on:
       api:
         condition: service_healthy
       minio-init:
         condition: service_completed_successfully
+      demo-stack-init:
+        condition: service_completed_successfully
 
   # **with-console**（需同时启用 **with-control-plane**）：先 **demo-stack-init**（IAM ``demo`` → DeVault），再 **console**（Ant Design Pro，反代 API / IAM）。
   # 构建 console：`docker compose --profile with-control-plane --profile with-console build console`；访问 <http://127.0.0.1:8080/>；**DEVAULT_CONSOLE_*_UPSTREAM** / **UMI_APP_IAM_PREFIX**；**UMI_APP_AUTH_DEBUG** 默认 **1**。
   demo-stack-init:
-    profiles: ["with-console"]
+    profiles: ["with-console", "with-agent"]
     image: ${DEVAULT_IMAGE:-glf9832/devault:latest}
     build:
       context: ..
@@ -289,7 +290,12 @@ services:
       DEMO_STACK_PLATFORM_PASSWORD: ${DEMO_STACK_PLATFORM_PASSWORD:-Devault12345}
       DEMO_STACK_TENANT_SLUG: ${DEMO_STACK_TENANT_SLUG:-demo}
       DEMO_STACK_TENANT_NAME: ${DEMO_STACK_TENANT_NAME:-Demo}
+      DEMO_STACK_AGENT_TOKEN_FILE: ${DEMO_STACK_AGENT_TOKEN_FILE:-/shared/demo-agent-token}
+      DEMO_STACK_AGENT_TOKEN_LABEL: ${DEMO_STACK_AGENT_TOKEN_LABEL:-demo-stack-agent}
+      DEMO_STACK_SKIP_AGENT_TOKEN_BOOTSTRAP: ${DEMO_STACK_SKIP_AGENT_TOKEN_BOOTSTRAP:-false}
       PYTHONPATH: /app/src
+    volumes:
+      - demo_stack_secrets:/shared
     entrypoint: ["python3", "/app/deploy/scripts/bootstrap_demo_stack.py"]
     depends_on:
       api:
@@ -382,3 +388,4 @@ volumes:
   pgdata: {}
   miniodata: {}
   agent_restore: {}
+  demo_stack_secrets: {}

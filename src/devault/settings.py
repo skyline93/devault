@@ -217,6 +217,10 @@ class Settings(BaseSettings):
         default=None,
         description="Agent only: optional short git SHA sent on Heartbeat/Register",
     )
+    agent_token: str | None = Field(
+        default=None,
+        description="Agent only: long-lived tenant Agent bearer token for gRPC",
+    )
 
     # Artifact encryption (AES-256-GCM chunked format); Agent must match control plane policy.
     artifact_encryption_key: str | None = Field(

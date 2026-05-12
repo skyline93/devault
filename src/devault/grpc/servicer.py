@@ -14,15 +14,14 @@ from sqlalchemy.orm import Session, aliased
 from devault import __version__ as server_release_version
 from devault.core.enums import JobKind, JobStatus, PluginName
 from devault.core.locking import release_policy_job_lock, try_acquire_policy_job_lock
-from devault.db.models import AgentPoolMember, Artifact, EdgeAgent, Job, Policy, Tenant
-from devault.services.agent_enrollment import allowed_tenant_frozenset, get_enrollment
+from devault.db.models import Artifact, EdgeAgent, Job, Policy, Tenant
 from devault.db.session import SessionLocal
-from devault.security.agent_grpc_session import (
-    mint_agent_session_token,
-    validate_and_refresh_agent_session,
+from devault.security.agent_token_auth import (
+    auth_context_from_agent_token,
+    ensure_agent_instance_for_token,
+    require_agent_token,
 )
 from devault.security.auth_context import AuthContext, dev_open_auth_context
-from devault.security.iam_jwt import try_decode_iam_bearer
 from devault.security.policy import authentication_enabled
 from devault.grpc.agent_version import (
     attach_control_plane_version_meta,
@@ -48,7 +47,11 @@ from devault.plugins.file.encryption_policy import (
     manifest_declares_chunked_encryption,
 )
 from devault.plugins.file.plugin import artifact_object_keys
-from devault.services.edge_agents import enforce_edge_agent_for_lease, upsert_edge_agent
+from devault.services.edge_agents import (
+    enforce_edge_agent_for_lease,
+    touch_edge_agent_heartbeat,
+    upsert_edge_agent,
+)
 from devault.settings import Settings, get_settings
 from devault.storage import get_storage_for_tenant
 from devault.storage.multipart import (
@@ -72,55 +75,39 @@ _ACTIVE_JOB_STATUSES = (
 )
 
 
+def _grpc_bearer_raw(context: grpc.ServicerContext) -> str:
+    meta = dict(context.invocation_metadata())
+    auth = meta.get("authorization") or meta.get("Authorization")
+    if not auth or not auth.startswith("Bearer "):
+        return ""
+    return auth[7:].strip()
+
+
 def _authenticate_grpc(context: grpc.ServicerContext, settings: Settings) -> AuthContext:
     db = SessionLocal()
     try:
         if not authentication_enabled(settings, db):
             return dev_open_auth_context()
-        meta = dict(context.invocation_metadata())
-        auth = meta.get("authorization") or meta.get("Authorization")
-        if not auth or not auth.startswith("Bearer "):
+        raw = _grpc_bearer_raw(context)
+        if not raw:
             context.abort(grpc.StatusCode.UNAUTHENTICATED, "Bearer token required")
             raise RuntimeError("unreachable")
-        raw = auth[7:].strip()
-        ctx_iam = try_decode_iam_bearer(raw, settings)
-        if ctx_iam is not None:
-            if ctx_iam.role == "auditor":
-                context.abort(
-                    grpc.StatusCode.PERMISSION_DENIED,
-                    "auditor role cannot access agent gRPC",
-                )
-                raise RuntimeError("unreachable")
-            return ctx_iam
-        aid = validate_and_refresh_agent_session(
-            settings.redis_url,
-            raw,
-            ttl_seconds=int(settings.grpc_agent_session_ttl_seconds),
-        )
-        if aid is not None:
-            enr_row = get_enrollment(db, aid)
-            if enr_row is None:
-                context.abort(
-                    grpc.StatusCode.UNAUTHENTICATED,
-                    "agent enrollment missing or revoked",
-                )
-                raise RuntimeError("unreachable")
-            allowed = allowed_tenant_frozenset(enr_row)
-            if not allowed:
-                context.abort(
-                    grpc.StatusCode.UNAUTHENTICATED,
-                    "agent enrollment has no allowed tenants",
-                )
-                raise RuntimeError("unreachable")
-            return AuthContext(
-                role="operator",
-                allowed_tenant_ids=allowed,
-                principal_label=f"agent-session:{aid}",
-            )
-        context.abort(grpc.StatusCode.UNAUTHENTICATED, "invalid token")
-        raise RuntimeError("unreachable")
+        principal = require_agent_token(db, context, raw)
+        db.commit()
+        return auth_context_from_agent_token(principal)
     finally:
         db.close()
+
+
+def _agent_token_id_from_auth(auth_ctx: AuthContext) -> uuid.UUID | None:
+    label = auth_ctx.principal_label
+    prefix = "agent-token:"
+    if not label.startswith(prefix):
+        return None
+    try:
+        return uuid.UUID(label[len(prefix) :])
+    except ValueError:
+        return None
 
 
 def _grpc_ensure_job_tenant(
@@ -144,21 +131,15 @@ def _require_agent_bearer_matches(
     agent_id: uuid.UUID,
     context: grpc.ServicerContext,
 ) -> None:
-    """Per-Agent Register tokens must match RPC ``agent_id``; shared API keys unchanged."""
-    label = auth_ctx.principal_label
-    prefix = "agent-session:"
-    if not label.startswith(prefix):
+    """Agent token principals may only use registered ``agent_id`` values for that token."""
+    token_id = _agent_token_id_from_auth(auth_ctx)
+    if token_id is None:
         return
+    db = SessionLocal()
     try:
-        bound = uuid.UUID(label[len(prefix) :])
-    except ValueError:
-        return
-    if bound != agent_id:
-        context.abort(
-            grpc.StatusCode.PERMISSION_DENIED,
-            "bearer token is bound to a different agent_id",
-        )
-        raise RuntimeError("unreachable")
+        ensure_agent_instance_for_token(db, agent_id=agent_id, token_id=token_id, context=context)
+    finally:
+        db.close()
 
 
 def _resolved_complete_agent_hostname(
@@ -211,21 +192,7 @@ def _pending_candidate_ids(
         exists(
             select(1).select_from(Policy).where(
                 Policy.id == Job.policy_id,
-                or_(
-                    and_(
-                        Policy.bound_agent_id.is_(None),
-                        Policy.bound_agent_pool_id.is_(None),
-                    ),
-                    Policy.bound_agent_id == leasing_agent_id,
-                    exists(
-                        select(1)
-                        .select_from(AgentPoolMember)
-                        .where(
-                            AgentPoolMember.pool_id == Policy.bound_agent_pool_id,
-                            AgentPoolMember.agent_id == leasing_agent_id,
-                        ),
-                    ),
-                ),
+                Policy.bound_agent_id == leasing_agent_id,
             ),
         ),
     )
@@ -325,7 +292,7 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
     def Register(self, request: agent_pb2.RegisterRequest, context: grpc.ServicerContext):
         settings = get_settings()
         register_audit: dict = {
-            "agent_id": request.agent_id,
+            "agent_id": request.agent_id or None,
             "agent_release": request.agent_release or None,
             "proto_package": request.proto_package or None,
             "agent_git_commit": request.git_commit or None,
@@ -336,69 +303,60 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
             settings,
             audit_extra=register_audit,
         ):
-            if not settings.grpc_registration_secret:
-                context.abort(grpc.StatusCode.FAILED_PRECONDITION, "registration disabled")
-            if request.registration_secret != settings.grpc_registration_secret:
-                context.abort(grpc.StatusCode.UNAUTHENTICATED, "invalid registration secret")
-            try:
-                agent_uuid = uuid.UUID(request.agent_id)
-            except ValueError:
-                context.abort(grpc.StatusCode.INVALID_ARGUMENT, "agent_id must be a UUID")
-                raise
-            dep = evaluate_agent_version_gate(
-                agent_release=request.agent_release,
-                proto_package=request.proto_package,
-                settings=settings,
-                context=context,
-                server_release=server_release_version,
-            )
+            raw = _grpc_bearer_raw(context)
             db_reg = SessionLocal()
             try:
-                enr = get_enrollment(db_reg, agent_uuid)
-                if enr is None:
-                    context.abort(
-                        grpc.StatusCode.FAILED_PRECONDITION,
-                        "agent enrollment missing: use PUT /api/v1/agents/{agent_id}/enrollment "
-                        "before Register",
-                    )
-                    raise RuntimeError("unreachable")
-                if not (enr.allowed_tenant_ids or []):
-                    context.abort(
-                        grpc.StatusCode.FAILED_PRECONDITION,
-                        "agent enrollment has empty allowed_tenant_ids",
-                    )
-                    raise RuntimeError("unreachable")
-                register_audit["enrolled_tenant_count"] = len(enr.allowed_tenant_ids)
+                principal = require_agent_token(db_reg, context, raw)
+                token_id = principal.token.id
+                register_audit["agent_token_id"] = str(token_id)
+                register_audit["tenant_id"] = str(principal.tenant_id)
+                dep = evaluate_agent_version_gate(
+                    agent_release=request.agent_release,
+                    proto_package=request.proto_package,
+                    settings=settings,
+                    context=context,
+                    server_release=server_release_version,
+                )
+                agent_uuid: uuid.UUID
+                if (request.agent_id or "").strip():
+                    try:
+                        agent_uuid = uuid.UUID(request.agent_id)
+                    except ValueError:
+                        context.abort(grpc.StatusCode.INVALID_ARGUMENT, "agent_id must be a UUID")
+                        raise
+                    existing = db_reg.get(EdgeAgent, agent_uuid)
+                    if existing is not None and existing.agent_token_id not in (None, token_id):
+                        context.abort(
+                            grpc.StatusCode.PERMISSION_DENIED,
+                            "agent_id is registered to a different token",
+                        )
+                        raise RuntimeError("unreachable")
+                else:
+                    agent_uuid = uuid.uuid4()
+                snap_ver = int(request.snapshot_schema_version or 0)
                 upsert_edge_agent(
                     db_reg,
                     agent_id=agent_uuid,
+                    agent_token_id=token_id,
                     agent_release=request.agent_release or None,
                     proto_package=request.proto_package or None,
                     git_commit=request.git_commit or None,
                     touch_register=True,
+                    snapshot_schema_version=snap_ver,
+                    hostname=request.hostname or None,
+                    host_os=request.os or None,
+                    region=request.region or None,
+                    agent_env=request.env or None,
+                    backup_path_allowlist=list(request.backup_path_allowlist),
                 )
                 db_reg.commit()
             finally:
                 db_reg.close()
-            try:
-                token, ttl_sec = mint_agent_session_token(
-                    settings.redis_url,
-                    agent_id=agent_uuid,
-                    ttl_seconds=int(settings.grpc_agent_session_ttl_seconds),
-                )
-            except Exception:
-                logger.exception("Register: failed to mint Redis agent session")
-                context.abort(
-                    grpc.StatusCode.UNAVAILABLE,
-                    "agent session store unavailable (check Redis)",
-                )
-                raise RuntimeError("unreachable")
             reply = agent_pb2.RegisterReply(
                 ok=True,
-                bearer_token=token,
-                expires_in_seconds=ttl_sec,
                 message="ok",
                 deprecation_message=dep,
+                agent_id=str(agent_uuid),
             )
             attach_control_plane_version_meta(reply, settings)
             apply_server_capabilities(reply, settings)
@@ -406,20 +364,12 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
 
     def Heartbeat(self, request: agent_pb2.HeartbeatRequest, context: grpc.ServicerContext):
         settings = get_settings()
-        snap_ver = int(request.snapshot_schema_version or 0)
         hb_audit: dict = {
             "agent_id": request.agent_id,
             "agent_release": request.agent_release or None,
             "proto_package": request.proto_package or None,
             "agent_git_commit": request.git_commit or None,
-            "snapshot_schema_version": snap_ver,
         }
-        if snap_ver >= 1:
-            hb_audit["hostname"] = request.hostname or None
-            hb_audit["os"] = request.os or None
-            hb_audit["region"] = request.region or None
-            hb_audit["env"] = request.env or None
-            hb_audit["backup_path_allowlist_count"] = len(request.backup_path_allowlist)
         with grpc_governance(
             "Heartbeat",
             context,
@@ -442,19 +392,12 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
             )
             db_hb = SessionLocal()
             try:
-                upsert_edge_agent(
+                touch_edge_agent_heartbeat(
                     db_hb,
                     agent_id=hb_agent,
                     agent_release=request.agent_release or None,
                     proto_package=request.proto_package or None,
                     git_commit=request.git_commit or None,
-                    touch_register=False,
-                    snapshot_schema_version=snap_ver,
-                    hostname=request.hostname or None,
-                    host_os=request.os or None,
-                    region=request.region or None,
-                    agent_env=request.env or None,
-                    backup_path_allowlist=list(request.backup_path_allowlist),
                 )
                 db_hb.commit()
             finally:

@@ -15,7 +15,7 @@ description: 本地与演示环境的服务角色与启动方式
 | Profile | 服务 |
 |---------|------|
 | **with-control-plane** | **iam**、**api**、**scheduler** |
-| **with-agent** | **agent**（依赖已启动的 **api**） |
+| **with-agent** | **agent**（依赖 **api**）；与 **with-console** 任一启用时都会跑 **demo-stack-init**（IAM→DeVault 租户镜像；启用 **with-agent** 时 init 还会 **`GET`/`POST /api/v1/agent-tokens`** 并把明文写入 **`demo_stack_secrets`** 卷供 agent 读取） |
 | **with-console** | **demo-stack-init**、**console**（需与 **with-control-plane** 同开） |
 | **with-grpc-tls** | **grpc-gateway**（Envoy；需 **with-control-plane**；Agent TLS 叠加 **`compose.include/grpc-tls-agent.yml`** 或 **`-f docker-compose.grpc-tls.yml`**） |
 | **with-monitoring** | **alertdump**、**alertmanager**、**prometheus**（需 **with-control-plane**） |
@@ -35,11 +35,11 @@ docker compose pull && docker compose --profile with-control-plane --profile wit
 
 ## 控制台 + IAM（本地手测，接近生产链路）
 
-仓库根目录 **`make demo-stack-up`**（或 `cd deploy` 后 **`DEVAULT_IMAGE=devault:local`** 并 **`docker compose --profile with-control-plane --profile with-agent --profile with-console up -d --build`**）：构建当前代码中的控制面镜像与 **console** 镜像，并拉起数据面、**iam** / **api** / **scheduler** / **agent**、**demo-stack-init**、**console**。IAM 与控制面共用数据库与 Redis（IAM 使用 Redis **db 1**）；默认 **`IAM_DEMO_AUTO_BOOTSTRAP`** 下迁移后幂等创建演示平台用户；**api** 的 **`DEVAULT_IAM_JWKS_URL`** 指向容器内 **iam**；**demo-stack-init** 用 **`DEMO_STACK_PLATFORM_*`** 将 IAM **`demo`** 租户镜像到 DeVault；**console** 在 init 成功退出后启动（同源 **`/iam-api`** 反代）。默认演示平台账号与覆盖方式见 **`deploy/docker-compose.yml`** 文件头及 **`deploy/.env.stack.example`**（可复制为 **`deploy/.env`**）。
+仓库根目录 **`make demo-stack-up`**（或 `cd deploy` 后 **`DEVAULT_IMAGE=devault:local`** 并 **`docker compose --profile with-control-plane --profile with-agent --profile with-console up -d --build`**）：构建当前代码中的控制面镜像与 **console** 镜像，并拉起数据面、**iam** / **api** / **scheduler** / **agent**、**demo-stack-init**、**console**。IAM 与控制面共用数据库与 Redis（IAM 使用 Redis **db 1**）；默认 **`IAM_DEMO_AUTO_BOOTSTRAP`** 下迁移后幂等创建演示平台用户；**api** 的 **`DEVAULT_IAM_JWKS_URL`** 指向容器内 **iam**；**demo-stack-init** 用 **`DEMO_STACK_PLATFORM_*`** 将 IAM **`demo`** 租户镜像到 DeVault，并在 **`with-agent`** 场景下经 **DeVault REST** 创建演示用 **Agent 令牌**（标签默认 **`demo-stack-agent`**），将 **`plaintext_secret`** 写入命名卷 **`demo_stack_secrets`**（容器内 **`/shared/demo-agent-token`**）；**agent** 通过 **`deploy/scripts/devault-agent-docker-entry.sh`** 从该文件注入 **`DEVAULT_AGENT_TOKEN`**（若已在 **`.env`** 设置 **`DEVAULT_AGENT_TOKEN`** 则优先使用环境变量）。**console** 在 init 成功退出后启动（同源 **`/iam-api`** 反代）。跳过自动令牌：设 **`DEMO_STACK_SKIP_AGENT_TOKEN_BOOTSTRAP=true`** 并自行提供 **`DEVAULT_AGENT_TOKEN`**。默认演示平台账号与覆盖方式见 **`deploy/docker-compose.yml`** 文件头及 **`deploy/.env.stack.example`**（可复制为 **`deploy/.env`**）。
 
-- 控制台：<http://127.0.0.1:8080/>  
-- IAM OpenAPI：<http://127.0.0.1:8100/docs>  
-- 控制面 API：<http://127.0.0.1:8000/docs>  
+- 控制台：[http://127.0.0.1:8080/](http://127.0.0.1:8080/)  
+- IAM OpenAPI：[http://127.0.0.1:8100/docs](http://127.0.0.1:8100/docs)  
+- 控制面 API：[http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)  
 
 ## 可选：多实例 `api`（gRPC 负载均衡）
 

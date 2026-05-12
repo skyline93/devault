@@ -79,7 +79,32 @@ declare namespace API {
     created_at: string;
     updated_at: string | null;
     bound_agent_id: string | null;
-    bound_agent_pool_id: string | null;
+  }
+
+  /** `GET /api/v1/agent-tokens` 列表项（`AgentTokenOut`）。 */
+  interface AgentTokenOut {
+    id: string;
+    tenant_id: string;
+    label: string;
+    description: string | null;
+    expires_at: string | null;
+    disabled_at: string | null;
+    created_at: string;
+    updated_at: string;
+    last_used_at: string | null;
+    instance_count: number;
+  }
+
+  /** `POST /api/v1/agent-tokens` 响应（含一次性明文密钥）。 */
+  interface AgentTokenCreatedOut {
+    id: string;
+    tenant_id: string;
+    label: string;
+    description: string | null;
+    expires_at: string | null;
+    created_at: string;
+    plaintext_secret: string;
+    instance_count: number;
   }
 
   /** `ArtifactOut`。 */
@@ -172,13 +197,6 @@ declare namespace API {
     region: string | null;
     env: string | null;
     backup_path_allowlist: string[] | null;
-  }
-
-  interface AgentEnrollmentOut {
-    agent_id: string;
-    allowed_tenant_ids: string[];
-    created_at: string;
-    updated_at: string;
   }
 
   /** `TenantOut`（管理员列表）。 */

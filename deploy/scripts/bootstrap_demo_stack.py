@@ -16,8 +16,13 @@ Environment (defaults suit in-network Compose service names):
 - ``DEMO_STACK_PLATFORM_EMAIL`` / ``DEMO_STACK_PLATFORM_PASSWORD`` — platform user (defaults match Compose / IAM demo bootstrap).
 - ``DEMO_STACK_TENANT_SLUG`` — default ``demo``.
 - ``DEMO_STACK_TENANT_NAME`` — default ``Demo``.
+- ``DEMO_STACK_SKIP_AGENT_TOKEN_BOOTSTRAP`` — when truthy, skip Agent token HTTP step (tenant mirror unchanged).
+- ``DEMO_STACK_AGENT_TOKEN_LABEL`` — label used to find or create the demo token (default ``demo-stack-agent``).
+- ``DEMO_STACK_AGENT_TOKEN_FILE`` — path to write ``plaintext_secret`` once (default ``/shared/demo-agent-token``).
+- ``DEMO_STACK_AGENT_TOKEN_DESCRIPTION`` — optional description for ``POST /api/v1/agent-tokens``.
 
 Idempotent: if IAM or DeVault already has the slug, exits 0 after ensuring DeVault row exists when possible.
+When Agent token bootstrap is enabled, uses **only** DeVault HTTP APIs (``GET``/``POST /api/v1/agent-tokens``) after a successful tenant mirror.
 """
 
 from __future__ import annotations
@@ -27,6 +32,7 @@ import os
 import sys
 import urllib.error
 import urllib.request
+from pathlib import Path
 
 
 def _json_req(method: str, url: str, *, body: dict | None = None, headers: dict[str, str] | None = None) -> tuple[int, dict | list | str]:
@@ -51,6 +57,87 @@ def _json_req(method: str, url: str, *, body: dict | None = None, headers: dict[
             return e.code, json.loads(raw)
         except json.JSONDecodeError:
             return e.code, raw
+
+
+def _truthy_env(name: str, *, default: bool = False) -> bool:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() not in ("0", "false", "no", "off", "")
+
+
+def _devault_tenant_headers(bearer: str, tenant_id: str) -> dict[str, str]:
+    return {
+        "Authorization": f"Bearer {bearer}",
+        "X-DeVault-Tenant-Id": tenant_id,
+    }
+
+
+def _ensure_demo_agent_token_file(*, api: str, bearer: str, tenant_id: str) -> int:
+    if _truthy_env("DEMO_STACK_SKIP_AGENT_TOKEN_BOOTSTRAP", default=False):
+        print("Skipping demo Agent token bootstrap (DEMO_STACK_SKIP_AGENT_TOKEN_BOOTSTRAP).", file=sys.stderr)
+        return 0
+
+    token_path = Path(os.environ.get("DEMO_STACK_AGENT_TOKEN_FILE", "/shared/demo-agent-token").strip())
+    label = os.environ.get("DEMO_STACK_AGENT_TOKEN_LABEL", "demo-stack-agent").strip() or "demo-stack-agent"
+    description = os.environ.get("DEMO_STACK_AGENT_TOKEN_DESCRIPTION", "Docker demo stack (auto)").strip() or None
+
+    if token_path.is_file():
+        try:
+            existing = token_path.read_text(encoding="utf-8").strip()
+        except OSError as exc:
+            print(f"Cannot read existing token file {token_path}: {exc}", file=sys.stderr)
+            return 1
+        if existing:
+            print(f"Demo Agent token file already present ({token_path}); skipping HTTP token create.", file=sys.stderr)
+            return 0
+
+    hdr = _devault_tenant_headers(bearer, tenant_id)
+    code_list, body_list = _json_req("GET", f"{api}/api/v1/agent-tokens", headers=hdr)
+    if code_list != 200:
+        print(f"GET /api/v1/agent-tokens failed: HTTP {code_list} {body_list!r}", file=sys.stderr)
+        return 1
+    if not isinstance(body_list, list):
+        print(f"GET /api/v1/agent-tokens unexpected body: {body_list!r}", file=sys.stderr)
+        return 1
+
+    for row in body_list:
+        if isinstance(row, dict) and str(row.get("label") or "") == label:
+            print(
+                f"Agent token with label {label!r} already exists but secret is not retrievable via API. "
+                f"Restore {token_path} from backup, delete the token in the console, or set "
+                f"DEMO_STACK_SKIP_AGENT_TOKEN_BOOTSTRAP and provide DEVAULT_AGENT_TOKEN manually.",
+                file=sys.stderr,
+            )
+            return 1
+
+    code_post, body_post = _json_req(
+        "POST",
+        f"{api}/api/v1/agent-tokens",
+        body={"label": label, "description": description},
+        headers=hdr,
+    )
+    if code_post not in (200, 201):
+        print(f"POST /api/v1/agent-tokens failed: HTTP {code_post} {body_post!r}", file=sys.stderr)
+        return 1
+    if not isinstance(body_post, dict) or not body_post.get("plaintext_secret"):
+        print(f"POST /api/v1/agent-tokens unexpected body: {body_post!r}", file=sys.stderr)
+        return 1
+    secret = str(body_post["plaintext_secret"]).strip()
+    if not secret:
+        print("POST /api/v1/agent-tokens returned empty plaintext_secret.", file=sys.stderr)
+        return 1
+
+    try:
+        token_path.parent.mkdir(parents=True, exist_ok=True)
+        token_path.write_text(secret + "\n", encoding="utf-8")
+        token_path.chmod(0o600)
+    except OSError as exc:
+        print(f"Failed to write {token_path}: {exc}", file=sys.stderr)
+        return 1
+
+    print(f"Demo Agent token written to {token_path}", file=sys.stderr)
+    return 0
 
 
 def main() -> int:
@@ -112,10 +199,10 @@ def main() -> int:
     )
     if code_d in (200, 201):
         print(f"DeVault tenant upsert ok: {slug} ({tid})", file=sys.stderr)
-        return 0
+        return _ensure_demo_agent_token_file(api=api, bearer=bearer, tenant_id=tid)
     if code_d == 409:
         print(f"DeVault tenant slug already exists ({slug}); treating as success.", file=sys.stderr)
-        return 0
+        return _ensure_demo_agent_token_file(api=api, bearer=bearer, tenant_id=tid)
 
     print(f"DeVault POST /api/v1/tenants failed: HTTP {code_d} {d_body!r}", file=sys.stderr)
     return 1

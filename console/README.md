@@ -69,7 +69,7 @@
 
 - **备份与恢复**：**`/backup/jobs`**（筛选、取消/重试、详情抽屉）；**`/backup/policies`**、**`/backup/policies/new`**、**`/backup/policies/:policyId`**（Tab 表单 **`FileBackupConfigV1`**、执行绑定、内嵌备份计划）；**`/backup/run`**、**`/backup/precheck`**；**`/backup/artifacts`**（分页、恢复/演练二次确认、管理员 Legal hold）。
 - **合规与演练**：**`/compliance/schedules`**、**`/compliance/restore-drill-schedules`**（全 CRUD）。
-- **执行面**：**`/execution/tenant-agents`**；**`/execution/agent-pools`**、**`/execution/agent-pools/:poolId`**（成员 **PUT**）；**`/execution/fleet`**、**`/execution/fleet/:agentId`**（Enrollment、吊销 gRPC）。
+- **执行面**：**`/execution/agent-tokens`**；**`/execution/tenant-agents`**；**`/execution/fleet`**、**`/execution/fleet/:agentId`**。
 - **平台管理**（仅 **`access.canAdmin`** 见菜单）：**`/platform/tenants`**（**`TenantPatch`** 表单）。
 - **RBAC**：写操作依赖 **`canWrite`**；Legal hold、Enrollment、吊销、gRPC 吊销、租户 PATCH 依赖 **`canAdmin`**；**auditor** 与 **`isAuditor`** 对齐只读。
 

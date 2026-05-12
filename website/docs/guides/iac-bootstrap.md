@@ -21,7 +21,7 @@ OpenAPI 权威定义见 **`/docs`**（或文档站 [gRPC 与端口](../reference
 
 | 路径 | 说明 |
 |------|------|
-| **`deploy/iac/examples/curl-enroll.sh`** | 单 Agent enrollment 的 `curl` 模板 |
+| **`deploy/iac/examples/curl-agent-token.sh`** | 创建租户 Agent 令牌的 `curl` 模板 |
 | **`deploy/iac/terraform-minimal/`** | `null_resource` + `local-exec` 的最小 Terraform（无专用 Provider） |
 
 与 **§十四-11** 路径预检、**§十四-12** 作业 hostname 快照等能力正交；预检使用 **`POST /api/v1/jobs/path-precheck`** 见 [Agent 舰队](../admin/agent-fleet.md)。

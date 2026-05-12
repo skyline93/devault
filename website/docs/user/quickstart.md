@@ -32,7 +32,7 @@ docker compose --profile with-control-plane --profile with-agent --profile with-
 
 应用镜像为预构建 **`DEVAULT_IMAGE`**（默认见 `docker-compose.yml`）。`api` 启动时会执行 `alembic upgrade head`。profile 说明见 [Docker Compose 管理文档](../admin/docker-compose.md)。
 
-**Agent 与多租户**：`Register` 前必须在控制面为 **`agent_id`** 配置 **`agent_enrollments`**（REST **`PUT /api/v1/agents/{agent_id}/enrollment`**）。演示栈中 **agent** 使用固定 **`DEVAULT_AGENT_ID`**，迁移 **`0011`** 会将其绑定到 **当前库中最早创建的一条租户**（开箱 Compose 下通常为迁移 **`0005`** 种子租户）。自建环境见 [Agent 舰队](../admin/agent-fleet.md)。**Heartbeat** 默认上报主机快照与可选 **`DEVAULT_ALLOWED_PATH_PREFIXES`**（逗号分隔路径前缀），供 **`GET /api/v1/tenant-agents`** 与租户级策略路径校验使用；详见 [gRPC（Agent）](../reference/grpc-services.md）。可在写入策略后用 **`POST /api/v1/jobs/path-precheck`**（或 Web UI 策略页的 **Run path precheck**）让 Agent 只读校验 **`paths`** 是否存在、可读，再上真实备份。
+**Agent 与多租户**：在控制台或 **`POST /api/v1/agent-tokens`** 为租户创建 **Agent 令牌**（明文仅创建时返回一次），将值配置为边端 **`DEVAULT_AGENT_TOKEN`**。**`make demo-stack-up`** 下 **`demo-stack-init`** 会在租户镜像成功后调用同一 HTTP API 签发演示令牌，并写入 Compose 共享卷；**`agent`** 从卷读取（亦可在 **`deploy/.env`** 中显式设置 **`DEVAULT_AGENT_TOKEN`** 覆盖）。Agent 启动后 **`Register`** 会分配或确认 **`agent_id`** 并上报主机快照；**`Heartbeat`** 仅刷新存活与版本校验。详见 [Agent 舰队](../admin/agent-fleet.md) 与 [gRPC（Agent）](../reference/grpc-services.md)。策略创建时 **必填 `bound_agent_id`**（须为已注册实例）。可在写入策略后用 **`POST /api/v1/jobs/path-precheck`**（或 Web UI 策略页的 **Run path precheck**）让 Agent 只读校验 **`paths`** 是否存在、可读，再上真实备份。
 
 **REST 租户头**：除 **`GET/POST /api/v1/tenants`** 等少数路由外，业务 API 必须带 **`X-DeVault-Tenant-Id: <uuid>`**（可先 **`GET /api/v1/tenants`** 列举可用 UUID；演示栈种子租户 id 见迁移 **`0005`**）。
 

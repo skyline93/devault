@@ -115,45 +115,68 @@ def _job_view(job_id: str, lease: agent_pb2.JobLease, cfg: dict) -> SimpleNamesp
     )
 
 
-def _bootstrap_token_if_needed(
+def _agent_state_path(settings: Settings) -> Path:
+    return settings.agent_multipart_state_root / "agent_instance.json"
+
+
+def _load_persisted_agent_id(settings: Settings) -> str | None:
+    path = _agent_state_path(settings)
+    if not path.is_file():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        raw = str(data.get("agent_id") or "").strip()
+        return raw or None
+    except (OSError, json.JSONDecodeError, TypeError, ValueError):
+        return None
+
+
+def _persist_agent_id(settings: Settings, agent_id: str) -> None:
+    path = _agent_state_path(settings)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"agent_id": agent_id}), encoding="utf-8")
+
+
+def _register_agent(
     stub: agent_pb2_grpc.AgentControlStub,
-    agent_id: str,
-    token: dict,
+    *,
+    bearer: str,
+    agent_id: str | None,
+    settings: Settings,
     cap_state: AgentCapabilityState,
-) -> None:
-    if token.get("value"):
-        return
-    s = get_settings()
-    if not s.grpc_registration_secret:
-        logger.error(
-            "No DEVAULT_GRPC_REGISTRATION_SECRET; cannot authenticate (IAM tokens are not used for Agent bootstrap)",
-        )
-        raise SystemExit(2)
-    rel, pkg, gc = _agent_identity_fields(s)
+) -> str:
+    rel, pkg, gc = _agent_identity_fields(settings)
+    prefixes = settings.allowed_prefix_list or []
+    region = (os.environ.get("DEVAULT_AGENT_REGION") or "").strip()
+    env_tag = (os.environ.get("DEVAULT_AGENT_ENV") or settings.env_name or "").strip()
     reply = stub.Register(
         agent_pb2.RegisterRequest(
-            agent_id=agent_id,
-            registration_secret=s.grpc_registration_secret,
+            agent_id=agent_id or "",
             agent_release=rel,
             proto_package=pkg,
             git_commit=gc,
+            hostname=socket.gethostname(),
+            os=f"{platform.system()} {platform.release()}".strip(),
+            region=region,
+            env=env_tag,
+            backup_path_allowlist=prefixes,
+            snapshot_schema_version=1,
         ),
-        metadata=[],
+        metadata=_metadata(bearer),
     )
-    if not reply.ok or not reply.bearer_token:
+    if not reply.ok or not (reply.agent_id or "").strip():
         logger.error("Register failed: %s", reply.message or "unknown")
         raise SystemExit(2)
-    token["value"] = reply.bearer_token
+    assigned = reply.agent_id.strip()
+    _persist_agent_id(settings, assigned)
     if reply.server_release:
-        logger.info(
-            "obtained API token via Register (bootstrap); control plane %s",
-            reply.server_release,
-        )
+        logger.info("registered agent %s; control plane %s", assigned, reply.server_release)
     else:
-        logger.info("obtained API token via Register (bootstrap)")
+        logger.info("registered agent %s", assigned)
     if reply.deprecation_message:
         logger.warning("Register: %s", reply.deprecation_message)
     cap_state.caps = frozenset(reply.server_capabilities)
+    return assigned
 
 
 def _run_one_job(
@@ -410,16 +433,24 @@ def run_forever() -> None:
         logger.error("Set DEVAULT_GRPC_TARGET or configure DEVAULT_GRPC_TARGET in settings")
         raise SystemExit(2)
 
-    agent_id = os.environ.get("DEVAULT_AGENT_ID") or str(uuid.uuid4())
-    logger.info("DeVault agent %s starting (DeVault %s)", agent_id, __version__)
+    bearer = (s.agent_token or os.environ.get("DEVAULT_AGENT_TOKEN") or "").strip()
+    if not bearer:
+        logger.error("Set DEVAULT_AGENT_TOKEN or configure agent_token in settings")
+        raise SystemExit(2)
 
-    token: dict[str, str | None] = {"value": None}
     cap_state = AgentCapabilityState()
     channel = _build_channel(target, settings=s)
     stub = agent_pb2_grpc.AgentControlStub(channel)
+    persisted = _load_persisted_agent_id(s)
 
     try:
-        _bootstrap_token_if_needed(stub, agent_id, token, cap_state)
+        agent_id = _register_agent(
+            stub,
+            bearer=bearer,
+            agent_id=persisted,
+            settings=s,
+            cap_state=cap_state,
+        )
     except grpc.RpcError as e:
         reason = _trailing_reason_code(e)
         if e.code() in (
@@ -431,30 +462,18 @@ def run_forever() -> None:
         logger.exception("Register RPC failed: %s", e.details())
         raise SystemExit(2) from e
 
-    bearer = token["value"]
-    if not bearer:
-        logger.error("No bearer token after bootstrap")
-        raise SystemExit(2)
+    logger.info("DeVault agent %s running (DeVault %s)", agent_id, __version__)
 
     while True:
         try:
             md = _metadata(bearer)
             rel, pkg, gc = _agent_identity_fields(s)
-            prefixes = s.allowed_prefix_list or []
-            region = (os.environ.get("DEVAULT_AGENT_REGION") or "").strip()
-            env_tag = (os.environ.get("DEVAULT_AGENT_ENV") or s.env_name or "").strip()
             hb = stub.Heartbeat(
                 agent_pb2.HeartbeatRequest(
                     agent_id=agent_id,
                     agent_release=rel,
                     proto_package=pkg,
                     git_commit=gc,
-                    hostname=socket.gethostname(),
-                    os=f"{platform.system()} {platform.release()}".strip(),
-                    region=region,
-                    env=env_tag,
-                    backup_path_allowlist=prefixes,
-                    snapshot_schema_version=1,
                 ),
                 metadata=md,
             )

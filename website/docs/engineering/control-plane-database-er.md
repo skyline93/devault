@@ -13,7 +13,7 @@ description: PostgreSQL 表、外键与多租户边界（与 ORM 对齐）
 
 ## 总览：多租户与作业域
 
-**租户 `tenants`** 为策略、作业、artifact 及演练调度的隔离根；**`edge_agents`**、**`agent_enrollments`**、**`control_plane_api_keys`** 与租户业务表无外键，属独立运维域。
+**租户 `tenants`** 为策略、作业、artifact 及演练调度的隔离根；**`edge_agents`**、**`agent_tokens`**、**`control_plane_api_keys`** 与租户业务表的关系见下文（**`agent_tokens.tenant_id`** 外键到 **`tenants`**；**`edge_agents.agent_token_id`** 外键到 **`agent_tokens`**）。
 
 ```mermaid
 erDiagram
@@ -38,8 +38,7 @@ erDiagram
         boolean enabled
         timestamptz created_at
         timestamptz updated_at "nullable"
-        uuid bound_agent_id "nullable"
-        uuid bound_agent_pool_id "nullable FK SET NULL"
+        uuid bound_agent_id "required FK"
     }
 
     schedules {
@@ -122,7 +121,7 @@ erDiagram
 | 关系 | 说明 |
 |------|------|
 | **policies → schedules** | 删除策略时级联删除其 Cron 行。 |
-| **policies 执行绑定** | 可选 **`bound_agent_id`** 或 **`bound_agent_pool_id`**（互斥 CHECK）；池表 **`agent_pools`** / **`agent_pool_members`**（迁移 **`0012`**）。 |
+| **policies 执行绑定** | 必填 **`bound_agent_id`**（外键 **`edge_agents.id`**）；**`LeaseJobs`** 按绑定收窄。 |
 | **policies → jobs** | 数据库存在 **`fk_jobs_policy_id_policies`**（`ON DELETE SET NULL`）。`policy_id` 可为空（例如部分恢复类作业）。ORM 未声明 `ForeignKey`，迁移与线上库仍以约束为准。 |
 | **jobs → artifacts** | 外键 `job_id` **`ON DELETE CASCADE`**。应用层通常 **0..1** 条 artifact / 作业（ORM `Job.artifact` 为单对象）；数据库未对 `artifacts.job_id` 加唯一约束。 |
 | **artifacts → restore_drill_schedules** | 按 artifact 配置恢复演练 Cron；删除 artifact 时级联删除相关演练调度。 |
@@ -134,25 +133,40 @@ erDiagram
 
 ## 独立表（fleet / 访问控制）
 
-用于 Agent 清单、**租户登记**、**Agent 池**与 REST/gRPC 访问令牌。**`edge_agents` / `agent_enrollments` / `control_plane_api_keys`** 无外键到 **`tenants`**；**`agent_pools.tenant_id`** 外键到 **`tenants`**；**`policies.bound_agent_pool_id`** 外键到 **`agent_pools`**（`ON DELETE SET NULL`）。
+用于 Agent 清单、**租户 Agent 令牌**与 REST/gRPC 访问令牌。**`agent_tokens.tenant_id`** 外键到 **`tenants`**；**`edge_agents.agent_token_id`** 外键到 **`agent_tokens`**；**`control_plane_api_keys`** 无外键到 **`tenants`**。
 
 ```mermaid
 erDiagram
+    tenants ||--o{ agent_tokens : issues
+    agent_tokens ||--o{ edge_agents : registers
+
+    agent_tokens {
+        uuid id PK
+        uuid tenant_id FK
+        string token_hash UK
+        string label "nullable"
+        string description "nullable"
+        timestamptz expires_at "nullable"
+        timestamptz disabled_at "nullable"
+        timestamptz last_used_at "nullable"
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
     edge_agents {
         uuid id PK
+        uuid agent_token_id FK "nullable"
         timestamptz first_seen_at
         timestamptz last_seen_at
         string agent_release "nullable"
         string proto_package "nullable"
         string git_commit "nullable"
         timestamptz last_register_at "nullable"
-    }
-
-    agent_enrollments {
-        uuid agent_id PK
-        jsonb allowed_tenant_ids
-        timestamptz created_at
-        timestamptz updated_at
+        string hostname "nullable"
+        string host_os "nullable"
+        string region "nullable"
+        string agent_env "nullable"
+        jsonb backup_path_allowlist "nullable"
     }
 
     control_plane_api_keys {
@@ -166,9 +180,8 @@ erDiagram
     }
 ```
 
-- **`edge_agents`**：gRPC Register/Heartbeat 汇总的边缘 Agent 身份；`id` 为 Agent 侧稳定 UUID，**不引用 `tenants`**。  
-- **`agent_enrollments`**：按 **`agent_id`** 绑定 **`allowed_tenant_ids`**（JSONB 租户 UUID 字符串列表）；**`Register`** 与会话路径的租户硬边界；与 **`tenants`** 无 DB 外键，写入时由 API 校验租户存在。  
-- **`agent_pools` / `agent_pool_members`**：租户内 Agent 分组；成员 **`agent_id`** 须 **enrollment** 覆盖该租户；供 **`policies.bound_agent_pool_id`** 与 **`LeaseJobs`** 收窄。  
+- **`agent_tokens`**：租户签发的长期 Agent 凭据（仅存哈希）；禁用/过期后 gRPC 鉴权失败。  
+- **`edge_agents`**：gRPC **Register** 汇总的边缘实例；**`id`** 为 Agent 侧稳定 UUID；**`agent_token_id`** 指向签发令牌。  
 - **`control_plane_api_keys`**：控制面 API 密钥哈希；**`allowed_tenant_ids`** 为 JSON 可选租户白名单，非 FK。
 
 ---

@@ -74,8 +74,7 @@ class AgentControlServicer(object):
     """
 
     def Register(self, request, context):
-        """Bootstrap: exchange a one-time registration secret for the same bearer token
-        the HTTP API uses (DEVAULT_API_TOKEN). Disabled when DEVAULT_GRPC_REGISTRATION_SECRET is unset.
+        """Register an edge instance with a tenant Agent token (Authorization Bearer).
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')

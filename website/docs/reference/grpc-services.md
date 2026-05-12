@@ -22,18 +22,73 @@ Agent 通过 gRPC **Register / Heartbeat / LeaseJobs / RequestStorageGrant / Rep
 
 [gRPC](../trust/agent-connectivity.md)、[端口速查](./ports-and-paths.md)。
 
-## Register 与会话令牌
+## Register 与 Agent 令牌
 
-**前提**：**`agent_enrollments`** 中已为该 **`agent_id`** 配置非空 **`allowed_tenant_ids`**（REST **`PUT /api/v1/agents/{agent_id}/enrollment`**，admin）。否则 **Register** → **`FAILED_PRECONDITION`**。
+租户管理员在控制台或 **`POST /api/v1/agent-tokens`** 创建 **长期 Bearer**（明文仅创建时返回一次）。边端 **`devault-agent`** 配置 **`DEVAULT_AGENT_TOKEN`**，所有 Agent gRPC 请求在 **`Authorization: Bearer`** 中携带该令牌。
 
-成功 **Register** 后控制面在 **Redis** 签发绑定 **`agent_id`** 的 **Bearer**，TTL **`DEVAULT_GRPC_AGENT_SESSION_TTL_SECONDS`**；RPC 成功后刷新 TTL。会话在控制面解析为 **`AuthContext.allowed_tenant_ids`**，与 **LeaseJobs / RequestStorageGrant / ReportProgress / CompleteJob** 的 **`job.tenant_id`** 硬过滤一致（与 **API Key** 的 **`allowed_tenant_ids`** 语义对齐）。**`LeaseJobs`** 另按策略 **`bound_agent_id` / `bound_agent_pool_id`** 收窄可领取的 **`policy_id`** 作业（见 [Agent 池](../admin/agent-pools.md)）。运维可用 **`POST /api/v1/agents/{agent_id}/revoke-grpc-sessions`** 吊销；Runbook 见 [Agent 凭据生命周期](../admin/agent-credential-lifecycle.md)。
+**Register** 在鉴权通过后写入 **`edge_agents`** 主机快照（**`hostname` / `os` / `region` / `env` / `backup_path_allowlist`**）并返回 **`agent_id`**（首次分配或复用本地持久化的实例 id）。**Heartbeat** 仅刷新 **`last_seen_at`** 并校验 **`agent_release` / `proto_package`**，不更新主机快照列。
 
-## Heartbeat 快照（十四-08）
+吊销：禁用对应 **`agent_tokens`** 行（**`POST /api/v1/agent-tokens/{id}/disable`**）。**`LeaseJobs`** 仅返回 **`policies.bound_agent_id`** 与当前 **`agent_id`** 一致的待办作业（每条策略必须绑定一台已注册 Agent）。
 
-当 **`HeartbeatRequest.snapshot_schema_version >= 1`** 时，控制面将 **`hostname`**、**`os`**、**`region`**、**`env`** 与 **`backup_path_allowlist`**（绝对路径前缀列表）持久化到 **`edge_agents`**。**`snapshot_schema_version = 0`**（缺省）表示旧 Agent：不覆盖上述快照列，避免误清空。
+## 时序概览
 
-- **Agent 侧**：同源 **`devault-agent`** 默认上报 **`snapshot_schema_version=1`**；**`backup_path_allowlist`** 来自 **`DEVAULT_ALLOWED_PATH_PREFIXES`**（逗号分隔，与 [配置参考](../admin/configuration.md) 中 Agent 小节一致）；**`region`/`env`** 可分别用 **`DEVAULT_AGENT_REGION`**、**`DEVAULT_AGENT_ENV`** 覆盖，否则 **`env`** 可回落到控制面 **`DEVAULT_ENV_NAME`** 类语义（见 Agent 代码）。
-- **消费侧**：租户 **`policy_paths_allowlist_mode`** 与 **`GET /api/v1/tenant-agents`** / 策略 **`paths`** 校验见 [Agent 舰队](../admin/agent-fleet.md)。
+以下示意与当前实现一致：**长期 Agent 令牌**经 HTTP 签发；**全部 Agent gRPC** 使用同一 **`Authorization: Bearer`**；**无** enrollment、**无** Register 换发的 Redis 会话。
+
+### 1. 签发令牌并配置边端（HTTP）
+
+```mermaid
+sequenceDiagram
+  autonumber
+  actor Op as "运维/租户管理员"
+  participant IAM as IAM
+  participant HTTP as "DeVault HTTP API"
+  participant DB as PostgreSQL
+  participant Ag as "devault-agent（边端）"
+
+  Op->>IAM: 登录（邮箱/密码或 SSO）
+  IAM-->>Op: access_token（JWT）
+  Op->>HTTP: POST /api/v1/agent-tokens<br/>Authorization: Bearer JWT<br/>X-DeVault-Tenant-Id: tenant_uuid<br/>{ label, description? }
+  HTTP->>DB: 写入 agent_tokens（仅 token_hash 等）
+  DB-->>HTTP: 新行 id
+  HTTP-->>Op: AgentTokenCreatedOut<br/>plaintext_secret（仅一次）
+  Op->>Ag: 配置环境变量 DEVAULT_AGENT_TOKEN
+  Note over Ag: 明文不落库；边端仅存环境/密钥文件
+```
+
+演示栈可由 **`demo-stack-init`** 代为调用同一 HTTP 路径并将明文写入共享卷，见 [Docker Compose](../admin/docker-compose.md)。
+
+### 2. 注册、存活与领作业（gRPC）
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant Ag as "devault-agent"
+  participant Grpc as "Agent gRPC 服务"
+  participant DB as PostgreSQL
+
+  Note over Ag,Grpc: 每条 RPC：metadata Authorization Bearer = Agent 令牌明文
+
+  Ag->>Grpc: Register(RegisterRequest<br/>可选 agent_id + 主机快照)
+  Grpc->>DB: 校验 agent_tokens（hash、禁用、过期）→ tenant_id
+  Grpc->>DB: upsert edge_agents（快照、agent_token_id）<br/>分配或确认 agent_id
+  Grpc-->>Ag: RegisterReply（agent_id、能力/版本协商字段）
+
+  loop 周期性
+    Ag->>Grpc: Heartbeat(版本字段)
+    Grpc->>DB: 再校验令牌 + 版本门闸
+    Grpc->>DB: 更新 last_seen_at（及允许的版本列）
+    Grpc-->>Ag: HeartbeatReply（能力/版本协商）
+  end
+
+  Ag->>Grpc: LeaseJobs(...)
+  Grpc->>DB: 鉴权同上 → 租户范围
+  Grpc->>DB: 候选作业 SQL：policy.bound_agent_id = 当前 agent_id
+  Grpc-->>Ag: 租约 / 空
+
+  Note over Ag,Grpc: RequestStorageGrant、ReportProgress、CompleteJob 等<br/>仍在同一 Bearer 鉴权与租户边界下执行
+```
+
+更完整的舰队与策略语义见 [Agent 舰队](../admin/agent-fleet.md)。
 
 ## 版本协商
 

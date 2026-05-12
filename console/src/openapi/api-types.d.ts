@@ -21,24 +21,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/agents/{agent_id}/enrollment": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Agent tenant enrollment (authorized tenant UUIDs for gRPC) */
-        get: operations["get_agent_enrollment_api_v1_agents__agent_id__enrollment_get"];
-        /** Set or replace Agent tenant enrollment (admin) */
-        put: operations["put_agent_enrollment_api_v1_agents__agent_id__enrollment_put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/agents/{agent_id}": {
         parameters: {
             query?: never;
@@ -56,7 +38,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/agents/{agent_id}/revoke-grpc-sessions": {
+    "/api/v1/agent-tokens": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Agent tokens for the effective tenant */
+        get: operations["list_tokens_api_v1_agent_tokens_get"];
+        put?: never;
+        /** Create tenant Agent token (plaintext once) */
+        post: operations["create_token_api_v1_agent_tokens_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent-tokens/{token_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get one Agent token */
+        get: operations["get_token_api_v1_agent_tokens__token_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update token label/description */
+        patch: operations["patch_token_api_v1_agent_tokens__token_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/agent-tokens/{token_id}/disable": {
         parameters: {
             query?: never;
             header?: never;
@@ -65,11 +83,25 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /**
-         * Revoke Register-minted gRPC bearer tokens for this Agent (Redis)
-         * @description Bump session generation so all per-Agent Bearer tokens minted via Register become invalid.
-         */
-        post: operations["revoke_agent_grpc_sessions_api_v1_agents__agent_id__revoke_grpc_sessions_post"];
+        /** Disable an Agent token */
+        post: operations["disable_token_api_v1_agent_tokens__token_id__disable_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent-tokens/{token_id}/enable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Re-enable a disabled Agent token */
+        post: operations["enable_token_api_v1_agent_tokens__token_id__enable_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -86,59 +118,6 @@ export interface paths {
         /** List Agents enrolled for the effective tenant (with fleet snapshot when known) */
         get: operations["list_tenant_scoped_agents_api_v1_tenant_agents_get"];
         put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/agent-pools": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Agent pools for the effective tenant */
-        get: operations["list_agent_pools_api_v1_agent_pools_get"];
-        put?: never;
-        /** Create an Agent pool (tenant-scoped) */
-        post: operations["create_agent_pool_api_v1_agent_pools_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/agent-pools/{pool_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get pool with members and last-seen hints */
-        get: operations["get_agent_pool_api_v1_agent_pools__pool_id__get"];
-        put?: never;
-        post?: never;
-        /** Delete pool (clears policy bindings that reference it) */
-        delete: operations["delete_agent_pool_api_v1_agent_pools__pool_id__delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/agent-pools/{pool_id}/members": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /** Replace pool members (enrollment for tenant required per member) */
-        put: operations["put_agent_pool_members_api_v1_agent_pools__pool_id__members_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -557,15 +536,72 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        /** AgentEnrollmentOut */
-        AgentEnrollmentOut: {
+        /** AgentTokenCreate */
+        AgentTokenCreate: {
+            /** Label */
+            label: string;
+            /** Description */
+            description?: string | null;
             /**
-             * Agent Id
+             * Expires At
+             * @description Null means no expiry.
+             */
+            expires_at?: string | null;
+        };
+        /** AgentTokenCreatedOut */
+        AgentTokenCreatedOut: {
+            /**
+             * Id
              * Format: uuid
              */
-            agent_id: string;
-            /** Allowed Tenant Ids */
-            allowed_tenant_ids: string[];
+            id: string;
+            /**
+             * Tenant Id
+             * Format: uuid
+             */
+            tenant_id: string;
+            /** Label */
+            label: string;
+            /** Description */
+            description?: string | null;
+            /** Expires At */
+            expires_at?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Plaintext Secret
+             * @description Shown once at creation.
+             */
+            plaintext_secret: string;
+            /**
+             * Instance Count
+             * @default 0
+             */
+            instance_count: number;
+        };
+        /** AgentTokenOut */
+        AgentTokenOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Tenant Id
+             * Format: uuid
+             */
+            tenant_id: string;
+            /** Label */
+            label: string;
+            /** Description */
+            description?: string | null;
+            /** Expires At */
+            expires_at?: string | null;
+            /** Disabled At */
+            disabled_at?: string | null;
             /**
              * Created At
              * Format: date-time
@@ -576,104 +612,20 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
-        };
-        /**
-         * AgentEnrollmentPut
-         * @description Replace authorized tenants for an Agent (admin); required before Register can mint a session token.
-         */
-        AgentEnrollmentPut: {
+            /** Last Used At */
+            last_used_at?: string | null;
             /**
-             * Allowed Tenant Ids
-             * @description Job tenant_id values this Agent may lease and complete over gRPC.
-             */
-            allowed_tenant_ids: string[];
-        };
-        /** AgentPoolCreate */
-        AgentPoolCreate: {
-            /** Name */
-            name: string;
-        };
-        /** AgentPoolDetailOut */
-        AgentPoolDetailOut: {
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /**
-             * Tenant Id
-             * Format: uuid
-             */
-            tenant_id: string;
-            /** Name */
-            name: string;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /** Members */
-            members: components["schemas"]["AgentPoolMemberOut"][];
-        };
-        /** AgentPoolMemberIn */
-        AgentPoolMemberIn: {
-            /**
-             * Agent Id
-             * Format: uuid
-             */
-            agent_id: string;
-            /**
-             * Weight
-             * @default 100
-             */
-            weight: number;
-            /**
-             * Sort Order
+             * Instance Count
              * @default 0
              */
-            sort_order: number;
+            instance_count: number;
         };
-        /** AgentPoolMemberOut */
-        AgentPoolMemberOut: {
-            /**
-             * Agent Id
-             * Format: uuid
-             */
-            agent_id: string;
-            /** Weight */
-            weight: number;
-            /** Sort Order */
-            sort_order: number;
-            /**
-             * Last Seen At
-             * @description From edge_agents.last_seen_at when the Agent has checked in.
-             */
-            last_seen_at?: string | null;
-        };
-        /** AgentPoolMembersPut */
-        AgentPoolMembersPut: {
-            /** Members */
-            members?: components["schemas"]["AgentPoolMemberIn"][];
-        };
-        /** AgentPoolOut */
-        AgentPoolOut: {
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /**
-             * Tenant Id
-             * Format: uuid
-             */
-            tenant_id: string;
-            /** Name */
-            name: string;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
+        /** AgentTokenPatch */
+        AgentTokenPatch: {
+            /** Label */
+            label?: string | null;
+            /** Description */
+            description?: string | null;
         };
         /** ArtifactLegalHoldPatch */
         ArtifactLegalHoldPatch: {
@@ -737,7 +689,7 @@ export interface components {
         AuthSessionOut: {
             /**
              * Role
-             * @description Effective RBAC role for the current `X-DeVault-Tenant-Id` / default tenant context.
+             * @description Effective RBAC role for the current `X-DeVault-Tenant-Id` tenant context.
              * @enum {string}
              */
             role: "admin" | "operator" | "auditor";
@@ -869,15 +821,20 @@ export interface components {
         };
         /**
          * EdgeAgentOut
-         * @description Registered edge Agent (from gRPC Heartbeat / Register).
+         * @description Registered edge Agent (from gRPC Register / Heartbeat).
          */
         EdgeAgentOut: {
             /**
              * Id
              * Format: uuid
-             * @description Same as DEVAULT_AGENT_ID / Heartbeat agent_id.
+             * @description Agent instance UUID from Register.
              */
             id: string;
+            /**
+             * Agent Token Id
+             * @description Issuing tenant Agent token, when known.
+             */
+            agent_token_id?: string | null;
             /**
              * First Seen At
              * Format: date-time
@@ -919,33 +876,28 @@ export interface components {
              */
             proto_matches_control_plane: boolean;
             /**
-             * Allowed Tenant Ids
-             * @description From agent_enrollments; omitted when no enrollment row exists yet.
-             */
-            allowed_tenant_ids?: string[] | null;
-            /**
              * Hostname
-             * @description Last reported hostname (Heartbeat snapshot v1).
+             * @description Host snapshot from Register.
              */
             hostname?: string | null;
             /**
              * Os
-             * @description Last reported OS string (untrusted).
+             * @description Host OS from Register.
              */
             os?: string | null;
             /**
              * Region
-             * @description Optional region tag from Agent.
+             * @description Optional region tag from Register.
              */
             region?: string | null;
             /**
              * Env
-             * @description Optional environment tag from Agent.
+             * @description Optional environment tag from Register.
              */
             env?: string | null;
             /**
              * Backup Path Allowlist
-             * @description Absolute path prefixes this Agent reported as allowed for backups (Heartbeat).
+             * @description Path prefixes reported at Register.
              */
             backup_path_allowlist?: string[] | null;
         };
@@ -1140,14 +1092,10 @@ export interface components {
             enabled: boolean;
             /**
              * Bound Agent Id
-             * @description If set, only this Agent may LeaseJobs for backups of this policy.
+             * Format: uuid
+             * @description Only this registered Agent may LeaseJobs for this policy.
              */
-            bound_agent_id?: string | null;
-            /**
-             * Bound Agent Pool Id
-             * @description If set, only Agents in this pool may lease; mutually exclusive with bound_agent_id.
-             */
-            bound_agent_pool_id?: string | null;
+            bound_agent_id: string;
         };
         /** PolicyOut */
         PolicyOut: {
@@ -1180,8 +1128,6 @@ export interface components {
             updated_at?: string | null;
             /** Bound Agent Id */
             bound_agent_id?: string | null;
-            /** Bound Agent Pool Id */
-            bound_agent_pool_id?: string | null;
         };
         /** PolicyPatch */
         PolicyPatch: {
@@ -1192,14 +1138,9 @@ export interface components {
             enabled?: boolean | null;
             /**
              * Bound Agent Id
-             * @description Set/clear execution binding.
+             * @description Replace execution binding.
              */
             bound_agent_id?: string | null;
-            /**
-             * Bound Agent Pool Id
-             * @description Set/clear pool binding.
-             */
-            bound_agent_pool_id?: string | null;
         };
         /** RestoreDrillScheduleCreate */
         RestoreDrillScheduleCreate: {
@@ -1375,6 +1316,11 @@ export interface components {
         };
         /** TenantCreate */
         TenantCreate: {
+            /**
+             * Id
+             * @description Optional stable UUID when mirroring a tenant created in IAM (see deploy/scripts).
+             */
+            id?: string | null;
             /** Name */
             name: string;
             /**
@@ -1501,23 +1447,20 @@ export interface components {
         };
         /**
          * TenantScopedAgentOut
-         * @description Agent enrolled for the requested tenant, with optional fleet snapshot from ``edge_agents``.
+         * @description Registered Agent instance for the effective tenant.
          */
         TenantScopedAgentOut: {
             /**
              * Id
              * Format: uuid
-             * @description Agent UUID (same as DEVAULT_AGENT_ID).
+             * @description Agent instance UUID.
              */
             id: string;
-            /**
-             * Allowed Tenant Ids
-             * @description Full enrollment list for this Agent (includes the effective tenant).
-             */
-            allowed_tenant_ids: string[];
+            /** Agent Token Id */
+            agent_token_id?: string | null;
             /**
              * First Seen At
-             * @description Set once the Agent has checked in over gRPC.
+             * @description Set once the Agent has registered over gRPC.
              */
             first_seen_at?: string | null;
             /** Last Seen At */
@@ -1610,78 +1553,6 @@ export interface operations {
             };
         };
     };
-    get_agent_enrollment_api_v1_agents__agent_id__enrollment_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "X-DeVault-Tenant-Id"?: string | null;
-            };
-            path: {
-                agent_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AgentEnrollmentOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    put_agent_enrollment_api_v1_agents__agent_id__enrollment_put: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "X-DeVault-Tenant-Id"?: string | null;
-            };
-            path: {
-                agent_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AgentEnrollmentPut"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AgentEnrollmentOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     get_agent_api_v1_agents__agent_id__get: {
         parameters: {
             query?: never;
@@ -1716,15 +1587,83 @@ export interface operations {
             };
         };
     };
-    revoke_agent_grpc_sessions_api_v1_agents__agent_id__revoke_grpc_sessions_post: {
+    list_tokens_api_v1_agent_tokens_get: {
         parameters: {
             query?: never;
             header?: {
-                authorization?: string | null;
                 "X-DeVault-Tenant-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentTokenOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_token_api_v1_agent_tokens_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-DeVault-Tenant-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentTokenCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentTokenCreatedOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_token_api_v1_agent_tokens__token_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-DeVault-Tenant-Id"?: string | null;
+                authorization?: string | null;
             };
             path: {
-                agent_id: string;
+                token_id: string;
             };
             cookie?: never;
         };
@@ -1736,9 +1675,113 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: number;
-                    };
+                    "application/json": components["schemas"]["AgentTokenOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_token_api_v1_agent_tokens__token_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-DeVault-Tenant-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                token_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentTokenPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentTokenOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    disable_token_api_v1_agent_tokens__token_id__disable_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-DeVault-Tenant-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                token_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentTokenOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    enable_token_api_v1_agent_tokens__token_id__enable_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-DeVault-Tenant-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                token_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentTokenOut"];
                 };
             };
             /** @description Validation Error */
@@ -1771,182 +1814,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TenantScopedAgentOut"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_agent_pools_api_v1_agent_pools_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-DeVault-Tenant-Id"?: string | null;
-                authorization?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AgentPoolOut"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    create_agent_pool_api_v1_agent_pools_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-DeVault-Tenant-Id"?: string | null;
-                authorization?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AgentPoolCreate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AgentPoolOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_agent_pool_api_v1_agent_pools__pool_id__get: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-DeVault-Tenant-Id"?: string | null;
-                authorization?: string | null;
-            };
-            path: {
-                pool_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AgentPoolDetailOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    delete_agent_pool_api_v1_agent_pools__pool_id__delete: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-DeVault-Tenant-Id"?: string | null;
-                authorization?: string | null;
-            };
-            path: {
-                pool_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: string;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    put_agent_pool_members_api_v1_agent_pools__pool_id__members_put: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-DeVault-Tenant-Id"?: string | null;
-                authorization?: string | null;
-            };
-            path: {
-                pool_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AgentPoolMembersPut"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AgentPoolDetailOut"];
                 };
             };
             /** @description Validation Error */

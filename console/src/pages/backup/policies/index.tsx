@@ -37,17 +37,6 @@ const PoliciesPage: React.FC = () => {
             '—'
           ),
       },
-      {
-        title: formatMessage({ id: 'page.policies.colPool' }),
-        dataIndex: 'bound_agent_pool_id',
-        ellipsis: true,
-        render: (_, r) =>
-          r.bound_agent_pool_id ? (
-            <Link to={`/execution/agent-pools/${r.bound_agent_pool_id}`}>{r.bound_agent_pool_id}</Link>
-          ) : (
-            '—'
-          ),
-      },
       { title: formatMessage({ id: 'page.policies.colCreated' }), dataIndex: 'created_at', valueType: 'dateTime', width: 170 },
       {
         title: formatMessage({ id: 'page.policies.colActions' }),

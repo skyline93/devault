@@ -148,16 +148,10 @@ export default defineConfig({
           component: './execution/tenant-agents',
         },
         {
-          path: '/execution/agent-pools',
-          name: 'agent-pools',
-          icon: 'ApartmentOutlined',
-          component: './execution/agent-pools',
-        },
-        {
-          path: '/execution/agent-pools/:poolId',
-          name: 'agent-pool-detail',
-          component: './execution/agent-pools/detail',
-          hideInMenu: true,
+          path: '/execution/agent-tokens',
+          name: 'agent-tokens',
+          icon: 'KeyOutlined',
+          component: './execution/agent-tokens',
         },
         {
           path: '/execution/fleet',

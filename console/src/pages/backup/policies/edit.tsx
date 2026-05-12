@@ -9,15 +9,12 @@ import {
   Input,
   InputNumber,
   Modal,
-  Radio,
   Select,
   Space,
   Switch,
   Tabs,
 } from 'antd';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-
-type BindingMode = 'none' | 'agent' | 'pool';
 
 function parseConfig(raw: Record<string, unknown> | undefined) {
   const c = raw ?? {};
@@ -47,22 +44,18 @@ const PolicyEditPage: React.FC = () => {
 
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(!isNew);
-  const [bindingMode, setBindingMode] = useState<BindingMode>('none');
   const [schedules, setSchedules] = useState<API.ScheduleOut[]>([]);
-  const [pools, setPools] = useState<API.AgentPoolOut[]>([]);
   const [tenantAgents, setTenantAgents] = useState<API.TenantScopedAgentOut[]>([]);
   const scheduleRef = useRef<ActionType>();
   const [schOpen, setSchOpen] = useState(false);
   const [schForm] = Form.useForm();
 
   const loadAux = useCallback(async () => {
-    const [sch, pl, ta] = await Promise.all([
+    const [sch, ta] = await Promise.all([
       request<API.ScheduleOut[]>('/api/v1/schedules'),
-      request<API.AgentPoolOut[]>('/api/v1/agent-pools'),
       request<API.TenantScopedAgentOut[]>('/api/v1/tenant-agents'),
     ]);
     setSchedules(sch);
-    setPools(pl);
     setTenantAgents(ta);
   }, []);
 
@@ -78,7 +71,6 @@ const PolicyEditPage: React.FC = () => {
         enabled: true,
         ...parseConfig({ version: 1, paths: [] }),
       });
-      setBindingMode('none');
       return;
     }
     let cancelled = false;
@@ -92,11 +84,7 @@ const PolicyEditPage: React.FC = () => {
           enabled: p.enabled,
           ...parseConfig(p.config),
         });
-        if (p.bound_agent_id) setBindingMode('agent');
-        else if (p.bound_agent_pool_id) setBindingMode('pool');
-        else setBindingMode('none');
         form.setFieldValue('bound_agent_id', p.bound_agent_id ?? undefined);
-        form.setFieldValue('bound_agent_pool_id', p.bound_agent_pool_id ?? undefined);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -200,13 +188,7 @@ const PolicyEditPage: React.FC = () => {
 
   const bindingPayload = () => {
     const v = form.getFieldsValue();
-    if (bindingMode === 'agent') {
-      return { bound_agent_id: v.bound_agent_id as string, bound_agent_pool_id: null };
-    }
-    if (bindingMode === 'pool') {
-      return { bound_agent_id: null, bound_agent_pool_id: v.bound_agent_pool_id as string };
-    }
-    return { bound_agent_id: null, bound_agent_pool_id: null };
+    return { bound_agent_id: v.bound_agent_id as string };
   };
 
   const onSave = async () => {
@@ -366,56 +348,26 @@ const PolicyEditPage: React.FC = () => {
                 label: formatMessage({ id: 'page.policyEdit.tabBinding' }),
                 children: (
                   <Space direction="vertical" style={{ width: '100%' }} size="middle">
-                    <Radio.Group
-                      value={bindingMode}
-                      onChange={(e) => {
-                        setBindingMode(e.target.value);
-                        if (e.target.value === 'none') {
-                          form.setFieldsValue({ bound_agent_id: undefined, bound_agent_pool_id: undefined });
-                        }
-                      }}
+                    <Form.Item
+                      name="bound_agent_id"
+                      label={formatMessage({ id: 'page.policyEdit.agentLabel' })}
+                      rules={[
+                        {
+                          required: true,
+                          message: formatMessage({ id: 'page.policyEdit.agentRequired' }),
+                        },
+                      ]}
                     >
-                      <Radio.Button value="none">{formatMessage({ id: 'page.policyEdit.bindNone' })}</Radio.Button>
-                      <Radio.Button value="agent">{formatMessage({ id: 'page.policyEdit.bindAgent' })}</Radio.Button>
-                      <Radio.Button value="pool">{formatMessage({ id: 'page.policyEdit.bindPool' })}</Radio.Button>
-                    </Radio.Group>
-                    {bindingMode === 'agent' ? (
-                      <Form.Item
-                        name="bound_agent_id"
-                        label={formatMessage({ id: 'page.policyEdit.agentLabel' })}
-                        rules={[{ required: true }]}
-                      >
-                        <Select
-                          showSearch
-                          optionFilterProp="label"
-                          options={tenantAgents.map((a) => ({
-                            value: a.id,
-                            label: `${a.hostname ?? a.id} (${a.id})`,
-                          }))}
-                        />
-                      </Form.Item>
-                    ) : null}
-                    {bindingMode === 'pool' ? (
-                      <Form.Item
-                        name="bound_agent_pool_id"
-                        label={formatMessage({ id: 'page.policyEdit.poolLabel' })}
-                        rules={[{ required: true }]}
-                      >
-                        <Select
-                          showSearch
-                          optionFilterProp="label"
-                          options={pools.map((p) => ({
-                            value: p.id,
-                            label: `${p.name} (${p.id})`,
-                          }))}
-                        />
-                      </Form.Item>
-                    ) : null}
-                    <Space>
-                      <Link to="/execution/tenant-agents">{formatMessage({ id: 'page.policyEdit.agentsLink' })}</Link>
-                      <span>|</span>
-                      <Link to="/execution/agent-pools">{formatMessage({ id: 'page.policyEdit.poolsLink' })}</Link>
-                    </Space>
+                      <Select
+                        showSearch
+                        optionFilterProp="label"
+                        options={tenantAgents.map((a) => ({
+                          value: a.id,
+                          label: `${a.hostname ?? a.id} (${a.id})`,
+                        }))}
+                      />
+                    </Form.Item>
+                    <Link to="/execution/tenant-agents">{formatMessage({ id: 'page.policyEdit.agentsLink' })}</Link>
                   </Space>
                 ),
               },

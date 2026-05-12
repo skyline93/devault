@@ -1,4 +1,4 @@
-"""Agent enrollment helpers and gRPC tenant gate."""
+"""Agent token helpers and gRPC tenant gate."""
 
 from __future__ import annotations
 
@@ -10,23 +10,12 @@ import pytest
 
 from devault.grpc.servicer import _grpc_ensure_job_tenant, _pending_candidate_ids
 from devault.security.auth_context import AuthContext
-from devault.services.agent_enrollment import validate_tenant_ids_exist
+from devault.services.agent_tokens import hash_agent_token, mint_agent_token_secret
 
 
-def test_validate_tenant_ids_exist_empty_raises() -> None:
-    db = MagicMock()
-    with pytest.raises(ValueError, match="at least one"):
-        validate_tenant_ids_exist(db, [])
-
-
-def test_validate_tenant_ids_exist_missing() -> None:
-    tid = uuid.uuid4()
-    db = MagicMock()
-    chain = MagicMock()
-    chain.all.return_value = []
-    db.scalars.return_value = chain
-    with pytest.raises(ValueError, match="unknown tenant_id"):
-        validate_tenant_ids_exist(db, [tid])
+def test_hash_agent_token_stable() -> None:
+    secret = mint_agent_token_secret()
+    assert hash_agent_token(secret) == hash_agent_token(secret)
 
 
 def test_grpc_ensure_job_tenant_denies() -> None:
@@ -34,7 +23,7 @@ def test_grpc_ensure_job_tenant_denies() -> None:
     auth = AuthContext(
         role="operator",
         allowed_tenant_ids=frozenset({uuid.uuid4()}),
-        principal_label="agent-session:x",
+        principal_label="agent-token:x",
     )
     with pytest.raises(RuntimeError, match="unreachable"):
         _grpc_ensure_job_tenant(auth, uuid.uuid4(), ctx)

@@ -105,7 +105,7 @@ def main() -> int:
         failed = True
     else:
         pp = _props(pol)
-        for needle in ("bound_agent_id", "bound_agent_pool_id", "updated_at"):
+        for needle in ("bound_agent_id", "updated_at"):
             if needle not in pp:
                 print(f"PolicyOut.properties missing {needle!r}", file=sys.stderr)
                 failed = True

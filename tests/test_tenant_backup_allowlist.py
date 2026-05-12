@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 import pytest
 from fastapi import HTTPException
 
-from devault.db.models import AgentEnrollment, EdgeAgent, Tenant
+from devault.db.models import EdgeAgent, Tenant
 from devault.services.tenant_backup_allowlist import (
     path_under_allowlist_prefix,
     union_backup_path_allowlist_for_tenant,
@@ -22,7 +22,7 @@ def test_path_under_allowlist_prefix() -> None:
     assert not path_under_allowlist_prefix("/etc", "/data")
 
 
-def test_union_and_enforce_rejects() -> None:
+def test_union_and_enforce_rejects(monkeypatch: pytest.MonkeyPatch) -> None:
     tid = uuid.uuid4()
     aid = uuid.uuid4()
     t = Tenant(
@@ -31,12 +31,9 @@ def test_union_and_enforce_rejects() -> None:
         slug="acme",
         policy_paths_allowlist_mode="enforce",
     )
-    enr = AgentEnrollment(
-        agent_id=aid,
-        allowed_tenant_ids=[str(tid)],
-    )
     edge = EdgeAgent(
         id=aid,
+        agent_token_id=uuid.uuid4(),
         first_seen_at=datetime.now(timezone.utc),
         last_seen_at=datetime.now(timezone.utc),
         backup_path_allowlist=["/data", "/var/w"],
@@ -50,12 +47,10 @@ def test_union_and_enforce_rejects() -> None:
                 return edge
             return None
 
-        def scalars(self, _stmt: object):
-            return self
-
-        def all(self) -> list:
-            return [enr]
-
+    monkeypatch.setattr(
+        "devault.services.tenant_backup_allowlist.list_registered_agent_ids_for_tenant",
+        lambda _db, _tid: [aid],
+    )
     db = _Db()  # type: ignore[assignment]
     assert union_backup_path_allowlist_for_tenant(db, tid) == ["/data", "/var/w"]  # type: ignore[arg-type]
 
@@ -73,12 +68,9 @@ def test_warn_mode_logs_only(monkeypatch: pytest.MonkeyPatch) -> None:
         slug="acme2",
         policy_paths_allowlist_mode="warn",
     )
-    enr = AgentEnrollment(
-        agent_id=aid,
-        allowed_tenant_ids=[str(tid)],
-    )
     edge = EdgeAgent(
         id=aid,
+        agent_token_id=uuid.uuid4(),
         first_seen_at=datetime.now(timezone.utc),
         last_seen_at=datetime.now(timezone.utc),
         backup_path_allowlist=["/data"],
@@ -92,11 +84,9 @@ def test_warn_mode_logs_only(monkeypatch: pytest.MonkeyPatch) -> None:
                 return edge
             return None
 
-        def scalars(self, _stmt: object):
-            return self
-
-        def all(self) -> list:
-            return [enr]
-
+    monkeypatch.setattr(
+        "devault.services.tenant_backup_allowlist.list_registered_agent_ids_for_tenant",
+        lambda _db, _tid: [aid],
+    )
     db = _Db()  # type: ignore[assignment]
-    validate_policy_paths_against_tenant_allowlist(db, tid, ["/etc"])  # type: ignore[arg-type] — should not raise
+    validate_policy_paths_against_tenant_allowlist(db, tid, ["/etc/passwd"])  # type: ignore[arg-type]

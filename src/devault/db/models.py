@@ -11,13 +11,23 @@ from devault.db.base import Base
 from devault.db.constants import prefixed_fk as fk
 
 
-class AgentEnrollment(Base):
-    """Admin-provisioned binding: ``agent_id`` may only touch jobs/artifacts in ``allowed_tenant_ids`` over gRPC."""
+class AgentToken(Base):
+    """Tenant-scoped long-lived bearer for edge Agent gRPC (plaintext shown once at create)."""
 
-    __tablename__ = "agent_enrollments"
+    __tablename__ = "agent_tokens"
 
-    agent_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
-    allowed_tenant_ids: Mapped[list] = mapped_column(JSONB, nullable=False)
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(fk("tenants", "id"), ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    label: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    disabled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -28,14 +38,23 @@ class AgentEnrollment(Base):
         server_default=func.now(),
         nullable=False,
     )
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    instances: Mapped[list["EdgeAgent"]] = relationship("EdgeAgent", back_populates="agent_token")
 
 
 class EdgeAgent(Base):
-    """Last-known Agent identity from gRPC Heartbeat / Register (fleet inventory)."""
+    """Registered edge Agent instance (gRPC Register + Heartbeat liveness)."""
 
     __tablename__ = "edge_agents"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    agent_token_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(fk("agent_tokens", "id"), ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
     first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     agent_release: Mapped[str | None] = mapped_column(String(64), nullable=True)
@@ -48,48 +67,7 @@ class EdgeAgent(Base):
     agent_env: Mapped[str | None] = mapped_column(String(128), nullable=True)
     backup_path_allowlist: Mapped[list | None] = mapped_column(JSONB, nullable=True)
 
-
-class AgentPool(Base):
-    """Tenant-scoped pool of edge Agent UUIDs for policy execution binding (failover group)."""
-
-    __tablename__ = "agent_pools"
-
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey(fk("tenants", "id"), ondelete="RESTRICT"),
-        nullable=False,
-        index=True,
-    )
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        nullable=False,
-    )
-
-    members: Mapped[list["AgentPoolMember"]] = relationship(
-        "AgentPoolMember",
-        back_populates="pool",
-        cascade="all, delete-orphan",
-    )
-
-
-class AgentPoolMember(Base):
-    """Member of an :class:`AgentPool` with optional dispatch hints (weight / sort_order)."""
-
-    __tablename__ = "agent_pool_members"
-
-    pool_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey(fk("agent_pools", "id"), ondelete="CASCADE"),
-        primary_key=True,
-    )
-    agent_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
-    weight: Mapped[int] = mapped_column(Integer(), nullable=False, default=100)
-    sort_order: Mapped[int] = mapped_column(Integer(), nullable=False, default=0)
-
-    pool: Mapped["AgentPool"] = relationship("AgentPool", back_populates="members")
+    agent_token: Mapped["AgentToken | None"] = relationship("AgentToken", back_populates="instances")
 
 
 class Tenant(Base):
@@ -144,11 +122,6 @@ class Policy(Base):
     )
     updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     bound_agent_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
-    bound_agent_pool_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey(fk("agent_pools", "id"), ondelete="SET NULL"),
-        nullable=True,
-    )
 
     tenant: Mapped["Tenant"] = relationship("Tenant", back_populates="policies")
     schedules: Mapped[list["Schedule"]] = relationship(
