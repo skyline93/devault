@@ -114,7 +114,7 @@ export default defineConfig({
         {
           path: '/backup/policies/:policyId',
           name: 'edit-policy',
-          component: './backup/policies/edit',
+          component: './backup/policies/EditRedirect',
           hideInMenu: true,
         },
         {

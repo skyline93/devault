@@ -2,7 +2,7 @@ import { EyeOutlined } from '@ant-design/icons';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { PageContainer, ProTable } from '@ant-design/pro-components';
 import { request, useAccess, useIntl } from '@umijs/max';
-import { App, Button, Drawer, Space, Tag } from 'antd';
+import { App, Button, Drawer, Space, Tag, Typography } from 'antd';
 import React, { useMemo, useRef, useState } from 'react';
 
 const TERMINAL = new Set(['success', 'failed', 'cancelled']);
@@ -50,22 +50,10 @@ const JobsPage: React.FC = () => {
       { title: formatMessage({ id: 'page.jobs.colPlugin' }), dataIndex: 'plugin', width: 80 },
       { title: formatMessage({ id: 'page.jobs.colTrigger' }), dataIndex: 'trigger', width: 100 },
       {
-        title: formatMessage({ id: 'page.jobs.colLeaseHost' }),
-        dataIndex: 'lease_agent_hostname',
-        ellipsis: true,
-        copyable: true,
-      },
-      {
-        title: formatMessage({ id: 'page.jobs.colFinishHost' }),
+        title: formatMessage({ id: 'page.jobs.colAgentHost' }),
         dataIndex: 'completed_agent_hostname',
         ellipsis: true,
         copyable: true,
-      },
-      {
-        title: formatMessage({ id: 'page.jobs.colError' }),
-        dataIndex: 'error_message',
-        ellipsis: true,
-        hideInSearch: true,
       },
       {
         title: formatMessage({ id: 'page.jobs.colActions' }),
@@ -178,11 +166,19 @@ const JobsPage: React.FC = () => {
                 {detail.result_meta == null ? 'null' : JSON.stringify(detail.result_meta, null, 2)}
               </pre>
             </div>
+            {detail.error_message ? (
+              <div>
+                <strong>{formatMessage({ id: 'page.jobs.drawerError' })}</strong>
+                <Typography.Paragraph
+                  copyable
+                  style={{ marginTop: 8, marginBottom: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
+                >
+                  {detail.error_message}
+                </Typography.Paragraph>
+              </div>
+            ) : null}
             <p>
-              <strong>{formatMessage({ id: 'page.jobs.leaseHost' })}</strong>：{detail.lease_agent_hostname ?? dash}
-            </p>
-            <p>
-              <strong>{formatMessage({ id: 'page.jobs.completeHost' })}</strong>：{detail.completed_agent_hostname ?? dash}
+              <strong>{formatMessage({ id: 'page.jobs.agentHost' })}</strong>：{detail.completed_agent_hostname ?? dash}
             </p>
             <p>
               <strong>{formatMessage({ id: 'page.jobs.policyRef' })}</strong>：{detail.policy_id ?? dash}

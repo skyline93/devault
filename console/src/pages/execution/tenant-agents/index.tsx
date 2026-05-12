@@ -1,20 +1,37 @@
 import type { ProColumns } from '@ant-design/pro-components';
 import { PageContainer, ProTable } from '@ant-design/pro-components';
-import { Link, request, useIntl } from '@umijs/max';
-import { Tag } from 'antd';
-import React, { useMemo } from 'react';
+import { request, useIntl } from '@umijs/max';
+import { Button, Tag } from 'antd';
+import React, { useMemo, useState } from 'react';
+import AgentSnapshotDrawer from '../AgentSnapshotDrawer';
+import { agentPrimaryLabel } from '../agentDisplay';
 
 const TenantAgentsPage: React.FC = () => {
   const { formatMessage } = useIntl();
+  const [snapshotOpen, setSnapshotOpen] = useState(false);
+  const [snapshotAgentId, setSnapshotAgentId] = useState<string | undefined>();
+
+  const unknownHost = formatMessage({ id: 'page.policies.agentHostnameUnknown' });
+
   const columns: ProColumns<API.TenantScopedAgentOut>[] = useMemo(
     () => [
       {
-        title: formatMessage({ id: 'page.tenantAgents.colAgentId' }),
-        dataIndex: 'id',
-        copyable: true,
-        render: (_, r) => <Link to={`/execution/fleet/${r.id}`}>{r.id}</Link>,
+        title: formatMessage({ id: 'page.tenantAgents.colHostname' }),
+        dataIndex: 'hostname',
+        ellipsis: true,
+        render: (_, r) => (
+          <Button
+            type="link"
+            style={{ padding: 0, height: 'auto' }}
+            onClick={() => {
+              setSnapshotAgentId(r.id);
+              setSnapshotOpen(true);
+            }}
+          >
+            {agentPrimaryLabel(r.hostname, unknownHost)}
+          </Button>
+        ),
       },
-      { title: formatMessage({ id: 'page.tenantAgents.colHostname' }), dataIndex: 'hostname', ellipsis: true },
       { title: formatMessage({ id: 'page.tenantAgents.colVersion' }), dataIndex: 'agent_release', width: 120 },
       {
         title: formatMessage({ id: 'page.tenantAgents.colGate' }),
@@ -36,7 +53,7 @@ const TenantAgentsPage: React.FC = () => {
         render: (_, r) => (r.backup_path_allowlist?.length ? r.backup_path_allowlist.join(', ') : '—'),
       },
     ],
-    [formatMessage],
+    [formatMessage, unknownHost],
   );
 
   return (
@@ -50,6 +67,14 @@ const TenantAgentsPage: React.FC = () => {
           return { data, success: true, total: data.length };
         }}
         pagination={{ pageSize: 20 }}
+      />
+      <AgentSnapshotDrawer
+        open={snapshotOpen}
+        agentId={snapshotAgentId}
+        onClose={() => {
+          setSnapshotOpen(false);
+          setSnapshotAgentId(undefined);
+        }}
       />
     </PageContainer>
   );
