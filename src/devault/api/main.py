@@ -16,6 +16,7 @@ from devault.api.routes import (
     policies,
     restore_drill_schedules,
     schedules,
+    storage_profiles,
     tenant_agents,
     tenants,
 )
@@ -76,6 +77,10 @@ _OPENAPI_TAGS = [
         "name": "tenant-agents",
         "description": "Agents registered for the effective tenant (`X-DeVault-Tenant-Id`) with host snapshot fields from Register.",
     },
+    {
+        "name": "storage-profiles",
+        "description": "Platform-wide object/local storage connections (encrypted credentials; exactly one active profile).",
+    },
 ]
 
 
@@ -105,6 +110,7 @@ app.include_router(policies.router, prefix="/api/v1")
 app.include_router(schedules.router, prefix="/api/v1")
 app.include_router(restore_drill_schedules.router, prefix="/api/v1")
 app.include_router(tenants.router, prefix="/api/v1")
+app.include_router(storage_profiles.router, prefix="/api/v1")
 app.include_router(auth.router, prefix="/api/v1")
 
 

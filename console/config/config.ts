@@ -200,6 +200,13 @@ export default defineConfig({
           component: './platform/tenants',
         },
         {
+          path: '/platform/storage',
+          name: 'storage',
+          icon: 'DatabaseOutlined',
+          component: './platform/storage',
+          access: 'canPlatformStorage',
+        },
+        {
           path: '/platform/users/new',
           name: 'users-new',
           icon: 'UserAddOutlined',

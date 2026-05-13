@@ -10,7 +10,7 @@ description: 本地与演示环境的服务角色与启动方式
 
 ## 启动与 Profiles
 
-无 profile 时仅启动 **内置数据面**：**postgres**、**redis**、**minio**、**minio-init**。
+无 profile 时仅启动 **内置数据面**：**postgres**、**redis**、**minio**。
 
 | Profile | 服务 |
 |---------|------|
@@ -63,8 +63,7 @@ docker compose --profile with-control-plane --profile with-agent --profile with-
 |------|------|
 | **postgres** | 控制面元数据库；DR 见 [控制面元数据库 DR](./control-plane-database-dr.md) |
 | **redis** | Redis |
-| **minio** | S3 兼容存储 |
-| **minio-init** | 一次性 `mc mb` 建桶；运行时**不** `CreateBucket` |
+| **minio** | S3 兼容存储；**桶须事先创建**（`mc mb` 或控制台），与 **storage profile** 一致 |
 | **iam**（profile **with-control-plane**） | IAM HTTP；与 **api** 共用 Postgres / Redis（Redis **db 1**） |
 | **api**（profile **with-control-plane**） | HTTP + gRPC；启动含 `alembic upgrade head`；默认 **`DEVAULT_GRPC_REGISTRATION_SECRET`** 支持 Agent **Register** |
 | **scheduler**（profile **with-control-plane**） | Cron 创建任务；**不**跑 `alembic` |

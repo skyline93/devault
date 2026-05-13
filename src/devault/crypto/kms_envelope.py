@@ -11,7 +11,7 @@ from devault.settings import Settings
 
 
 def build_kms_client(settings: Settings) -> BaseClient:
-    region = settings.kms_region or settings.s3_region
+    region = settings.kms_region or settings.aws_default_region
     return boto3.session.Session().client("kms", region_name=region)
 
 

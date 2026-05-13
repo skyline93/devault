@@ -59,11 +59,14 @@ minio:
   size: 20Gi
   rootUser: minioadmin
   rootPassword: minioadmin
+  # Reference name for docs / future hooks; not injected into api/scheduler (create bucket + profile manually).
   bucket: devault
 
 secrets:
   # Override in production (e.g. helm --set-file, SealedSecrets, ExternalSecrets).
   grpcRegistrationSecret: devault-helm-register-secret
+  # Fernet key for encrypting storage profile static credentials at rest (must match across api/scheduler).
+  storageConfigMasterKey: W6G1v87JXm6Q3J8Iyo7ACkH3vDXqCfuT6ItcL47UEzI=
 
 devault:
   # When postgresql.enabled is false, set a full SQLAlchemy URL (e.g. managed RDS).

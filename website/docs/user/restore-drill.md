@@ -16,7 +16,7 @@ description: restore_drill、Cron 调度与演练报告
 
 ## 前置条件
 
-- 控制面 **`DEVAULT_STORAGE_BACKEND=s3`**。
+- 控制面当前激活的 **`storage_profiles.storage_type` 为 `s3`**（预签名与直传）。
 - Agent **`DEVAULT_ALLOWED_PATH_PREFIXES`** 包含演练目录前缀（如 **`/restore`**）。
 - artifact 加密时 Agent 配置 **`DEVAULT_ARTIFACT_ENCRYPTION_KEY`**。
 

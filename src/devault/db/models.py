@@ -11,6 +11,40 @@ from devault.db.base import Base
 from devault.db.constants import prefixed_fk as fk
 
 
+class StorageProfile(Base):
+    """Platform-wide object/local storage connection (exactly one row may be ``is_active``)."""
+
+    __tablename__ = "storage_profiles"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    slug: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
+    storage_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean(), nullable=False, default=False)
+    local_root: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    s3_endpoint: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    s3_region: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    s3_bucket: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    s3_use_ssl: Mapped[bool] = mapped_column(Boolean(), nullable=False, default=False)
+    encrypted_access_key: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    encrypted_secret_key: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    s3_assume_role_arn: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    s3_assume_role_external_id: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    artifacts: Mapped[list["Artifact"]] = relationship("Artifact", back_populates="storage_profile")
+
+
 class AgentToken(Base):
     """Tenant-scoped long-lived bearer for edge Agent gRPC (plaintext shown once at create)."""
 
@@ -83,9 +117,6 @@ class Tenant(Base):
     )
     require_encrypted_artifacts: Mapped[bool] = mapped_column(Boolean(), nullable=False, default=False)
     kms_envelope_key_id: Mapped[str | None] = mapped_column(String(2048), nullable=True)
-    s3_bucket: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    s3_assume_role_arn: Mapped[str | None] = mapped_column(String(2048), nullable=True)
-    s3_assume_role_external_id: Mapped[str | None] = mapped_column(String(1224), nullable=True)
     policy_paths_allowlist_mode: Mapped[str] = mapped_column(String(16), nullable=False, default="off")
     require_mfa_for_admins: Mapped[bool] = mapped_column(Boolean(), nullable=False, default=False)
     sso_oidc_issuer: Mapped[str | None] = mapped_column(Text(), nullable=True)
@@ -254,6 +285,12 @@ class Artifact(Base):
         nullable=False,
         index=True,
     )
+    storage_profile_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(fk("storage_profiles", "id"), ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
     storage_backend: Mapped[str] = mapped_column(String(16), nullable=False)
     bundle_key: Mapped[str] = mapped_column(String(1024), nullable=False)
     manifest_key: Mapped[str] = mapped_column(String(1024), nullable=False)
@@ -270,3 +307,4 @@ class Artifact(Base):
     legal_hold: Mapped[bool] = mapped_column(Boolean(), nullable=False, default=False)
 
     job: Mapped["Job"] = relationship("Job", back_populates="artifact")
+    storage_profile: Mapped["StorageProfile | None"] = relationship("StorageProfile", back_populates="artifacts")

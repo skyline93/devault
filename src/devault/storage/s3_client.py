@@ -1,19 +1,16 @@
-"""Build boto3 S3 clients for the control plane: static keys, AssumeRole, or default chain."""
+"""Build boto3 S3 clients from a resolved connection spec (DB-backed storage profiles)."""
 
 from __future__ import annotations
 
 import threading
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import boto3
 from botocore.client import BaseClient
 
 from devault.settings import Settings
-
-if TYPE_CHECKING:
-    from devault.db.models import Tenant
 
 _CACHE_LOCK = threading.Lock()
 _ASSUME_ROLE_CACHE: dict[str, _CachedAssumeRole] = {}
@@ -33,22 +30,23 @@ class _CachedAssumeRole:
     expires_at: datetime
 
 
-def resolved_assume_role_pair(settings: Settings, tenant: "Tenant | None") -> tuple[str | None, str | None]:
-    """STS AssumeRole target: tenant-scoped BYOB role wins over global settings."""
-    if tenant is not None and tenant.s3_assume_role_arn:
-        return tenant.s3_assume_role_arn, tenant.s3_assume_role_external_id
-    return settings.s3_assume_role_arn, settings.s3_assume_role_external_id
+@dataclass(frozen=True)
+class S3ConnSpec:
+    """Resolved S3-compatible endpoint and credentials for one storage profile."""
 
-
-def effective_s3_bucket(settings: Settings, tenant: "Tenant | None") -> str:
-    """Resolve S3 bucket for API calls and presigns (tenant override or global default)."""
-    if tenant is not None and tenant.s3_bucket:
-        return tenant.s3_bucket
-    return settings.s3_bucket
+    endpoint: str | None
+    region: str
+    use_ssl: bool
+    bucket: str
+    access_key: str | None
+    secret_key: str | None
+    assume_role_arn: str | None
+    assume_role_external_id: str | None
 
 
 def _assume_role_cache_key(
     settings: Settings,
+    spec: S3ConnSpec,
     *,
     role_arn: str,
     external_id: str | None,
@@ -59,31 +57,32 @@ def _assume_role_cache_key(
             external_id or "",
             settings.s3_assume_role_session_name,
             str(settings.s3_assume_role_duration_seconds),
-            settings.s3_sts_region or settings.s3_region,
+            settings.s3_sts_region or spec.region,
             settings.s3_sts_endpoint_url or "",
-            settings.s3_access_key or "",
-            settings.s3_secret_key or "",
+            spec.access_key or "",
+            spec.secret_key or "",
         ]
     )
 
 
-def _session_kwargs_for_base_chain(settings: Settings) -> dict[str, Any]:
-    if settings.s3_access_key and settings.s3_secret_key:
+def _session_kwargs_for_base_chain(spec: S3ConnSpec) -> dict[str, Any]:
+    if spec.access_key and spec.secret_key:
         return {
-            "aws_access_key_id": settings.s3_access_key,
-            "aws_secret_access_key": settings.s3_secret_key,
+            "aws_access_key_id": spec.access_key,
+            "aws_secret_access_key": spec.secret_key,
         }
     return {}
 
 
 def _fetch_assume_role_credentials(
     settings: Settings,
+    spec: S3ConnSpec,
     *,
     role_arn: str,
     external_id: str | None,
 ) -> _CachedAssumeRole:
-    session = boto3.session.Session(**_session_kwargs_for_base_chain(settings))
-    sts_region = settings.s3_sts_region or settings.s3_region
+    session = boto3.session.Session(**_session_kwargs_for_base_chain(spec))
+    sts_region = settings.s3_sts_region or spec.region
     sts_kwargs: dict[str, Any] = {
         "region_name": sts_region,
         "use_ssl": settings.s3_sts_use_ssl,
@@ -113,11 +112,11 @@ def _fetch_assume_role_credentials(
     )
 
 
-def _credentials_for_s3(settings: Settings, *, tenant: "Tenant | None" = None) -> dict[str, Any]:
+def _credentials_for_spec(settings: Settings, spec: S3ConnSpec) -> dict[str, Any]:
     """Return kwargs for boto3 Session().client('s3', **credentials, ...)."""
-    role_arn, ext_id = resolved_assume_role_pair(settings, tenant)
+    role_arn = spec.assume_role_arn
     if role_arn:
-        key = _assume_role_cache_key(settings, role_arn=role_arn, external_id=ext_id)
+        key = _assume_role_cache_key(settings, spec, role_arn=role_arn, external_id=spec.assume_role_external_id)
         refresh_margin = timedelta(minutes=5)
         now = datetime.now(timezone.utc)
         with _CACHE_LOCK:
@@ -128,7 +127,12 @@ def _credentials_for_s3(settings: Settings, *, tenant: "Tenant | None" = None) -
                     "aws_secret_access_key": cached.secret_access_key,
                     "aws_session_token": cached.session_token,
                 }
-            fresh = _fetch_assume_role_credentials(settings, role_arn=role_arn, external_id=ext_id)
+            fresh = _fetch_assume_role_credentials(
+                settings,
+                spec,
+                role_arn=role_arn,
+                external_id=spec.assume_role_external_id,
+            )
             _ASSUME_ROLE_CACHE[key] = fresh
         return {
             "aws_access_key_id": fresh.access_key_id,
@@ -136,48 +140,41 @@ def _credentials_for_s3(settings: Settings, *, tenant: "Tenant | None" = None) -
             "aws_session_token": fresh.session_token,
         }
 
-    if settings.s3_access_key and settings.s3_secret_key:
+    if spec.access_key and spec.secret_key:
         return {
-            "aws_access_key_id": settings.s3_access_key,
-            "aws_secret_access_key": settings.s3_secret_key,
+            "aws_access_key_id": spec.access_key,
+            "aws_secret_access_key": spec.secret_key,
         }
 
     return {}
 
 
-def _make_s3_client(settings: Settings, creds: dict[str, Any]) -> BaseClient:
+def _make_s3_client(settings: Settings, spec: S3ConnSpec, creds: dict[str, Any]) -> BaseClient:
     session = boto3.session.Session()
     return session.client(
         "s3",
-        endpoint_url=settings.s3_endpoint or None,
-        region_name=settings.s3_region,
-        use_ssl=settings.s3_use_ssl,
+        endpoint_url=spec.endpoint or None,
+        region_name=spec.region,
+        use_ssl=spec.use_ssl,
         **creds,
     )
 
 
-def build_s3_client_for_tenant(settings: Settings, tenant: "Tenant | None") -> BaseClient:
-    """S3 client using tenant BYOB AssumeRole when configured, else global settings."""
-    creds = _credentials_for_s3(settings, tenant=tenant)
-    return _make_s3_client(settings, creds)
-
-
-def build_s3_client(settings: Settings) -> BaseClient:
+def build_s3_client_from_spec(settings: Settings, spec: S3ConnSpec) -> BaseClient:
     """
     Control-plane S3 client for presigning, multipart control APIs, and existence checks.
 
-    Resolution order when ``DEVAULT_STORAGE_BACKEND=s3``:
+    Resolution order:
 
-    1. If ``DEVAULT_S3_ASSUME_ROLE_ARN`` is set: call STS ``AssumeRole`` using either
-       static ``DEVAULT_S3_ACCESS_KEY`` / ``DEVAULT_S3_SECRET_KEY`` (optional) or the
-       process default credential chain (IRSA, instance profile, env), then build S3
-       with the returned temporary keys. Credentials are cached until shortly before expiry.
-    2. Else if static keys are set: S3 client with those keys.
-    3. Else: S3 client using the default credential chain only (no AssumeRole).
+    1. If ``spec.assume_role_arn`` is set: STS ``AssumeRole`` using static keys from ``spec`` (if any)
+       or the process default credential chain, then S3 with temporary keys (cached).
+    2. Else if static keys on ``spec``: S3 client with those keys.
+    3. Else: S3 client using the default credential chain only.
     """
-    return build_s3_client_for_tenant(settings, None)
+    creds = _credentials_for_spec(settings, spec)
+    return _make_s3_client(settings, spec, creds)
 
 
-def s3_client_from_settings(settings: Settings) -> BaseClient:
-    """Backward-compatible alias used by gRPC servicer and presign helpers."""
-    return build_s3_client(settings)
+def s3_client_from_spec(settings: Settings, spec: S3ConnSpec) -> BaseClient:
+    """Alias used by gRPC servicer and presign helpers."""
+    return build_s3_client_from_spec(settings, spec)

@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session, aliased
 from devault import __version__ as server_release_version
 from devault.core.enums import JobKind, JobStatus, PluginName
 from devault.core.locking import release_policy_job_lock, try_acquire_policy_job_lock
-from devault.db.models import Artifact, EdgeAgent, Job, Policy, Tenant
+from devault.db.models import Artifact, EdgeAgent, Job, Policy, StorageProfile, Tenant
 from devault.db.session import SessionLocal
 from devault.security.agent_token_auth import (
     auth_context_from_agent_token,
@@ -53,7 +53,8 @@ from devault.services.edge_agents import (
     upsert_edge_agent,
 )
 from devault.settings import Settings, get_settings
-from devault.storage import get_storage_for_tenant
+from devault.services.storage_profiles import get_active_profile, require_active_profile, s3_conn_spec_from_profile
+from devault.storage import get_storage_for_active_profile, get_storage_for_artifact_row, get_storage_for_profile
 from devault.storage.multipart import (
     abort_multipart_upload_best_effort,
     build_multipart_part_presigns,
@@ -64,7 +65,8 @@ from devault.storage.multipart import (
     start_multipart_upload,
 )
 from devault.storage.presign import presign_get_object, presign_put_object
-from devault.storage.s3_client import build_s3_client_for_tenant, effective_s3_bucket
+from devault.storage.s3 import S3Storage
+from devault.storage.s3_client import build_s3_client_from_spec
 
 logger = logging.getLogger(__name__)
 
@@ -480,13 +482,6 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
             audit_extra=grant_audit,
         ):
             auth_ctx = _authenticate_grpc(context, settings)
-            if settings.storage_backend != "s3":
-                context.abort(
-                    grpc.StatusCode.FAILED_PRECONDITION,
-                    "Agent storage grants require DEVAULT_STORAGE_BACKEND=s3 on control plane",
-                )
-                raise RuntimeError("unreachable")
-
             try:
                 agent_uuid = uuid.UUID(request.agent_id)
                 job_uuid = uuid.UUID(request.job_id)
@@ -497,6 +492,14 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
 
             db = SessionLocal()
             try:
+                prof_gate = get_active_profile(db)
+                if prof_gate is None or prof_gate.storage_type != "s3":
+                    context.abort(
+                        grpc.StatusCode.FAILED_PRECONDITION,
+                        "Agent storage grants require an active S3 storage profile on the control plane",
+                    )
+                    raise RuntimeError("unreachable")
+
                 job = db.get(Job, job_uuid)
                 if job is None:
                     context.abort(grpc.StatusCode.NOT_FOUND, "job not found")
@@ -510,14 +513,19 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
                     context.abort(grpc.StatusCode.FAILED_PRECONDITION, "job not active")
 
                 ttl = int(settings.presign_ttl_seconds)
-                tenant = db.get(Tenant, job.tenant_id)
-                client = build_s3_client_for_tenant(settings, tenant)
-                bucket = effective_s3_bucket(settings, tenant)
                 ol_mode, ol_until = object_lock_params_from_backup_cfg(job.config_snapshot)
 
                 if request.intent == agent_pb2.STORAGE_INTENT_WRITE:
                     if job.kind != JobKind.BACKUP.value:
                         context.abort(grpc.StatusCode.INVALID_ARGUMENT, "WRITE only for backup jobs")
+                    try:
+                        active = require_active_profile(db)
+                        write_spec = s3_conn_spec_from_profile(active, settings)
+                    except ValueError as e:
+                        context.abort(grpc.StatusCode.FAILED_PRECONDITION, str(e))
+                        raise RuntimeError("unreachable") from e
+                    client = build_s3_client_from_spec(settings, write_spec)
+                    bucket = write_spec.bucket
                     bundle_key, manifest_key = artifact_object_keys(settings, job.id, job.tenant_id)
                     manifest_url = presign_put_object(
                         client,
@@ -691,6 +699,24 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
                             "restore artifact tenant does not match job tenant",
                         )
                         raise RuntimeError("unreachable")
+                    if art.storage_profile_id is None:
+                        try:
+                            prof = require_active_profile(db)
+                        except ValueError as e:
+                            context.abort(grpc.StatusCode.FAILED_PRECONDITION, str(e))
+                            raise RuntimeError("unreachable") from e
+                    else:
+                        prof = db.get(StorageProfile, art.storage_profile_id)
+                        if prof is None:
+                            context.abort(grpc.StatusCode.NOT_FOUND, "artifact storage profile missing")
+                            raise RuntimeError("unreachable")
+                    try:
+                        read_spec = s3_conn_spec_from_profile(prof, settings)
+                    except ValueError as e:
+                        context.abort(grpc.StatusCode.FAILED_PRECONDITION, str(e))
+                        raise RuntimeError("unreachable") from e
+                    client = build_s3_client_from_spec(settings, read_spec)
+                    bucket = read_spec.bucket
                     manifest_get_url = presign_get_object(
                         client, bucket=bucket, key=art.manifest_key, expires_in=ttl
                     )
@@ -802,7 +828,12 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
                         ).inc()
                     elif job.kind == JobKind.BACKUP.value:
                         tenant_row = db.get(Tenant, job.tenant_id)
-                        storage = get_storage_for_tenant(settings, tenant_row)
+                        try:
+                            active_profile = require_active_profile(db)
+                            storage = get_storage_for_profile(db, settings, active_profile.id)
+                        except ValueError as e:
+                            context.abort(grpc.StatusCode.FAILED_PRECONDITION, str(e))
+                            raise RuntimeError("unreachable") from e
                         bundle_key = request.bundle_key or ""
                         manifest_key = request.manifest_key or ""
                         if not bundle_key or not manifest_key:
@@ -847,8 +878,14 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
                                 }
                                 for p in parts_sorted
                             ]
-                            s3c = build_s3_client_for_tenant(settings, tenant_row)
-                            bucket_eff = effective_s3_bucket(settings, tenant_row)
+                            if not isinstance(storage, S3Storage):
+                                context.abort(
+                                    grpc.StatusCode.FAILED_PRECONDITION,
+                                    "multipart completion requires s3 storage backend",
+                                )
+                                raise RuntimeError("unreachable")
+                            s3c = storage.client
+                            bucket_eff = storage.bucket
                             try:
                                 s3c.complete_multipart_upload(
                                     Bucket=bucket_eff,
@@ -936,6 +973,7 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
                         art = Artifact(
                             tenant_id=job.tenant_id,
                             job_id=job.id,
+                            storage_profile_id=active_profile.id,
                             storage_backend=storage.backend_name,
                             bundle_key=bundle_key,
                             manifest_key=manifest_key,
@@ -977,18 +1015,24 @@ class AgentControlServicer(agent_pb2_grpc.AgentControlServicer):
                             *job_terminal_label_values(job, status="success", error_class="none"),
                         ).inc()
                 else:
-                    if job.kind == JobKind.BACKUP.value and settings.storage_backend == "s3":
-                        uid = job.bundle_wip_multipart_upload_id
-                        if uid:
-                            tenant_row = db.get(Tenant, job.tenant_id)
-                            s3c = build_s3_client_for_tenant(settings, tenant_row)
-                            bk, _mk = artifact_object_keys(settings, job.id, job.tenant_id)
-                            abort_multipart_upload_best_effort(
-                                s3c,
-                                bucket=effective_s3_bucket(settings, tenant_row),
-                                key=bk,
-                                upload_id=uid,
-                            )
+                    if job.kind == JobKind.BACKUP.value:
+                        ap = get_active_profile(db)
+                        if ap is not None and ap.storage_type == "s3":
+                            uid = job.bundle_wip_multipart_upload_id
+                            if uid:
+                                try:
+                                    storage_abort = get_storage_for_active_profile(db, settings)
+                                except ValueError:
+                                    storage_abort = None
+                                if isinstance(storage_abort, S3Storage):
+                                    s3c = storage_abort.client
+                                    bk, _mk = artifact_object_keys(settings, job.id, job.tenant_id)
+                                    abort_multipart_upload_best_effort(
+                                        s3c,
+                                        bucket=storage_abort.bucket,
+                                        key=bk,
+                                        upload_id=uid,
+                                    )
                     if job.kind == JobKind.PATH_PRECHECK.value:
                         raw = (request.result_summary_json or "").strip()
                         if raw:

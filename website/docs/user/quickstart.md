@@ -10,7 +10,7 @@ description: 使用 Docker Compose 最短路径跑通备份与恢复
 
 ## 1. 启动栈
 
-仅内置 **Postgres / Redis / MinIO / minio-init**（无 profile）：
+仅内置 **Postgres / Redis / MinIO**（无 profile）：
 
 ```bash
 cd deploy

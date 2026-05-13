@@ -19,7 +19,7 @@ description: 运行时版本与外部依赖服务
 | **Redis** | 协调与锁（同策略备份互斥等） |
 | **S3 兼容存储** | 生产路径下 Artifact 与预签名直传 |
 
-控制面在 `DEVAULT_STORAGE_BACKEND=s3` 时为 Agent 生成预签名 URL；本地单测可使用 `local` 等非 S3 后端（见 [本地开发](../engineering/local-setup.md)）。
+控制面在激活 profile 为 **`s3`** 时为 Agent 生成预签名 URL；本地开发可激活 **`local`** profile（见 [本地开发](../engineering/local-setup.md)）。
 
 ## Agent 侧
 

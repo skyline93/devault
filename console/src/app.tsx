@@ -64,6 +64,7 @@ export async function getInitialState(): Promise<{
   canAdmin?: boolean;
   canWrite?: boolean;
   canInviteMembers?: boolean;
+  canPlatformStorage?: boolean;
   needsPasswordChange?: boolean;
   fetchUserInfo?: () => Promise<API.CurrentUser | undefined>;
 }> {
@@ -117,6 +118,7 @@ export async function getInitialState(): Promise<{
     canAdmin: flags.canAdmin,
     canWrite: flags.canWrite,
     canInviteMembers: flags.canInviteMembers,
+    canPlatformStorage: flags.canPlatformStorage,
     needsPasswordChange: flags.needsPasswordChange,
     settings: defaultSettings as Partial<ProLayoutProps>,
   };

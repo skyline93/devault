@@ -8,7 +8,8 @@ import pytest
 
 from devault.settings import Settings
 from devault.storage.s3_client import (
-    build_s3_client,
+    S3ConnSpec,
+    build_s3_client_from_spec,
     reset_assume_role_credential_cache,
 )
 
@@ -24,14 +25,13 @@ def _base_settings(**kwargs: object) -> Settings:
     defaults: dict = {
         "database_url": "postgresql+psycopg://localhost/devault",
         "redis_url": "redis://localhost:6379/0",
-        "s3_region": "us-east-1",
-        "s3_use_ssl": True,
+        "aws_default_region": "us-east-1",
     }
     defaults.update(kwargs)
     return Settings(**defaults)
 
 
-def test_build_s3_client_uses_static_keys(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_build_s3_client_from_spec_uses_static_keys(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: dict = {}
     s3_mock = MagicMock()
 
@@ -42,19 +42,25 @@ def test_build_s3_client_uses_static_keys(monkeypatch: pytest.MonkeyPatch) -> No
         raise AssertionError(service_name)
 
     monkeypatch.setattr(boto3.session.Session, "client", fake_client)
-    s = _base_settings(
-        s3_access_key="AKIA_TEST",
-        s3_secret_key="secret",
-        s3_endpoint="https://s3.example.com",
+    s = _base_settings()
+    spec = S3ConnSpec(
+        endpoint="https://s3.example.com",
+        region="us-east-1",
+        use_ssl=True,
+        bucket="b",
+        access_key="AKIA_TEST",
+        secret_key="secret",
+        assume_role_arn=None,
+        assume_role_external_id=None,
     )
-    c = build_s3_client(s)
+    c = build_s3_client_from_spec(s, spec)
     assert c is s3_mock
     assert captured["aws_access_key_id"] == "AKIA_TEST"
     assert captured["aws_secret_access_key"] == "secret"
     assert "aws_session_token" not in captured
 
 
-def test_build_s3_client_assume_role_then_s3(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_build_s3_client_from_spec_assume_role_then_s3(monkeypatch: pytest.MonkeyPatch) -> None:
     sts = MagicMock()
     sts.assume_role.return_value = {
         "Credentials": {
@@ -80,11 +86,20 @@ def test_build_s3_client_assume_role_then_s3(monkeypatch: pytest.MonkeyPatch) ->
 
     monkeypatch.setattr(boto3.session.Session, "client", fake_client)
     s = _base_settings(
-        s3_region="eu-west-1",
-        s3_assume_role_arn="arn:aws:iam::111111111111:role/devault-s3",
+        aws_default_region="eu-west-1",
         s3_assume_role_session_name="session-x",
     )
-    c = build_s3_client(s)
+    spec = S3ConnSpec(
+        endpoint="https://s3.example.com",
+        region="eu-west-1",
+        use_ssl=True,
+        bucket="b",
+        access_key=None,
+        secret_key=None,
+        assume_role_arn="arn:aws:iam::111111111111:role/devault-s3",
+        assume_role_external_id=None,
+    )
+    c = build_s3_client_from_spec(s, spec)
     assert c is s3
     sts.assume_role.assert_called_once()
     ar_kw = sts.assume_role.call_args.kwargs
@@ -112,10 +127,17 @@ def test_assume_role_credentials_cached(monkeypatch: pytest.MonkeyPatch) -> None
         raise AssertionError(service_name)
 
     monkeypatch.setattr(boto3.session.Session, "client", fake_client)
-    s = _base_settings(
-        s3_region="us-east-1",
-        s3_assume_role_arn="arn:aws:iam::1:role/r",
+    s = _base_settings(aws_default_region="us-east-1")
+    spec = S3ConnSpec(
+        endpoint="https://s3.amazonaws.com",
+        region="us-east-1",
+        use_ssl=True,
+        bucket="b",
+        access_key=None,
+        secret_key=None,
+        assume_role_arn="arn:aws:iam::1:role/r",
+        assume_role_external_id=None,
     )
-    build_s3_client(s)
-    build_s3_client(s)
+    build_s3_client_from_spec(s, spec)
+    build_s3_client_from_spec(s, spec)
     assert sts.assume_role.call_count == 1

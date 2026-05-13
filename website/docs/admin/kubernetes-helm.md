@@ -69,7 +69,7 @@ helm test dv -n devault
 ## 与 Compose 的差异
 
 - **`api` Pod** 启动时执行 `alembic upgrade head`；**勿**多副本并发迁移。
-- MinIO 桶由 **`api` initContainer** `mc mb` 创建。
+- MinIO/S3 **桶**不在 Chart 内创建；请在集群外或 Job 中 **`mc mb`** / 控制台创建，并与 **storage profile** 一致。
 - Helm 默认不启用 Agent；启用后为 `emptyDir`，需自备数据源。
 
 ## 源码位置

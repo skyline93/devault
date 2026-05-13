@@ -11,13 +11,16 @@ export default function access(initialState: {
   canAdmin?: boolean;
   canWrite?: boolean;
   canInviteMembers?: boolean;
+  canPlatformStorage?: boolean;
   needsPasswordChange?: boolean;
 }) {
-  const { currentUser, canAdmin, canWrite, canInviteMembers, needsPasswordChange } = initialState ?? {};
+  const { currentUser, canAdmin, canWrite, canInviteMembers, canPlatformStorage, needsPasswordChange } =
+    initialState ?? {};
   const snapshot = {
     canAdmin: Boolean(canAdmin),
     canWrite: Boolean(canWrite),
     canInviteMembers: Boolean(canInviteMembers),
+    canPlatformStorage: Boolean(canPlatformStorage),
     needsPasswordChange: Boolean(needsPasswordChange),
     isAuditor: currentUser?.role === 'auditor',
   };

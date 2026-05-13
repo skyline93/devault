@@ -61,7 +61,7 @@ flowchart TB
 - **控制面 → 对象存储**：清单、multipart 收尾、HEAD 与保留期删除等**控制类**调用。
 - **数据库迁移**：多 api 副本时 **`alembic upgrade head` 只应执行一次**（发布 Job 或单实例首启），见 [数据库迁移](../admin/database-migrations.md)。
 
-`DEVAULT_STORAGE_BACKEND=s3` 时启用预签名与直传；非 S3 后端仅用于有限开发场景（见 [本地开发](../engineering/local-setup.md)）。
+当前激活的 **`storage_profiles.storage_type` 为 `s3`** 时启用预签名与直传；`local` 等仅用于有限开发场景（见 [本地开发](../engineering/local-setup.md)）。
 
 ## 逻辑组件（按职责）
 
@@ -115,7 +115,7 @@ flowchart LR
 | **Agent gRPC** | 租约、心跳、进度、**CompleteJob** 等与 Agent 的契约（见 [gRPC 参考](../reference/grpc-services.md)） |
 | **作业与租约** | 状态机、并发锁、取消与重试 |
 | **调度器** | 按 Cron **创建**待处理任务，不执行备份体 |
-| **预签名与存储授权** | 在 `s3` 后端下生成预签名 URL |
+| **预签名与存储授权** | 激活 profile 为 `s3` 时生成预签名 URL |
 | **策略 / Artifact 元数据** | 策略、调度、artifact 索引持久化 |
 
 ## 与运行进程的对照

@@ -26,12 +26,8 @@ pip install -e ".[dev]"
 export DEVAULT_DATABASE_URL=postgresql+psycopg://devault:devault@localhost:5432/devault
 export DEVAULT_REDIS_URL=redis://localhost:6379/0
 export DEVAULT_API_TOKEN=dev
-export DEVAULT_STORAGE_BACKEND=s3
-export DEVAULT_S3_ENDPOINT=http://127.0.0.1:9000
-export DEVAULT_S3_ACCESS_KEY=minioadmin
-export DEVAULT_S3_SECRET_KEY=minioadmin
-export DEVAULT_S3_BUCKET=devault
-export DEVAULT_S3_USE_SSL=false
+export DEVAULT_STORAGE_CONFIG_MASTER_KEY='<fernet-key-from-cryptography.fernet.Fernet.generate_key>'
+# 迁移不会插入默认 storage profile；在控制台创建并激活 profile（S3 或 local）后再跑备份。
 export DEVAULT_GRPC_LISTEN=0.0.0.0:50051
 
 alembic upgrade head
@@ -47,4 +43,4 @@ export DEVAULT_ALLOWED_PATH_PREFIXES=/data,/restore
 devault-agent
 ```
 
-单测可使用 `DEVAULT_STORAGE_BACKEND=local` 缩短路径。
+单测可配合 fixture 插入并激活 **`storage_type=local`** 的 profile，以缩短本地路径。

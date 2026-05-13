@@ -36,9 +36,6 @@ class TenantOut(BaseModel):
     created_at: datetime
     require_encrypted_artifacts: bool = False
     kms_envelope_key_id: str | None = None
-    s3_bucket: str | None = None
-    s3_assume_role_arn: str | None = None
-    s3_assume_role_external_id: str | None = None
     policy_paths_allowlist_mode: Literal["off", "enforce", "warn"] = Field(
         "off",
         description="When enforce/warn: file policy paths must fall under enrolled Agents' "
@@ -70,9 +67,6 @@ class TenantPatch(BaseModel):
     name: str | None = Field(None, min_length=1, max_length=255)
     require_encrypted_artifacts: bool | None = None
     kms_envelope_key_id: str | None = None
-    s3_bucket: str | None = None
-    s3_assume_role_arn: str | None = None
-    s3_assume_role_external_id: str | None = None
     policy_paths_allowlist_mode: Literal["off", "enforce", "warn"] | None = None
     require_mfa_for_admins: bool | None = None
     sso_oidc_issuer: str | None = None
@@ -83,6 +77,54 @@ class TenantPatch(BaseModel):
     sso_jit_provisioning: bool | None = None
     sso_saml_entity_id: str | None = None
     sso_saml_acs_url: str | None = None
+
+
+class StorageProfileOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    slug: str
+    storage_type: Literal["s3", "local"]
+    is_active: bool
+    local_root: str | None = None
+    s3_endpoint: str | None = None
+    s3_region: str | None = None
+    s3_bucket: str | None = None
+    has_static_credentials: bool = False
+    s3_assume_role_arn: str | None = None
+    s3_assume_role_external_id: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class StorageProfileCreate(BaseModel):
+    """For ``local``, ``name`` and ``slug`` are required. For ``s3``, they are optional (server generates)."""
+
+    name: str | None = Field(None, max_length=255)
+    slug: str | None = Field(None, max_length=64)
+    storage_type: Literal["s3", "local"]
+    is_active: bool = False
+    local_root: str | None = None
+    s3_endpoint: str | None = None
+    s3_region: str | None = Field(None, max_length=64)
+    s3_bucket: str | None = None
+    s3_access_key: str | None = Field(None, description="Plaintext; stored encrypted.")
+    s3_secret_key: str | None = Field(None, description="Plaintext; stored encrypted.")
+    s3_assume_role_arn: str | None = None
+    s3_assume_role_external_id: str | None = None
+
+
+class StorageProfilePatch(BaseModel):
+    name: str | None = Field(None, min_length=1, max_length=255)
+    local_root: str | None = None
+    s3_endpoint: str | None = None
+    s3_region: str | None = None
+    s3_bucket: str | None = None
+    s3_access_key: str | None = None
+    s3_secret_key: str | None = None
+    s3_assume_role_arn: str | None = None
+    s3_assume_role_external_id: str | None = None
 
 
 class SessionTenantRow(BaseModel):
@@ -301,6 +343,7 @@ class ArtifactOut(BaseModel):
     id: uuid.UUID
     tenant_id: uuid.UUID
     job_id: uuid.UUID
+    storage_profile_id: uuid.UUID | None = None
     storage_backend: str
     bundle_key: str
     manifest_key: str

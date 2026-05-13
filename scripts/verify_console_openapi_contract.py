@@ -33,6 +33,10 @@ def main() -> int:
         print("missing path /api/v1/auth/session", file=sys.stderr)
         failed = True
 
+    if "/api/v1/storage-profiles" not in paths:
+        print("missing path /api/v1/storage-profiles (storage profiles API)", file=sys.stderr)
+        failed = True
+
     if "/api/v1/jobs" not in paths:
         print("missing path /api/v1/jobs", file=sys.stderr)
         failed = True
@@ -109,6 +113,16 @@ def main() -> int:
             if needle not in pp:
                 print(f"PolicyOut.properties missing {needle!r}", file=sys.stderr)
                 failed = True
+
+    art = schemas.get("ArtifactOut")
+    if not isinstance(art, dict):
+        print("missing components.schemas.ArtifactOut", file=sys.stderr)
+        failed = True
+    else:
+        ap = _props(art)
+        if "storage_profile_id" not in ap:
+            print("ArtifactOut.properties missing 'storage_profile_id'", file=sys.stderr)
+            failed = True
 
     return 1 if failed else 0
 

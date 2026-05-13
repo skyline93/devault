@@ -52,9 +52,6 @@ const TenantsAdminPage: React.FC = () => {
                 require_encrypted_artifacts: r.require_encrypted_artifacts,
                 require_mfa_for_admins: Boolean(r.require_mfa_for_admins),
                 kms_envelope_key_id: r.kms_envelope_key_id ?? '',
-                s3_bucket: r.s3_bucket ?? '',
-                s3_assume_role_arn: r.s3_assume_role_arn ?? '',
-                s3_assume_role_external_id: r.s3_assume_role_external_id ?? '',
                 policy_paths_allowlist_mode: r.policy_paths_allowlist_mode,
                 sso_oidc_issuer: r.sso_oidc_issuer ?? '',
                 sso_oidc_audience: r.sso_oidc_audience ?? '',
@@ -189,12 +186,6 @@ const TenantsAdminPage: React.FC = () => {
           body.sso_saml_acs_url = sacs.length ? sacs : '';
           const kms = String(v.kms_envelope_key_id ?? '').trim();
           body.kms_envelope_key_id = kms.length ? kms : '';
-          const b = String(v.s3_bucket ?? '').trim();
-          body.s3_bucket = b.length ? b : '';
-          const arn = String(v.s3_assume_role_arn ?? '').trim();
-          body.s3_assume_role_arn = arn.length ? arn : '';
-          const ext = String(v.s3_assume_role_external_id ?? '').trim();
-          body.s3_assume_role_external_id = ext.length ? ext : '';
           await request(`/api/v1/tenants/${row.id}`, { method: 'PATCH', data: body });
           message.success(formatMessage({ id: 'page.tenants.updated' }));
           setOpen(false);
@@ -213,15 +204,6 @@ const TenantsAdminPage: React.FC = () => {
             <Switch />
           </Form.Item>
           <Form.Item name="kms_envelope_key_id" label={formatMessage({ id: 'page.tenants.editKms' })}>
-            <Input placeholder={formatMessage({ id: 'page.tenants.placeholderClear' })} />
-          </Form.Item>
-          <Form.Item name="s3_bucket" label={formatMessage({ id: 'page.tenants.editS3Bucket' })}>
-            <Input placeholder={formatMessage({ id: 'page.tenants.placeholderClear' })} />
-          </Form.Item>
-          <Form.Item name="s3_assume_role_arn" label={formatMessage({ id: 'page.tenants.editRoleArn' })}>
-            <Input placeholder={formatMessage({ id: 'page.tenants.placeholderClear' })} />
-          </Form.Item>
-          <Form.Item name="s3_assume_role_external_id" label={formatMessage({ id: 'page.tenants.editExternalId' })}>
             <Input placeholder={formatMessage({ id: 'page.tenants.placeholderClear' })} />
           </Form.Item>
           <Form.Item name="policy_paths_allowlist_mode" label={formatMessage({ id: 'page.tenants.editAllowlist' })}>

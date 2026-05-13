@@ -1,42 +1,44 @@
 ---
 sidebar_position: 2
 title: STS 与 AssumeRole
-description: 控制面使用短时会话访问 S3
+description: 控制面使用短时会话访问 S3（按存储 profile）
 ---
 
 # STS 与 AssumeRole（控制面 → S3）
 
-访问密钥可通过 **STS `AssumeRole`** 获取短时凭证，而非长期 AK/SK 固化在 Secret 中。
+访问密钥可通过 **STS `AssumeRole`** 获取短时凭证，而非长期 AK/SK 固化在库中。连接信息来自 **`devault_storage_profiles`**（平台 **admin** 经 **`/api/v1/storage-profiles`** 维护；静态 AK/SK 以 **`DEVAULT_STORAGE_CONFIG_MASTER_KEY`** Fernet 加密落库）。
 
-## 凭证解析顺序
+## 凭证解析顺序（每条 S3 profile）
 
-每次构造 boto3 S3 客户端（AssumeRole 结果带内存缓存、过期前刷新）：
+对 **`S3ConnSpec`** 构造 boto3 S3 客户端时（AssumeRole 结果带进程内缓存、过期前刷新）：
 
-1. **`DEVAULT_S3_ASSUME_ROLE_ARN`** 已设置 → STS `AssumeRole`；基底为静态 `DEVAULT_S3_ACCESS_KEY`/`SECRET` 或**默认凭证链**。
-2. 未 AssumeRole，但有静态密钥对 → 直连。
+1. **`s3_assume_role_arn`**（profile 上）已设置 → STS `AssumeRole`；基底为 profile 上的静态密钥（若已配置并解密成功）或**默认凭证链**。
+2. 未 AssumeRole，但 profile 有静态密钥对 → 直连。
 3. 皆无 → 默认凭证链（IRSA、实例配置、`AWS_*` 环境变量）。
 
-`DEVAULT_S3_ACCESS_KEY` / `DEVAULT_S3_SECRET_KEY` 须成对出现或成对省略。
+静态 **Access key / Secret key** 在 API 中成对提交；省略则表示不依赖静态密钥（仅用 AssumeRole 或默认链）。
 
-## 环境变量一览
+## 进程级 STS 调优（仍来自环境变量）
+
+这些变量作用于 **STS 客户端**与 **AssumeRole 调用参数**，与具体 profile 的 endpoint/region/bucket 无关：
 
 | 变量 | 说明 |
 |------|------|
-| `DEVAULT_S3_ASSUME_ROLE_ARN` | 目标角色 ARN |
-| `DEVAULT_S3_ASSUME_ROLE_EXTERNAL_ID` | （可选）ExternalId |
 | `DEVAULT_S3_ASSUME_ROLE_SESSION_NAME` | （可选）默认 `devault-control-plane` |
 | `DEVAULT_S3_ASSUME_ROLE_DURATION_SECONDS` | （可选）900–43200，默认 `3600` |
 | `DEVAULT_S3_STS_REGION` / `DEVAULT_S3_STS_ENDPOINT_URL` / `DEVAULT_S3_STS_USE_SSL` | STS 客户端 |
 
-其余 `DEVAULT_S3_*` 作用于 S3 客户端本身。
+实现：`src/devault/storage/s3_client.py`（**`build_s3_client_from_spec`**）、`src/devault/services/storage_profiles.py`。
 
-**按租户**：若 **`tenants.s3_assume_role_arn`** 已设置，该租户artifact 的预签名 / Multipart / 删除**优先**使用该 ARN（可选 ExternalId）；桶名为 **`tenants.s3_bucket`** 或全局默认。详见 [租户与访问控制](../admin/tenants-and-rbac.md)。
+## 首次迁移与 Compose 种子
+
+**`alembic upgrade`** 仅创建 **`devault_storage_profiles`** 表与 **`artifacts.storage_profile_id`**（可空）；**不**再插入默认 profile。运行期控制面从库中 profile 解析 S3；scheduler 与制品读路径一致。
 
 ## 典型部署模式
 
 ### EKS（IRSA）
 
-服务账号 Web Identity → 基底角色可 `AssumeRole` 到数据面角色 **B**，`DEVAULT_S3_ASSUME_ROLE_ARN=B`，不配静态密钥。
+服务账号 Web Identity → 基底角色可 `AssumeRole` 到数据面角色 **B**；在 profile 中填 **`s3_assume_role_arn=B`**，不配静态密钥。
 
 ### EC2 实例配置文件
 
@@ -44,16 +46,17 @@ description: 控制面使用短时会话访问 S3
 
 ### Vault 等动态密钥
 
-若写入 `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_SESSION_TOKEN` 可走凭证链第三条。
+若进程环境写入 `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_SESSION_TOKEN` 可走凭证链。
 
 ### 本地与 MinIO
 
-演示多用静态密钥；MinIO STS 能力与 AWS 有差异时需核对端点。
+演示多用 profile 内静态密钥；MinIO STS 能力与 AWS 有差异时需核对端点。
 
 ## 与预签名 TTL
 
 `DurationSeconds` 应 **≥** 备份作业所需的预签名有效期（`DEVAULT_PRESIGN_TTL_SECONDS`）。
 
-## 实现位置
+## 相关文档
 
-`src/devault/storage/s3_client.py`、`src/devault/settings.py`。
+- [对象存储模型](./object-store-model.md)  
+- [租户与访问控制](../admin/tenants-and-rbac.md)

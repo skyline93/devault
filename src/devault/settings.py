@@ -35,25 +35,14 @@ class Settings(BaseSettings):
         description="Expected JWT aud (must match IAM IAM_JWT_AUDIENCE, e.g. devault-api)",
     )
 
-    storage_backend: str = Field(default="local", description="local | s3")
-    local_storage_root: str = Field(default="./data/storage")
+    local_storage_root: str = Field(default="./data/storage", description="Fallback root when a local profile omits local_root")
 
-    s3_endpoint: str | None = Field(default=None, description="MinIO/S3 endpoint URL")
-    s3_access_key: str | None = None
-    s3_secret_key: str | None = None
-    s3_bucket: str = "devault"
-    s3_region: str = "us-east-1"
-    s3_use_ssl: bool = False
+    aws_default_region: str = Field(
+        default="us-east-1",
+        description="Default AWS region for KMS and similar APIs when no profile-specific region applies",
+    )
 
-    # STS AssumeRole for control-plane S3 (optional; see website/docs/storage/sts-assume-role.md)
-    s3_assume_role_arn: str | None = Field(
-        default=None,
-        description="If set, control plane calls STS AssumeRole and uses returned creds for S3",
-    )
-    s3_assume_role_external_id: str | None = Field(
-        default=None,
-        description="Optional ExternalId for cross-account AssumeRole",
-    )
+    # STS AssumeRole for S3 clients built from storage profiles (see website/docs/storage/sts-assume-role.md)
     s3_assume_role_session_name: str = Field(
         default="devault-control-plane",
         description="RoleSessionName for AssumeRole (max 64 chars; truncated if longer)",
@@ -66,7 +55,7 @@ class Settings(BaseSettings):
     )
     s3_sts_region: str | None = Field(
         default=None,
-        description="STS client region; defaults to s3_region when unset",
+        description="STS client region; defaults to the active profile S3 region when unset",
     )
     s3_sts_endpoint_url: str | None = Field(
         default=None,
@@ -237,7 +226,7 @@ class Settings(BaseSettings):
     )
     kms_region: str | None = Field(
         default=None,
-        description="KMS API region; defaults to s3_region when unset",
+        description="KMS API region; defaults to DEVAULT_AWS_DEFAULT_REGION when unset",
     )
 
     retention_cleanup_enabled: bool = Field(
@@ -250,15 +239,6 @@ class Settings(BaseSettings):
         le=86400,
         description="Interval between retention purge runs in the scheduler process",
     )
-
-    @model_validator(mode="after")
-    def _s3_key_pair_consistent(self) -> Self:
-        ak, sk = self.s3_access_key, self.s3_secret_key
-        if (ak is None) ^ (sk is None):
-            raise ValueError(
-                "DEVAULT_S3_ACCESS_KEY and DEVAULT_S3_SECRET_KEY must be set together or both omitted"
-            )
-        return self
 
     @model_validator(mode="after")
     def _grpc_tls_paths_consistent(self) -> Self:
@@ -292,14 +272,6 @@ class Settings(BaseSettings):
             return None
         parts = [p.strip() for p in self.allowed_path_prefixes.split(",") if p.strip()]
         return parts or None
-
-    @field_validator("storage_backend")
-    @classmethod
-    def storage_ok(cls, v: str) -> str:
-        v = v.lower()
-        if v not in ("local", "s3"):
-            raise ValueError("storage_backend must be local or s3")
-        return v
 
 
 @lru_cache

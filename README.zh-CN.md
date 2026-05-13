@@ -6,7 +6,7 @@
 
 ## 快速开始
 
-在仓库根目录，**不加 profile** 时仅启动内置 **Postgres / Redis / MinIO / minio-init**：
+在仓库根目录，**不加 profile** 时仅启动内置 **Postgres / Redis / MinIO**：
 
 ```bash
 cd deploy

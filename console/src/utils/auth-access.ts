@@ -17,6 +17,7 @@ export function computeSessionAccessFlags(currentUser: API.CurrentUser | undefin
   canAdmin: boolean;
   canWrite: boolean;
   canInviteMembers: boolean;
+  canPlatformStorage: boolean;
 } {
   const pwdPending = readPasswordChangePending();
   const gated = Boolean(currentUser?.needs_mfa) || pwdPending;
@@ -26,6 +27,9 @@ export function computeSessionAccessFlags(currentUser: API.CurrentUser | undefin
     canWrite: Boolean(currentUser && !gated && (currentUser.role === 'admin' || currentUser.role === 'operator')),
     canInviteMembers: Boolean(
       currentUser && !gated && currentUser.tenants?.some((t) => t.membership_role === 'tenant_admin'),
+    ),
+    canPlatformStorage: Boolean(
+      currentUser && !gated && currentUser.role === 'admin' && currentUser.principal_kind === 'platform',
     ),
   };
 }

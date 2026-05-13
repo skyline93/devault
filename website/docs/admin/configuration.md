@@ -64,23 +64,24 @@ description: 常用环境变量分组说明
 | `DEVAULT_GRPC_REGISTRATION_SECRET` | 若设置：开放 **Register** |
 | `DEVAULT_GRPC_AGENT_SESSION_TTL_SECONDS` | Register 令牌 Redis TTL（默认 7 天） |
 
-## 存储后端（S3）
+## 存储 profile（S3 / local）
 
 | 变量 | 说明 |
 |------|------|
-| `DEVAULT_STORAGE_BACKEND` | `s3` 启用预签名与 Agent 直传 |
-| `DEVAULT_S3_ENDPOINT` | S3 API 端点 |
-| `DEVAULT_S3_ACCESS_KEY` / `DEVAULT_S3_SECRET_KEY` | （可选）静态密钥 |
-| `DEVAULT_S3_ASSUME_ROLE_ARN` | （可选）STS AssumeRole 目标 ARN |
-| `DEVAULT_S3_ASSUME_ROLE_EXTERNAL_ID` | （可选） |
-| `DEVAULT_S3_ASSUME_ROLE_SESSION_NAME` | （可选）默认 `devault-control-plane` |
+| `DEVAULT_STORAGE_CONFIG_MASTER_KEY` | **Fernet** 密钥（URL-safe Base64）；加密 profile 内静态 AK/SK；**api 与 scheduler 必须一致** |
+| `DEVAULT_LOCAL_STORAGE_ROOT` | 本地 profile 未填 `local_root` 时的默认根目录 |
+
+**首次迁移**：不再插入默认 `storage_profiles` 行；请在控制面创建并激活存储 profile（**激活行的 `storage_type` 决定**控制面走本地路径还是 S3 预签名等）。S3/MinIO **桶**须在对象存储侧事先创建（应用不调用 ``CreateBucket``）。
+
+运行期 S3 端点、桶、区域、AssumeRole 等以 **`storage_profiles`** 为准；进程级 STS 客户端参数：
+
+| 变量 | 说明 |
+|------|------|
+| `DEVAULT_S3_ASSUME_ROLE_SESSION_NAME` | （可选）AssumeRole `RoleSessionName`，默认 `devault-control-plane` |
 | `DEVAULT_S3_ASSUME_ROLE_DURATION_SECONDS` | （可选）900–43200，默认 `3600` |
 | `DEVAULT_S3_STS_REGION` / `DEVAULT_S3_STS_ENDPOINT_URL` / `DEVAULT_S3_STS_USE_SSL` | STS 客户端 |
-| `DEVAULT_S3_BUCKET` | 全局默认桶名 |
-| `DEVAULT_S3_USE_SSL` | HTTPS |
-| `DEVAULT_S3_REGION` | 区域 |
 
-详见 [STS 与 AssumeRole](../storage/sts-assume-role.md)、[租户与访问控制](./tenants-and-rbac.md)（按租户 BYOB）、[存储调优](../storage/tuning.md)。
+详见 [STS 与 AssumeRole](../storage/sts-assume-role.md)、[对象存储模型](../storage/object-store-model.md)、[存储调优](../storage/tuning.md)。
 
 ## Artifact 加密与合规（控制面）
 
@@ -110,7 +111,7 @@ description: 常用环境变量分组说明
 | `DEVAULT_RETENTION_CLEANUP_ENABLED` | 默认 `true` |
 | `DEVAULT_RETENTION_CLEANUP_INTERVAL_SECONDS` | 默认 `900` |
 
-保留清理需在 `s3` 模式下能按租户访问桶（见 [保留与生命周期](../user/retention-lifecycle.md)）。
+保留清理需在**激活的 storage profile 为 `s3`** 时能按租户访问桶（见 [保留与生命周期](../user/retention-lifecycle.md)）。
 
 ## 与 Compose 对齐
 

@@ -23,10 +23,26 @@ erDiagram
         string name
         boolean require_encrypted_artifacts
         string kms_envelope_key_id "nullable"
-        string s3_bucket "nullable"
-        string s3_assume_role_arn "nullable"
-        string s3_assume_role_external_id "nullable"
         timestamptz created_at
+    }
+
+    storage_profiles {
+        uuid id PK
+        string slug UK
+        string name
+        string storage_type
+        boolean is_active
+        text local_root "nullable"
+        text s3_endpoint "nullable"
+        string s3_region
+        string s3_bucket "nullable"
+        boolean s3_use_ssl
+        text encrypted_access_key "nullable"
+        text encrypted_secret_key "nullable"
+        text s3_assume_role_arn "nullable"
+        text s3_assume_role_external_id "nullable"
+        timestamptz created_at
+        timestamptz updated_at
     }
 
     policies {
@@ -80,6 +96,7 @@ erDiagram
         uuid id PK
         uuid tenant_id FK
         uuid job_id FK
+        uuid storage_profile_id FK "nullable pre-backfill"
         string storage_backend
         string bundle_key
         string manifest_key
@@ -109,6 +126,8 @@ erDiagram
     tenants ||--o{ artifacts : "RESTRICT del"
     tenants ||--o{ restore_drill_schedules : "RESTRICT del"
 
+    storage_profiles ||--o{ artifacts : "RESTRICT del"
+
     policies ||--o{ schedules : "CASCADE del policy"
     policies ||--o{ jobs : "SET NULL on del policy"
 
@@ -124,6 +143,7 @@ erDiagram
 | **policies 执行绑定** | 必填 **`bound_agent_id`**（外键 **`edge_agents.id`**）；**`LeaseJobs`** 按绑定收窄。 |
 | **policies → jobs** | 数据库存在 **`fk_jobs_policy_id_policies`**（`ON DELETE SET NULL`）。`policy_id` 可为空（例如部分恢复类作业）。ORM 未声明 `ForeignKey`，迁移与线上库仍以约束为准。 |
 | **jobs → artifacts** | 外键 `job_id` **`ON DELETE CASCADE`**。应用层通常 **0..1** 条 artifact / 作业（ORM `Job.artifact` 为单对象）；数据库未对 `artifacts.job_id` 加唯一约束。 |
+| **artifacts → storage_profiles** | **`artifacts.storage_profile_id`** 外键 **`ON DELETE RESTRICT`**；可为 **NULL**（无种子迁移后的旧行）；读/保留清理在 NULL 时回退到**当前激活** profile。 |
 | **artifacts → restore_drill_schedules** | 按 artifact 配置恢复演练 Cron；删除 artifact 时级联删除相关演练调度。 |
 | **jobs.restore_artifact_id** | 仅 UUID 字段，**无数据库外键**；由应用保证指向本租户 artifact。 |
 

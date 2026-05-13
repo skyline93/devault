@@ -67,30 +67,17 @@ spec:
                   key: DEVAULT_DATABASE_URL
             - name: DEVAULT_REDIS_URL
               value: redis://{{ include "devault.redisHost" . }}:6379/0
-            - name: DEVAULT_STORAGE_BACKEND
-              value: "s3"
-            - name: DEVAULT_S3_ENDPOINT
-              value: http://{{ include "devault.minioHost" . }}:9000
-            - name: DEVAULT_S3_BUCKET
-              value: {{ .Values.minio.bucket | quote }}
-            - name: DEVAULT_S3_USE_SSL
-              value: "false"
             - name: DEVAULT_ENV_NAME
               value: {{ .Values.devault.envName | quote }}
             - name: DEVAULT_RETENTION_CLEANUP_ENABLED
               value: {{ .Values.devault.retentionCleanupEnabled | quote }}
             - name: DEVAULT_RETENTION_CLEANUP_INTERVAL_SECONDS
               value: {{ .Values.devault.retentionCleanupIntervalSeconds | quote }}
-            - name: DEVAULT_S3_ACCESS_KEY
+            - name: DEVAULT_STORAGE_CONFIG_MASTER_KEY
               valueFrom:
                 secretKeyRef:
                   name: {{ include "devault.fullname" . }}-app
-                  key: DEVAULT_S3_ACCESS_KEY
-            - name: DEVAULT_S3_SECRET_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "devault.fullname" . }}-app
-                  key: DEVAULT_S3_SECRET_KEY
+                  key: DEVAULT_STORAGE_CONFIG_MASTER_KEY
           {{- with .Values.scheduler.resources }}
           resources:
             {{- toYaml . | nindent 12 }}

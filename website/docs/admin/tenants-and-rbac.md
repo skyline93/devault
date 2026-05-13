@@ -9,18 +9,17 @@ description: 数据模型、HTTP 作用域、RBAC、OIDC 与计费相关指标
 ## 数据模型
 
 - **`tenants`**：`id`（UUID）、`name`、`slug`（唯一）、`created_at`。
-- （迁移 **`0010`** 起）**合规与自带桶（BYOB）**可选字段：
+- （迁移 **`0010`** 起）**合规**可选字段：
   - **`require_encrypted_artifacts`** — 若为 **true**，该租户下**新策略/备份配置**不得关闭 **`encrypt_artifacts`**（与全局 **`DEVAULT_REQUIRE_ENCRYPTED_ARTIFACTS`** 叠加）。
   - **`kms_envelope_key_id`** — 默认 KMS CMK（KeyId/ARN）；在未写入策略 **`kms_envelope_key_id`** 时由 **`LeaseJobs` 下发的 `config_json`** 注入供 Agent 信封加密。
-  - **`s3_bucket`** — 覆盖全局 **`DEVAULT_S3_BUCKET`**，该租户 artifact 的对象读写、预签名、Multipart 收尾与 scheduler 删除均使用该桶。
-  - **`s3_assume_role_arn`** / **`s3_assume_role_external_id`** — STS **AssumeRole** 到客户账号；若设置则**优先于** **`DEVAULT_S3_ASSUME_ROLE_ARN`** 构造该租户的 S3 客户端。
+- **`devault_storage_profiles`**（平台级）：**`storage_type`**（`s3` \| `local`）、连接字段、**`is_active`**（至多一条为 **true**）、**`encrypted_access_key` / `encrypted_secret_key`**（Fernet，密钥来自 **`DEVAULT_STORAGE_CONFIG_MASTER_KEY`**）。写入 artifact 时记录 **`artifacts.storage_profile_id`**；读回与保留清理按该行解析存储。**控制台**「对象存储」页仅 **`principal_kind=platform`** 的平台员可见；REST **`/api/v1/storage-profiles`** 同样要求平台 **admin**。
 - **`policies` / `jobs` / `schedules` / `artifacts`** 均带有 **`tenant_id`** 外键。
 - **`artifacts.legal_hold`** — **true** 时保留清理不删除该行及对象。
 - 迁移 **`0005`** 会创建一条初始租户行（历史上 slug 常为 **`default`**），并把现有行归属到该租户；**不**再依赖环境变量隐式选租户。
 
 ## HTTP API 与 Web UI
 
-除 **`GET/POST /api/v1/tenants`** 与 **`PATCH /api/v1/tenants/{tenant_id}`**（**admin**：更新名称与 BYOB/合规字段）外，以下资源在读写时限定在当前租户：
+除 **`GET/POST /api/v1/tenants`** 与 **`PATCH /api/v1/tenants/{tenant_id}`**（**admin**：更新名称与合规字段）外，以下资源在读写时限定在当前租户：
 
 - `/api/v1/policies`、`/schedules`、`/jobs`、`/artifacts`
 
@@ -50,7 +49,7 @@ Content-Type: application/json
 
 **幂等键**：`jobs.idempotency_key` 在 **同一 `tenant_id` 内** 唯一。
 
-### Admin：更新租户（BYOB / 强制加密）
+### Admin：更新租户（强制加密等）
 
 ```http
 PATCH /api/v1/tenants/<tenant_uuid>
@@ -58,16 +57,13 @@ Authorization: Bearer <admin token>
 Content-Type: application/json
 
 {
-  "s3_bucket": "customer-owned-bucket",
-  "s3_assume_role_arn": "arn:aws:iam::123456789012:role/devault-tenant-acme",
-  "s3_assume_role_external_id": "optional-external-id",
   "kms_envelope_key_id": "arn:aws:kms:...:key/...",
   "require_encrypted_artifacts": true,
   "name": "Acme Corp"
 }
 ```
 
-详见 [Artifact 静态加密](../trust/artifact-encryption.md)、[STS 与 AssumeRole](../storage/sts-assume-role.md)、[对象存储模型](../storage/object-store-model.md)。
+对象存储连接与桶由 **`storage_profiles`** 管理（见 [对象存储模型](../storage/object-store-model.md)、[STS 与 AssumeRole](../storage/sts-assume-role.md)）。详见 [Artifact 静态加密](../trust/artifact-encryption.md)。
 
 ## 对象存储键
 
@@ -107,7 +103,8 @@ Content-Type: application/json
 | 读策略/调度/任务/artifact（租户内） | ✓ | ✓ | ✓ |
 | 写策略/调度、触发备份/恢复、取消/重试 | ✓ | ✓ | ✗ |
 | **`POST /api/v1/tenants`** | ✓ | ✗ | ✗ |
-| **`PATCH /api/v1/tenants/{id}`**（BYOB、强制加密等） | ✓ | ✗ | ✗ |
+| **`PATCH /api/v1/tenants/{id}`**（强制加密等） | ✓ | ✗ | ✗ |
+| **`/api/v1/storage-profiles`**（平台存储配置） | ✓（平台 **admin**） | ✗ | ✗ |
 | **`GET /api/v1/tenants`** | 全部 | 允许的 `tenant_id` | 允许的 `tenant_id` |
 | **`PATCH /api/v1/artifacts/{id}/legal-hold`** | ✓（admin，且 header 租户匹配） | ✗ | ✗ |
 | **Agent gRPC** | ✓ | ✓ | ✗（`PERMISSION_DENIED`） |

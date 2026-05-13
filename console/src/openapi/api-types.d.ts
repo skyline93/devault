@@ -458,6 +458,60 @@ export interface paths {
         patch: operations["patch_tenant_api_v1_tenants__tenant_id__patch"];
         trace?: never;
     };
+    "/api/v1/storage-profiles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List storage profiles */
+        get: operations["list_storage_profiles_api_v1_storage_profiles_get"];
+        put?: never;
+        /** Create storage profile */
+        post: operations["create_storage_profile_api_v1_storage_profiles_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/storage-profiles/{profile_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get storage profile */
+        get: operations["get_storage_profile_api_v1_storage_profiles__profile_id__get"];
+        put?: never;
+        post?: never;
+        /** Delete storage profile */
+        delete: operations["delete_storage_profile_api_v1_storage_profiles__profile_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update storage profile */
+        patch: operations["patch_storage_profile_api_v1_storage_profiles__profile_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/storage-profiles/{profile_id}/activate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Set active storage profile */
+        post: operations["activate_storage_profile_api_v1_storage_profiles__profile_id__activate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/session": {
         parameters: {
             query?: never;
@@ -655,6 +709,8 @@ export interface components {
              * Format: uuid
              */
             job_id: string;
+            /** Storage Profile Id */
+            storage_profile_id?: string | null;
             /** Storage Backend */
             storage_backend: string;
             /** Bundle Key */
@@ -1314,6 +1370,112 @@ export interface components {
              */
             sso_password_login_disabled: boolean;
         };
+        /** StorageProfileCreate */
+        StorageProfileCreate: {
+            /** Name */
+            name?: string | null;
+            /** Slug */
+            slug?: string | null;
+            /**
+             * Storage Type
+             * @enum {string}
+             */
+            storage_type: "s3" | "local";
+            /**
+             * Is Active
+             * @default false
+             */
+            is_active: boolean;
+            /** Local Root */
+            local_root?: string | null;
+            /** S3 Endpoint */
+            s3_endpoint?: string | null;
+            /** S3 Region */
+            s3_region?: string | null;
+            /** S3 Bucket */
+            s3_bucket?: string | null;
+            /**
+             * S3 Access Key
+             * @description Plaintext; stored encrypted.
+             */
+            s3_access_key?: string | null;
+            /**
+             * S3 Secret Key
+             * @description Plaintext; stored encrypted.
+             */
+            s3_secret_key?: string | null;
+            /** S3 Assume Role Arn */
+            s3_assume_role_arn?: string | null;
+            /** S3 Assume Role External Id */
+            s3_assume_role_external_id?: string | null;
+        };
+        /** StorageProfileOut */
+        StorageProfileOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Slug */
+            slug: string;
+            /**
+             * Storage Type
+             * @enum {string}
+             */
+            storage_type: "s3" | "local";
+            /** Is Active */
+            is_active: boolean;
+            /** Local Root */
+            local_root?: string | null;
+            /** S3 Endpoint */
+            s3_endpoint?: string | null;
+            /** S3 Region */
+            s3_region?: string | null;
+            /** S3 Bucket */
+            s3_bucket?: string | null;
+            /**
+             * Has Static Credentials
+             * @default false
+             */
+            has_static_credentials: boolean;
+            /** S3 Assume Role Arn */
+            s3_assume_role_arn?: string | null;
+            /** S3 Assume Role External Id */
+            s3_assume_role_external_id?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** StorageProfilePatch */
+        StorageProfilePatch: {
+            /** Name */
+            name?: string | null;
+            /** Local Root */
+            local_root?: string | null;
+            /** S3 Endpoint */
+            s3_endpoint?: string | null;
+            /** S3 Region */
+            s3_region?: string | null;
+            /** S3 Bucket */
+            s3_bucket?: string | null;
+            /** S3 Access Key */
+            s3_access_key?: string | null;
+            /** S3 Secret Key */
+            s3_secret_key?: string | null;
+            /** S3 Assume Role Arn */
+            s3_assume_role_arn?: string | null;
+            /** S3 Assume Role External Id */
+            s3_assume_role_external_id?: string | null;
+        };
         /** TenantCreate */
         TenantCreate: {
             /**
@@ -1352,12 +1514,6 @@ export interface components {
             require_encrypted_artifacts: boolean;
             /** Kms Envelope Key Id */
             kms_envelope_key_id?: string | null;
-            /** S3 Bucket */
-            s3_bucket?: string | null;
-            /** S3 Assume Role Arn */
-            s3_assume_role_arn?: string | null;
-            /** S3 Assume Role External Id */
-            s3_assume_role_external_id?: string | null;
             /**
              * Policy Paths Allowlist Mode
              * @description When enforce/warn: file policy paths must fall under enrolled Agents' Heartbeat-reported backup_path_allowlist union (empty union skips validation).
@@ -1418,12 +1574,6 @@ export interface components {
             require_encrypted_artifacts?: boolean | null;
             /** Kms Envelope Key Id */
             kms_envelope_key_id?: string | null;
-            /** S3 Bucket */
-            s3_bucket?: string | null;
-            /** S3 Assume Role Arn */
-            s3_assume_role_arn?: string | null;
-            /** S3 Assume Role External Id */
-            s3_assume_role_external_id?: string | null;
             /** Policy Paths Allowlist Mode */
             policy_paths_allowlist_mode?: ("off" | "enforce" | "warn") | null;
             /** Require Mfa For Admins */
@@ -2840,6 +2990,212 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TenantOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_storage_profiles_api_v1_storage_profiles_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-DeVault-Tenant-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageProfileOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_storage_profile_api_v1_storage_profiles_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-DeVault-Tenant-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StorageProfileCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageProfileOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_storage_profile_api_v1_storage_profiles__profile_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-DeVault-Tenant-Id"?: string | null;
+            };
+            path: {
+                profile_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageProfileOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_storage_profile_api_v1_storage_profiles__profile_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-DeVault-Tenant-Id"?: string | null;
+            };
+            path: {
+                profile_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_storage_profile_api_v1_storage_profiles__profile_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-DeVault-Tenant-Id"?: string | null;
+            };
+            path: {
+                profile_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StorageProfilePatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageProfileOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    activate_storage_profile_api_v1_storage_profiles__profile_id__activate_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-DeVault-Tenant-Id"?: string | null;
+            };
+            path: {
+                profile_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageProfileOut"];
                 };
             };
             /** @description Validation Error */

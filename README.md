@@ -6,7 +6,7 @@ Enterprise-oriented **backup and restore** platform: a control plane (HTTP API, 
 
 ## Quick start
 
-From the repository root, **without profiles** only the bundled data plane starts (**postgres**, **redis**, **minio**, **minio-init**):
+From the repository root, **without profiles** only the bundled data plane starts (**postgres**, **redis**, **minio**):
 
 ```bash
 cd deploy

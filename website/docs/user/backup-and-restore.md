@@ -18,7 +18,7 @@ description: 设计要点、时序、HTTP 步骤与可选 CLI
 - **数据面**：Agent 使用预授权，经 **HTTPS** 与 **S3 兼容存储** 直传读写；**大对象不经过 gRPC**。
 - **Pull**：Agent **主动**调用 `LeaseJobs` 领取作业。
 
-首启且未配置 `DEVAULT_API_TOKEN` 时，Agent 可先调用 **`Register`** 用一次性密钥换取 Bearer（见 `agent.proto` 注释）；循环中发送 **`Heartbeat`**。大对象分片、恢复侧流式与重试见 [大对象与恢复](../storage/large-objects.md)、[存储调优](../storage/tuning.md)。**Artifact 加密**见 [Artifact 静态加密](../trust/artifact-encryption.md)。租户级存储（BYOB、AssumeRole）见 [租户与访问控制](../admin/tenants-and-rbac.md)、[对象存储模型](../storage/object-store-model.md)。
+首启且未配置 `DEVAULT_API_TOKEN` 时，Agent 可先调用 **`Register`** 用一次性密钥换取 Bearer（见 `agent.proto` 注释）；循环中发送 **`Heartbeat`**。大对象分片、恢复侧流式与重试见 [大对象与恢复](../storage/large-objects.md)、[存储调优](../storage/tuning.md)。**Artifact 加密**见 [Artifact 静态加密](../trust/artifact-encryption.md)。对象存储连接见 [对象存储模型](../storage/object-store-model.md) 与 [租户与访问控制](../admin/tenants-and-rbac.md)（**`storage_profiles`**）。
 
 ---
 

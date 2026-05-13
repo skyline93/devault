@@ -112,6 +112,8 @@ declare namespace API {
     id: string;
     tenant_id: string;
     job_id: string;
+    /** 缺省表示迁移前制品或未回填；读路径按当前激活 profile 解析。 */
+    storage_profile_id?: string | null;
     storage_backend: string;
     bundle_key: string;
     manifest_key: string;
@@ -204,9 +206,6 @@ declare namespace API {
     created_at: string;
     require_encrypted_artifacts: boolean;
     kms_envelope_key_id: string | null;
-    s3_bucket: string | null;
-    s3_assume_role_arn: string | null;
-    s3_assume_role_external_id: string | null;
     policy_paths_allowlist_mode: 'off' | 'enforce' | 'warn';
     require_mfa_for_admins?: boolean;
     sso_oidc_issuer?: string | null;

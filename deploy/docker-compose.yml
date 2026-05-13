@@ -3,7 +3,7 @@
 #
 # ## Profiles（按需启用）
 #
-# 无 profile 时仅启动 **内置数据面**：``postgres``、``redis``、``minio``、``minio-init``。
+# 无 profile 时仅启动 **内置数据面**：``postgres``、``redis``、``minio``。
 #
 # | Profile | 服务 |
 # |---------|------|
@@ -35,11 +35,14 @@
 #
 # PyPI：默认阿里云镜像并复用 BuildKit pip 缓存；覆盖官方源可设 **``export PIP_INDEX_URL=https://pypi.org/simple/``** 后再 ``compose build``。
 #
-# Remote agents (outside this compose network) need presigned S3 URLs they can reach. By default
-# DEVAULT_S3_ENDPOINT is http://minio:9000 (in-stack only). Set in .env or the shell, e.g.:
-#   DEVAULT_S3_ENDPOINT=http://192.168.1.10:9000
-#   DEVAULT_S3_ENDPOINT=http://host.docker.internal:9000   # Docker Desktop: api reaches host-published :9000
-# Use the same host:port from api, scheduler, and every agent. Minio already publishes 9000:9000.
+# Storage: DB-backed profiles (``devault_storage_profiles``). ``alembic upgrade`` creates the table and
+# nullable ``artifacts.storage_profile_id`` only — **no** default profile row. Create and activate a profile
+# in the console (or API) before backup traffic; static keys use **``DEVAULT_STORAGE_CONFIG_MASTER_KEY``**
+# (Fernet). API and scheduler must share the same key at runtime. Override the demo default in any shared environment.
+#
+# Remote agents need presigned URLs pointing at an endpoint they can reach (configure in the active
+# **storage profile** in the console). Create the target S3/MinIO **bucket** outside the app (e.g. ``mc mb``)
+# before running backups; DeVault does not call ``CreateBucket`` at runtime.
 #
 # IAM（profile **with-control-plane**）：与控制面共用 **postgres / redis**（同一 database `devault`，表前缀分别为 **devault_*** / **iam_***；Redis IAM 使用 **db 1**）。`api` 默认 **DEVAULT_IAM_JWKS_URL=http://iam:8100/...**
 # 与 **DEVAULT_IAM_JWT_ISSUER/AUDIENCE**（与 IAM 默认 `IAM_JWT_*` 对齐），启动后 HTTP 走 IAM JWT 校验（非 dev-open）。
@@ -126,30 +129,6 @@ services:
     volumes:
       - miniodata:/data
 
-  # One-shot: create bucket at deploy time (app never calls CreateBucket — enterprise IAM).
-  minio-init:
-    image: minio/mc:latest
-    depends_on:
-      minio:
-        condition: service_started
-    environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
-      DEVAULT_S3_BUCKET: ${DEVAULT_S3_BUCKET:-devault}
-    entrypoint: /bin/sh
-    command:
-      - -c
-      - |
-        set -e
-        i=0
-        while [ "$$i" -lt 60 ]; do
-          mc alias set local http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD" && break
-          i=$$((i+1))
-          sleep 1
-        done
-        mc mb --ignore-existing "local/$$DEVAULT_S3_BUCKET"
-    restart: "no"
-
   api:
     profiles: ["with-control-plane"]
     image: ${DEVAULT_IMAGE:-glf9832/devault:latest}
@@ -170,12 +149,7 @@ services:
       DEVAULT_IAM_JWKS_URL: ${DEVAULT_IAM_JWKS_URL:-http://iam:8100/.well-known/jwks.json}
       # Enables Agent Register bootstrap; must match agent service below (dev-only default).
       DEVAULT_GRPC_REGISTRATION_SECRET: ${DEVAULT_GRPC_REGISTRATION_SECRET:-devault-docker-register-secret}
-      DEVAULT_STORAGE_BACKEND: s3
-      DEVAULT_S3_ENDPOINT: ${DEVAULT_S3_ENDPOINT:-http://minio:9000}
-      DEVAULT_S3_ACCESS_KEY: minioadmin
-      DEVAULT_S3_SECRET_KEY: minioadmin
-      DEVAULT_S3_BUCKET: ${DEVAULT_S3_BUCKET:-devault}
-      DEVAULT_S3_USE_SSL: "false"
+      DEVAULT_STORAGE_CONFIG_MASTER_KEY: ${DEVAULT_STORAGE_CONFIG_MASTER_KEY:-W6G1v87JXm6Q3J8Iyo7ACkH3vDXqCfuT6ItcL47UEzI=}
       DEVAULT_ENV_NAME: dev
       DEVAULT_GRPC_LISTEN: 0.0.0.0:50051
       PYTHONPATH: /app/src
@@ -187,8 +161,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
-      minio-init:
-        condition: service_completed_successfully
       iam:
         condition: service_healthy
     # Uvicorn lifespan starts gRPC on :50051; wait until HTTP is up so Envoy/agents do not hit connection refused.
@@ -217,13 +189,8 @@ services:
     environment:
       DEVAULT_DATABASE_URL: postgresql+psycopg://devault:devault@postgres:5432/devault
       DEVAULT_REDIS_URL: redis://redis:6379/0
-      # Same storage as api for retention purge (delete bundle + manifest)
-      DEVAULT_STORAGE_BACKEND: s3
-      DEVAULT_S3_ENDPOINT: ${DEVAULT_S3_ENDPOINT:-http://minio:9000}
-      DEVAULT_S3_ACCESS_KEY: minioadmin
-      DEVAULT_S3_SECRET_KEY: minioadmin
-      DEVAULT_S3_BUCKET: ${DEVAULT_S3_BUCKET:-devault}
-      DEVAULT_S3_USE_SSL: "false"
+      # Same storage resolution as api (active DB storage profile); no DEVAULT_S3_* env.
+      DEVAULT_STORAGE_CONFIG_MASTER_KEY: ${DEVAULT_STORAGE_CONFIG_MASTER_KEY:-W6G1v87JXm6Q3J8Iyo7ACkH3vDXqCfuT6ItcL47UEzI=}
       DEVAULT_ENV_NAME: dev
       DEVAULT_RETENTION_CLEANUP_ENABLED: "true"
       DEVAULT_RETENTION_CLEANUP_INTERVAL_SECONDS: "900"
@@ -269,8 +236,6 @@ services:
     depends_on:
       api:
         condition: service_healthy
-      minio-init:
-        condition: service_completed_successfully
       demo-stack-init:
         condition: service_completed_successfully
 
@@ -298,8 +263,6 @@ services:
     depends_on:
       api:
         condition: service_healthy
-      minio-init:
-        condition: service_completed_successfully
       demo-stack-init:
         condition: service_completed_successfully
 

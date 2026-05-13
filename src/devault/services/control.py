@@ -68,12 +68,6 @@ def patch_tenant(db: Session, tenant_id: uuid.UUID, body: TenantPatch) -> Tenant
         t.require_encrypted_artifacts = body.require_encrypted_artifacts
     if body.kms_envelope_key_id is not None:
         t.kms_envelope_key_id = body.kms_envelope_key_id.strip() or None
-    if body.s3_bucket is not None:
-        t.s3_bucket = body.s3_bucket.strip() or None
-    if body.s3_assume_role_arn is not None:
-        t.s3_assume_role_arn = body.s3_assume_role_arn.strip() or None
-    if body.s3_assume_role_external_id is not None:
-        t.s3_assume_role_external_id = body.s3_assume_role_external_id.strip() or None
     if body.policy_paths_allowlist_mode is not None:
         t.policy_paths_allowlist_mode = body.policy_paths_allowlist_mode
     if body.require_mfa_for_admins is not None:

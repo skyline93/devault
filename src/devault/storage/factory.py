@@ -1,34 +1,61 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING
+import uuid
 
+from sqlalchemy.orm import Session
+
+from devault.db.models import StorageProfile
 from devault.settings import Settings, get_settings
+from devault.services.storage_profiles import require_active_profile, s3_conn_spec_from_profile
 from devault.storage.local import LocalStorage
 from devault.storage.s3 import S3Storage
-from devault.storage.s3_client import build_s3_client_for_tenant, effective_s3_bucket
+from devault.storage.s3_client import build_s3_client_from_spec
 from devault.storage.types import Storage
 
-if TYPE_CHECKING:
-    from devault.db.models import Tenant
+
+def _storage_from_profile_row(settings: Settings, profile: StorageProfile) -> Storage:
+    if profile.storage_type == "local":
+        root = profile.local_root or settings.local_storage_root
+        return LocalStorage(Path(root).expanduser())
+    if profile.storage_type == "s3":
+        spec = s3_conn_spec_from_profile(profile, settings)
+        return S3Storage(client=build_s3_client_from_spec(settings, spec), bucket=spec.bucket)
+    raise ValueError(f"Unknown storage_type on profile: {profile.storage_type}")
 
 
-def get_storage(settings: Settings | None = None) -> Storage:
+def get_storage_for_artifact_row(
+    db: Session, settings: Settings, *, storage_profile_id: uuid.UUID | None
+) -> Storage:
+    """Resolve storage for an artifact; NULL ``storage_profile_id`` uses the active profile (legacy rows)."""
+    if storage_profile_id is None:
+        return get_storage_for_active_profile(db, settings)
+    return get_storage_for_profile(db, settings, storage_profile_id)
+
+
+def get_storage_for_profile(db: Session, settings: Settings, profile_id: uuid.UUID) -> Storage:
+    profile = db.get(StorageProfile, profile_id)
+    if profile is None:
+        raise ValueError("storage profile not found")
+    return _storage_from_profile_row(settings, profile)
+
+
+def get_storage_for_active_profile(db: Session, settings: Settings) -> Storage:
+    return _storage_from_profile_row(settings, require_active_profile(db))
+
+
+def get_storage(db: Session | None = None, settings: Settings | None = None) -> Storage:
+    """Resolve storage for the active profile (requires DB session)."""
+    if db is None:
+        raise RuntimeError("get_storage requires a database session; use get_storage_for_active_profile(db, settings)")
     s = settings or get_settings()
-    if s.storage_backend == "local":
-        return LocalStorage(Path(s.local_storage_root))
-    if s.storage_backend == "s3":
-        return S3Storage(client=build_s3_client_for_tenant(s, None), bucket=effective_s3_bucket(s, None))
-    raise RuntimeError(f"Unknown storage backend: {s.storage_backend}")
+    return get_storage_for_active_profile(db, s)
 
 
-def get_storage_for_tenant(settings: Settings, tenant: "Tenant | None") -> Storage:
-    """Resolve storage backend and tenant-scoped S3 bucket/credentials (BYOB)."""
-    if settings.storage_backend == "local":
-        return LocalStorage(Path(settings.local_storage_root))
-    if settings.storage_backend == "s3":
-        return S3Storage(
-            client=build_s3_client_for_tenant(settings, tenant),
-            bucket=effective_s3_bucket(settings, tenant),
-        )
-    raise RuntimeError(f"Unknown storage backend: {settings.storage_backend}")
+__all__ = [
+    "Storage",
+    "get_storage",
+    "get_storage_for_active_profile",
+    "get_storage_for_artifact_row",
+    "get_storage_for_profile",
+]

@@ -5,13 +5,10 @@ from typing import Any
 
 from botocore.client import BaseClient
 
-from devault.storage.s3_client import s3_client_from_settings
-
 __all__ = [
     "presign_get_object",
     "presign_put_object",
     "presign_upload_part",
-    "s3_client_from_settings",
 ]
 
 

@@ -24,8 +24,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **部署（Compose / Helm）**：移除 **`minio-init`** 与 **`mc mb`** 自动建桶；**api** / **scheduler** 不再注入连接类 **`DEVAULT_S3_*`**（存储连接由 **storage profile** 配置）。MinIO/S3 **桶**须在控制面外手工创建并与 profile 一致。
 - **破坏性（Agent ↔ 控制面，与 §十四 登记/池/会话模型替代）**：边端以 **`DEVAULT_AGENT_TOKEN`** 为唯一长期凭据；**`proto/agent.proto`** 与 **`Register`/`Heartbeat`** 语义见 **`website/docs/reference/grpc-services.md`**；升级前须按 OpenSpec **`refactor-agent-token-control-plane`** 迁移数据与策略绑定。
-- **`deploy/docker-compose.yml`**：默认无 profile 仅 **postgres / redis / minio / minio-init**；**`with-control-plane`** / **`with-agent`** / **`with-console`** 按需启用；**`with-monitoring`**；**`with-grpc-tls`**（**grpc-gateway**）。**Agent TLS** 片段迁至 **`deploy/compose.include/grpc-tls-agent.yml`**；**`docker-compose.grpc-tls.yml`** 仅 **`include`** 该片段（兼容既有 **`-f`**）。**`docker-compose.iam.yml`** 仍为独立 IAM 栈。**`install.sh`** 默认 **`COMPOSE_PROFILES=with-control-plane,with-agent`**；**`make demo-stack-up`** / **down**、CI 矩阵、HA 脚本与文档已同步。
+- **`deploy/docker-compose.yml`**：默认无 profile 仅 **postgres / redis / minio**；**`with-control-plane`** / **`with-agent`** / **`with-console`** 按需启用；**`with-monitoring`**；**`with-grpc-tls`**（**grpc-gateway**）。**Agent TLS** 片段迁至 **`deploy/compose.include/grpc-tls-agent.yml`**；**`docker-compose.grpc-tls.yml`** 仅 **`include`** 该片段（兼容既有 **`-f`**）。**`docker-compose.iam.yml`** 仍为独立 IAM 栈。**`install.sh`** 默认 **`COMPOSE_PROFILES=with-control-plane,with-agent`**；**`make demo-stack-up`** / **down**、CI 矩阵、HA 脚本与文档已同步。
 - **console 布局**：对齐 [Ant Design Pro](https://github.com/ant-design/ant-design-pro) 官方 **`defaultSettings` + `RunTimeLayoutConfig`**（**`mix`**、拂晓蓝 **`#1890ff`**、**`menuItemRender` + `Link`**、**`RightContent` / `AvatarDropdown` / `DefaultFooter`**）；精简无 **`bgLayoutImgList`** / **`SettingDrawer`**；新增 **`/overview/welcome`**，登录后默认进入欢迎页。
 
 ### Deprecated

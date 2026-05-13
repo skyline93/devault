@@ -43,7 +43,7 @@ description: 信任边界、密钥流、审计面与合规能力对照
 | 租户隔离、RBAC、可选 OIDC | **已支持** |
 | 保留期与元数据驱动对象删除 | **已支持** |
 | **Legal hold**（元数据 + 清理跳过） | **已支持**（API；与 S3 Bucket Legal Hold 无自动绑定） |
-| **BYOB / 按租户 AssumeRole** | **已支持**（租户字段） |
+| **多 profile / AssumeRole** | **已支持**（`storage_profiles` + STS；静态密钥 Fernet 加密） |
 | **S3 Object Lock（WORM）** | **已支持**（策略 `object_lock_mode` / `object_lock_retain_days`；桶须开启 Object Lock） |
 | **增量数据库备份插件** | **非当前文件备份主线**（后续插件方向） |
 
